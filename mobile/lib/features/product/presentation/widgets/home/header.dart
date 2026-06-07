@@ -38,14 +38,7 @@ class Header extends StatelessWidget {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NotificationsScreen(),
-                            ),
-                          );
-                        },
+                        onPressed: () {},
                         icon: const Icon(
                           Iconsax.notification,
                           color: Colors.white,
@@ -55,7 +48,14 @@ class Header extends StatelessWidget {
                       Stack(
                         children: [
                           IconButton(
-                            onPressed: () {},
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CartScreen(),
+                                ),
+                              );
+                            },
                             icon: const Icon(
                               Iconsax.shopping_cart,
                               color: Colors.white,
@@ -64,34 +64,25 @@ class Header extends StatelessWidget {
                           Positioned(
                             right: 8,
                             top: 8,
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => CartScreen(),
-                                  ),
-                                );
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFF4757),
-                                  shape: BoxShape.circle,
+
+                            child: Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF4757),
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 18,
+                              ),
+                              child: const Text(
+                                "0",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 18,
-                                  minHeight: 18,
-                                ),
-                                child: const Text(
-                                  "0",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
+                                textAlign: TextAlign.center,
                               ),
                             ),
                           ),

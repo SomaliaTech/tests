@@ -1,6 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
-import 'package:mobile/features/cart/domain/usecases/apply_coupon.dart';
 import 'package:mobile/features/cart/domain/usecases/clear_cart.dart';
 import 'package:mobile/features/cart/domain/usecases/get_cart_items.dart';
 import 'package:mobile/features/cart/domain/usecases/get_cart_summary.dart';
