@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 // Core imports
-import '../network/network_info.dart'; // Adjust this path to your NetworkInfo file
+import '../network/network_info.dart';
 
 // Feature Product imports
 import '../../features/product/data/datasources/product_remote_datasource.dart';
@@ -11,6 +11,7 @@ import '../../features/product/data/repositories/product_repository_impl.dart';
 import '../../features/product/domain/repositories/product_repository.dart';
 import '../../features/product/domain/usecases/get_categories.dart';
 import '../../features/product/domain/usecases/get_featured_products.dart';
+import '../../features/product/domain/usecases/get_product_by_id.dart';
 import '../../features/product/domain/usecases/get_products_by_category.dart';
 import '../../features/product/domain/usecases/search_products.dart';
 import '../../features/product/presentation/blocs/product_bloc.dart';
@@ -47,14 +48,16 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton(() => GetFeaturedProducts(sl()));
   sl.registerLazySingleton(() => GetProductsByCategory(sl()));
   sl.registerLazySingleton(() => SearchProducts(sl()));
+  sl.registerLazySingleton(() => GetProductById(sl()));
 
-  // 4. Blocs / State Management (Always register as Factory so they reset when closed)
+  // 4. Blocs / State Management
   sl.registerFactory(
     () => ProductBloc(
       getCategories: sl(),
       getFeaturedProducts: sl(),
       getProductsByCategory: sl(),
       searchProducts: sl(),
+      getProductById: sl(),
     ),
   );
 }

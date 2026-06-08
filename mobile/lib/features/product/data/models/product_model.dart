@@ -1,23 +1,9 @@
 import '../../domain/entities/product.dart';
 
-class ProductModel extends Product {
-  const ProductModel({
-    required super.id,
-    required super.name,
-    required super.slug,
-    required super.description,
-    required super.price,
-    required super.stock,
-    required super.isActive,
-    required super.categoryId,
-    super.categoryName,
-    super.brand,
-    required super.imageUrls,
-    required super.variants,
-    required super.createdAt,
-  });
+class ProductModel {
+  const ProductModel._();
 
-  factory ProductModel.fromJson(Map<String, dynamic> json) {
+  static Product fromJson(Map<String, dynamic> json) {
     // Safe price parsing
     double parsePrice(dynamic value) {
       if (value == null) return 0.0;
@@ -61,7 +47,39 @@ class ProductModel extends Product {
       return [];
     }
 
-    return ProductModel(
+    // Parse colors (if your API returns colors)
+    List<String> parseColors(dynamic colorsData) {
+      if (colorsData == null) return [];
+      if (colorsData is List) {
+        return colorsData.map((c) => c.toString()).toList();
+      }
+      return ['Black', 'White', 'Red', 'Blue']; // Default colors for demo
+    }
+
+    // Parse sizes (if your API returns sizes)
+    List<String> parseSizes(dynamic sizesData) {
+      if (sizesData == null) return [];
+      if (sizesData is List) {
+        return sizesData.map((s) => s.toString()).toList();
+      }
+      return ['XS', 'S', 'M', 'L', 'XL']; // Default sizes for demo
+    }
+
+    // Parse features
+    List<String> parseFeatures(dynamic featuresData) {
+      if (featuresData == null) return [];
+      if (featuresData is List) {
+        return featuresData.map((f) => f.toString()).toList();
+      }
+      return [
+        'High quality material',
+        'Premium design',
+        'Fast shipping',
+        '24/7 customer support',
+      ];
+    }
+
+    return Product(
       id: json['id'] as String,
       name: json['name'] as String,
       slug: json['slug'] as String? ?? '',
@@ -77,6 +95,11 @@ class ProductModel extends Product {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
           : DateTime.now(),
+      colors: parseColors(json['colors']),
+      sizes: parseSizes(json['sizes']),
+      features: parseFeatures(json['features']),
+      rating: (json['rating'] as num?)?.toDouble() ?? 4.5,
+      reviewCount: json['reviewCount'] as int? ?? 0,
     );
   }
 }

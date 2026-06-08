@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'address_selection_modal.dart';
+import 'package:mobile/features/product/domain/entities/address.dart';
 
 class AddressCard extends StatelessWidget {
   final Address address;
@@ -75,7 +75,7 @@ class AddressCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  address.name,
+                  address.fullAddress,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,

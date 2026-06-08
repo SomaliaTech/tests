@@ -2,22 +2,30 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
+import '../../domain/entities/category.dart';
+import '../../domain/entities/product.dart';
 import '../models/category_model.dart';
 import '../models/product_model.dart';
 
 abstract class ProductRemoteDataSource {
-  Future<List<CategoryModel>> getCategories();
-  Future<List<ProductModel>> getFeaturedProducts({int limit});
-  Future<List<ProductModel>> getProductsByCategory(String categoryId);
-  Future<List<ProductModel>> searchProducts({
+  Future<List<Category>> getCategories(); // Changed to return Category entity
+  Future<List<Product>> getFeaturedProducts({
+    int limit,
+  }); // Changed to return Product entity
+  Future<List<Product>> getProductsByCategory(
+    String categoryId,
+  ); // Changed to return Product entity
+  Future<List<Product>> searchProducts({
     String? query,
     double? minPrice,
     double? maxPrice,
     String? categoryId,
     String? sortBy,
-  });
-  Future<ProductModel> getProductById(String id);
-  Future<ProductModel> getProductBySlug(String slug);
+  }); // Changed to return Product entity
+  Future<Product> getProductById(String id); // Changed to return Product entity
+  Future<Product> getProductBySlug(
+    String slug,
+  ); // Changed to return Product entity
 }
 
 class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
@@ -26,7 +34,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   const ProductRemoteDataSourceImpl({required this.client});
 
   @override
-  Future<List<CategoryModel>> getCategories() async {
+  Future<List<Category>> getCategories() async {
     try {
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.categories}'),
@@ -47,7 +55,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }
 
   @override
-  Future<List<ProductModel>> getFeaturedProducts({int limit = 10}) async {
+  Future<List<Product>> getFeaturedProducts({int limit = 10}) async {
     try {
       final response = await client.get(
         Uri.parse(
@@ -70,7 +78,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }
 
   @override
-  Future<List<ProductModel>> getProductsByCategory(String categoryId) async {
+  Future<List<Product>> getProductsByCategory(String categoryId) async {
     try {
       final response = await client.get(
         Uri.parse(
@@ -94,7 +102,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }
 
   @override
-  Future<List<ProductModel>> searchProducts({
+  Future<List<Product>> searchProducts({
     String? query,
     double? minPrice,
     double? maxPrice,
@@ -132,7 +140,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }
 
   @override
-  Future<ProductModel> getProductById(String id) async {
+  Future<Product> getProductById(String id) async {
     try {
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/$id'),
@@ -140,6 +148,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
       );
 
       if (response.statusCode == 200) {
+        // Convert ProductModel to Product entity
         return ProductModel.fromJson(json.decode(response.body));
       } else {
         throw ServerException('Failed to load product: ${response.statusCode}');
@@ -150,7 +159,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   }
 
   @override
-  Future<ProductModel> getProductBySlug(String slug) async {
+  Future<Product> getProductBySlug(String slug) async {
     try {
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/slug/$slug'),

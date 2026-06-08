@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'address_selection_modal.dart';
+import 'package:mobile/features/product/domain/entities/address.dart';
 
 class AddAddressForm extends StatefulWidget {
   final Function(Address) onAddressAdded;
@@ -15,22 +15,16 @@ class _AddAddressFormState extends State<AddAddressForm> {
   final _formKey = GlobalKey<FormState>();
 
   String? _selectedLabel;
-  final _nameController = TextEditingController();
-  final _streetController = TextEditingController();
-  final _cityController = TextEditingController();
-  final _zipController = TextEditingController();
-  String? _selectedCountry;
+  final _fullAddressController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isDefault = false;
 
-  final List<String> _labels = ['Home', 'Work', 'Other'];
-  final List<String> _countries = ['Wabari', 'Shangahani', 'Warta'];
+  final List<String> _labels = ['Home', 'Office', 'Other'];
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _streetController.dispose();
-    _cityController.dispose();
-    _zipController.dispose();
+    _fullAddressController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -39,25 +33,27 @@ class _AddAddressFormState extends State<AddAddressForm> {
       final newAddress = Address(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         label: _selectedLabel ?? 'Other',
-        name: _nameController.text,
-        street: _streetController.text,
-        city: _cityController.text,
-        zipCode: _zipController.text,
-        country: _selectedCountry ?? 'Somalia',
+        fullAddress: _fullAddressController.text,
+        phoneNumber: _phoneController.text,
         isDefault: _isDefault,
       );
       widget.onAddressAdded(newAddress);
 
       // Clear form
-      _nameController.clear();
-      _streetController.clear();
-      _cityController.clear();
-      _zipController.clear();
+      _fullAddressController.clear();
+      _phoneController.clear();
       setState(() {
         _selectedLabel = null;
-        _selectedCountry = null;
         _isDefault = false;
       });
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Address added successfully'),
+          backgroundColor: Color(0xFF2ED573),
+        ),
+      );
     }
   }
 
@@ -84,15 +80,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 IconButton(
-                  icon: const Icon(Iconsax.minus, size: 20),
+                  icon: const Icon(Iconsax.close_circle, size: 20),
                   onPressed: () {
+                    // Clear form
+                    _fullAddressController.clear();
+                    _phoneController.clear();
                     setState(() {
-                      _nameController.clear();
-                      _streetController.clear();
-                      _cityController.clear();
-                      _zipController.clear();
                       _selectedLabel = null;
-                      _selectedCountry = null;
                       _isDefault = false;
                     });
                   },
@@ -130,16 +124,17 @@ class _AddAddressFormState extends State<AddAddressForm> {
             ),
             const SizedBox(height: 16),
 
-            // Address Name
+            // Full Address
             const Text(
-              'Address Name *',
+              'Full Address *',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             TextFormField(
-              controller: _nameController,
+              controller: _fullAddressController,
+              maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'e.g., Home, Office, Vacation House',
+                hintText: 'Enter your full address',
                 hintStyle: TextStyle(color: Colors.grey[400]),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -149,60 +144,25 @@ class _AddAddressFormState extends State<AddAddressForm> {
                   vertical: 14,
                 ),
               ),
-              validator: (value) =>
-                  value?.isEmpty ?? true ? 'Please enter address name' : null,
+              validator: (value) => value?.isEmpty ?? true
+                  ? 'Please enter your full address'
+                  : null,
             ),
             const SizedBox(height: 16),
 
-            // Street Address
-            const SizedBox(height: 16),
-
-            // City and ZIP Code Row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(width: 16),
-                // Expanded(
-                //   child: Column(
-                //     crossAxisAlignment: CrossAxisAlignment.start,
-                //     children: [
-                //       const Text(
-                //         'ZIP Code *',
-                //         style: TextStyle(fontWeight: FontWeight.w600),
-                //       ),
-                //       const SizedBox(height: 8),
-                //       TextFormField(
-                //         controller: _zipController,
-                //         keyboardType: TextInputType.number,
-                //         decoration: InputDecoration(
-                //           hintText: 'Enter ZIP code',
-                //           hintStyle: TextStyle(color: Colors.grey[400]),
-                //           border: OutlineInputBorder(
-                //             borderRadius: BorderRadius.circular(12),
-                //           ),
-                //           contentPadding: const EdgeInsets.symmetric(
-                //             horizontal: 16,
-                //             vertical: 14,
-                //           ),
-                //         ),
-                //         validator: (value) => value?.isEmpty ?? true
-                //             ? 'Please enter ZIP code'
-                //             : null,
-                //       ),
-                //     ],
-                //   ),
-                // ),
-              ],
+            // Phone Number
+            const Text(
+              'Phone Number *',
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 16),
-
-            // Country
-            const Text('City *', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              value: _selectedCountry,
-              hint: const Text('Select City'),
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
               decoration: InputDecoration(
+                hintText: 'Enter your phone number',
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                prefixIcon: const Icon(Iconsax.call, size: 20),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -211,16 +171,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
                   vertical: 14,
                 ),
               ),
-              items: _countries.map((country) {
-                return DropdownMenuItem(value: country, child: Text(country));
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedCountry = value),
-              validator: (value) =>
-                  value == null ? 'Please select country' : null,
+              validator: (value) => value?.isEmpty ?? true
+                  ? 'Please enter your phone number'
+                  : null,
             ),
             const SizedBox(height: 16),
 
-            // Set as Default Address - FIXED overflow issue
+            // Set as Default Address
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [

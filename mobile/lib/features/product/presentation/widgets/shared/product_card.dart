@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
+import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
@@ -12,6 +13,12 @@ class ProductCard extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         // Navigate to product detail
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductDetailScreen(productId: product.id),
+          ),
+        );
       },
       child: Container(
         padding: const EdgeInsets.all(4),

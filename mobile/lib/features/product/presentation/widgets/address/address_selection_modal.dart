@@ -1,99 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'add_address_form.dart';
+import '../../../domain/entities/address.dart';
 
-class Address {
-  final String id;
-  final String label;
-  final String name;
-  final String street;
-  final String city;
-  final String zipCode;
-  final String country;
-  final bool isDefault;
-
-  Address({
-    required this.id,
-    required this.label,
-    required this.name,
-    required this.street,
-    required this.city,
-    required this.zipCode,
-    required this.country,
-    this.isDefault = false,
-  });
-
-  String get fullAddress => '$street, $city, $zipCode, $country';
-}
-
-class AddressSelectionModal extends StatefulWidget {
+class AddressSelectionModal extends StatelessWidget {
   final Function(Address) onAddressSelected;
 
   const AddressSelectionModal({super.key, required this.onAddressSelected});
 
   @override
-  State<AddressSelectionModal> createState() => _AddressSelectionModalState();
-}
-
-class _AddressSelectionModalState extends State<AddressSelectionModal> {
-  List<Address> addresses = [];
-  bool _showAddForm = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMockAddresses();
-  }
-
-  void _loadMockAddresses() {
-    addresses = [
-      Address(
+  Widget build(BuildContext context) {
+    final addresses = [
+      const Address(
         id: '1',
         label: 'Home',
-        name: 'Home',
-        street: '123 Main Street',
-        city: 'Mogadishu',
-        zipCode: '1000',
-        country: 'Somalia',
+        fullAddress: '123 Main Street, Mogadishu, Somalia',
+        phoneNumber: '+252 61 1234567',
         isDefault: true,
       ),
-      Address(
+      const Address(
         id: '2',
-        label: 'Work',
-        name: 'Work',
-        street: '45 Business Avenue',
-        city: 'Hargeisa',
-        zipCode: '2000',
-        country: 'Somalia',
+        label: 'Office',
+        fullAddress: '456 Business District, Mogadishu, Somalia',
+        phoneNumber: '+252 61 7654321',
         isDefault: false,
       ),
     ];
-  }
 
-  void _addAddress(Address newAddress) {
-    setState(() {
-      addresses.add(newAddress);
-      _showAddForm = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Address added successfully'),
-        backgroundColor: Color(0xFF2ED573),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
+      height: MediaQuery.of(context).size.height * 0.6,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [
-          // Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
@@ -102,23 +42,9 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    if (_showAddForm)
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, size: 20),
-                        onPressed: () {
-                          setState(() => _showAddForm = false);
-                        },
-                      ),
-                    Text(
-                      _showAddForm ? 'Add New Address' : 'Select Address',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Select Delivery Address',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 IconButton(
                   icon: const Icon(Iconsax.close_circle),
@@ -127,148 +53,120 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
               ],
             ),
           ),
-
-          // ✅ FIX: Conditional rendering - show form OR list, never both
-          if (_showAddForm) ...[
-            Expanded(
-              child: SingleChildScrollView(
-                child: AddAddressForm(onAddressAdded: _addAddress),
-              ),
-            ),
-          ] else ...[
-            // Add New Address Button
-            Padding(
+          Expanded(
+            child: ListView.builder(
               padding: const EdgeInsets.all(16),
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  setState(() => _showAddForm = true);
-                },
-                icon: const Icon(Iconsax.add, color: Colors.white),
-                label: const Text('Add New Address'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2ED573),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-
-            // Address List
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: addresses.length,
-                itemBuilder: (context, index) {
-                  final address = addresses[index];
-                  return AddressCard(
-                    address: address,
-                    onSelect: () {
-                      widget.onAddressSelected(address);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// Address Card Widget
-class AddressCard extends StatelessWidget {
-  final Address address;
-  final VoidCallback onSelect;
-
-  const AddressCard({super.key, required this.address, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: address.isDefault
-              ? const Color(0xFF2ED573)
-              : const Color(0xFFEEEEEE),
-        ),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onSelect,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      address.label == 'Home'
-                          ? Iconsax.home
-                          : address.label == 'Work'
-                          ? Iconsax.building
-                          : Iconsax.location,
-                      size: 20,
-                      color: const Color(0xFF2ED573),
+              itemCount: addresses.length,
+              itemBuilder: (context, index) {
+                final address = addresses[index];
+                return GestureDetector(
+                  onTap: () {
+                    onAddressSelected(address);
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFEEEEEE)),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      address.label,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (address.isDefault) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2ED573).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Default',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF2ED573),
-                            fontWeight: FontWeight.w600,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2ED573).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            address.isDefault ? Iconsax.home : Iconsax.building,
+                            color: const Color(0xFF2ED573),
                           ),
                         ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  address.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                address.label,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                address.fullAddress,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                address.phoneNumber,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (address.isDefault)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2ED573).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'Default',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF2ED573),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  address.fullAddress,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                ),
-              ],
+                );
+              },
             ),
           ),
-        ),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
+            ),
+            child: ElevatedButton(
+              onPressed: () {
+                // Navigate to add new address
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF2ED573),
+                minimumSize: const Size(double.infinity, 50),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFF2ED573)),
+                ),
+              ),
+              child: const Text(
+                '+ Add New Address',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

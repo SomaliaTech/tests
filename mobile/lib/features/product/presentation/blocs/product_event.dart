@@ -11,15 +11,6 @@ class GetCategoriesEvent extends ProductEvent {}
 
 class GetFeaturedProductsEvent extends ProductEvent {}
 
-class GetProductsByCategoryEvent extends ProductEvent {
-  final String categoryId;
-
-  const GetProductsByCategoryEvent(this.categoryId);
-
-  @override
-  List<Object?> get props => [categoryId];
-}
-
 class SearchProductsEvent extends ProductEvent {
   final String? query;
 
@@ -30,3 +21,21 @@ class SearchProductsEvent extends ProductEvent {
 }
 
 class ResetProductStateEvent extends ProductEvent {}
+
+class GetProductsByCategoryEvent extends ProductEvent {
+  final String categoryId;
+
+  const GetProductsByCategoryEvent(this.categoryId);
+
+  @override
+  List<Object?> get props => [categoryId];
+}
+
+class GetProductByIdEvent extends ProductEvent {
+  final String productId;
+
+  const GetProductByIdEvent(this.productId);
+
+  @override
+  List<Object?> get props => [productId];
+}

@@ -53,6 +53,27 @@ class FeaturedProductsError extends ProductState {
   List<Object?> get props => [message];
 }
 
+// ==========================================
+// 📦 Single Product States
+// ==========================================
+class ProductDetailLoading extends ProductState {}
+
+class ProductDetailLoaded extends ProductState {
+  final Product product;
+  const ProductDetailLoaded(this.product);
+
+  @override
+  List<Object?> get props => [product];
+}
+
+class ProductDetailError extends ProductState {
+  final String message;
+  const ProductDetailError(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}
+
 // Generic fallback or for other dynamic routes if needed
 class ProductLoading extends ProductState {}
 
