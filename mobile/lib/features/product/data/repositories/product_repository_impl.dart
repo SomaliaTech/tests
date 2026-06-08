@@ -6,8 +6,6 @@ import '../../domain/entities/category.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../datasources/product_remote_datasource.dart';
-import '../models/category_model.dart';
-import '../models/product_model.dart';
 
 class ProductRepositoryImpl implements ProductRepository {
   final ProductRemoteDataSource remoteDataSource;
@@ -19,6 +17,18 @@ class ProductRepositoryImpl implements ProductRepository {
     try {
       final categories = await remoteDataSource.getCategories();
       return Right(categories);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: $e'));
+    }
+  }
+
+  @override
+  ResultFuture<List<Category>> getSubcategories(String parentId) async {
+    try {
+      final subcategories = await remoteDataSource.getSubcategories(parentId);
+      return Right(subcategories);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {

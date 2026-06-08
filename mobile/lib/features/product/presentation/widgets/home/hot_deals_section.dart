@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/product/presentation/widgets/shared/product_card.dart';
+import 'package:toastification/toastification.dart';
 import '../../blocs/product_bloc.dart';
 import '../../blocs/product_state.dart';
+import '../shared/product_card.dart';
 
 class HotDealsSection extends StatelessWidget {
   const HotDealsSection({super.key});
@@ -40,10 +41,9 @@ class HotDealsSection extends StatelessWidget {
           ),
           const SizedBox(height: 15),
           BlocBuilder<ProductBloc, ProductState>(
-            // Build ONLY when it relates directly to featured list state changes
             buildWhen: (previous, current) =>
-                current is FeaturedProductsLoading ||
                 current is FeaturedProductsLoaded ||
+                current is FeaturedProductsLoading ||
                 current is FeaturedProductsError,
             builder: (context, state) {
               if (state is FeaturedProductsLoaded) {
@@ -68,7 +68,16 @@ class HotDealsSection extends StatelessWidget {
               } else if (state is FeaturedProductsLoading) {
                 return const Center(child: CircularProgressIndicator());
               } else if (state is FeaturedProductsError) {
-                return Center(child: Text(state.message));
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  toastification.show(
+                    title: const Text('Error'),
+                    description: Text(state.message),
+                    type: ToastificationType.error,
+                    style: ToastificationStyle.fillColored,
+                    autoCloseDuration: const Duration(seconds: 3),
+                  );
+                });
+                return const SizedBox.shrink();
               }
               return const SizedBox.shrink();
             },

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/wishlist/presentation/provider/wishlist_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:toastification/toastification.dart';
+import '../bloc/wishlist_bloc.dart';
+import '../bloc/wishlist_event.dart';
+import '../bloc/wishlist_state.dart';
 
 class WishlistAppBar extends StatelessWidget implements PreferredSizeWidget {
   const WishlistAppBar({super.key});
@@ -10,15 +13,18 @@ class WishlistAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: Colors.white,
       elevation: 0,
-
+      title: const Text(
+        'My Wishlist',
+        style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+      ),
       actions: [
-        Consumer<WishlistProvider>(
-          builder: (context, provider, child) {
-            if (!provider.isWishlistEmpty) {
+        BlocBuilder<WishlistBloc, WishlistState>(
+          builder: (context, state) {
+            if (state is WishlistLoaded && !state.isWishlistEmpty) {
               return Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: TextButton(
-                  onPressed: () => _showClearDialog(context, provider),
+                  onPressed: () => _showClearDialog(context),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
                   child: const Text(
                     'Clear All',
@@ -34,7 +40,7 @@ class WishlistAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  void _showClearDialog(BuildContext context, WishlistProvider provider) {
+  void _showClearDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -50,13 +56,14 @@ class WishlistAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             TextButton(
               onPressed: () {
-                provider.clearWishlist();
+                context.read<WishlistBloc>().add(ClearWishlistEvent());
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Wishlist cleared'),
-                    backgroundColor: Colors.red,
-                  ),
+                toastification.show(
+                  title: const Text('Cleared'),
+                  description: const Text('Wishlist cleared successfully'),
+                  type: ToastificationType.success,
+                  style: ToastificationStyle.fillColored,
+                  autoCloseDuration: const Duration(seconds: 2),
                 );
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),

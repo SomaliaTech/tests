@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/wishlist/presentation/model/wishlist_item_model.dart';
+import 'package:mobile/features/wishlist/domain/entities/wishlist_item.dart';
 
 class WishlistItemCard extends StatelessWidget {
   final WishlistItem item;
@@ -17,7 +17,7 @@ class WishlistItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
-      height: 120,
+      height: 130,
       child: Row(
         children: [
           // Product Image Container
@@ -25,20 +25,21 @@ class WishlistItemCard extends StatelessWidget {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: item.backgroundColor,
+              color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(20),
             ),
             padding: const EdgeInsets.all(9),
             child: Stack(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
+                  borderRadius: const BorderRadius.all(Radius.circular(10)),
                   child: Image.network(
                     item.imageUrl,
                     height: double.infinity,
+                    width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.headphones, size: 50),
+                        const Icon(Icons.image_not_supported, size: 50),
                   ),
                 ),
                 // Remove Button
@@ -82,40 +83,33 @@ class WishlistItemCard extends StatelessWidget {
               children: [
                 Text(
                   item.name,
+
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      'Review ',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                    const Icon(Icons.star, color: Colors.black, size: 14),
-                    Text(
-                      ' ${item.ratingString}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      ' )',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+                if (item.brand != null) ...[
+                  Text(
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    item.brand!,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  ),
+
+                  const SizedBox(height: 4),
+                ],
+
                 Text(
                   item.formattedPrice,
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: Color(0xFF2ED573),
                   ),
                 ),
               ],

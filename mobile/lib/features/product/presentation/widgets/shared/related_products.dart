@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import '../../models/product_model.dart';
+import 'package:mobile/features/product/presentation/widgets/product/product_model.dart';
 
 class RelatedProducts extends StatelessWidget {
   final List<Product> products;

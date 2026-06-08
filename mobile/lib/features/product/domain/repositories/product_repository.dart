@@ -6,6 +6,7 @@ abstract class ProductRepository {
   ResultFuture<List<Category>> getCategories();
   ResultFuture<List<Product>> getFeaturedProducts({int limit});
   ResultFuture<List<Product>> getProductsByCategory(String categoryId);
+  ResultFuture<List<Category>> getSubcategories(String parentId); // Add this
   ResultFuture<List<Product>> searchProducts({
     String? query,
     double? minPrice,

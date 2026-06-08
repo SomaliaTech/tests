@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
 
 class EmptyWishlistView extends StatelessWidget {
   const EmptyWishlistView({super.key});
@@ -12,14 +11,7 @@ class EmptyWishlistView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SvgPicture.asset(
-              'assets/empty_wishlist.svg',
-              height: 220,
-              placeholderBuilder: (BuildContext context) => const SizedBox(
-                height: 220,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ),
+            Icon(Icons.favorite_border, size: 80, color: Colors.grey[400]),
             const SizedBox(height: 32),
             const Text(
               'My Wishlist is Empty!',
@@ -31,7 +23,7 @@ class EmptyWishlistView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Please choose a heart product to  start saving\nyour favorite items.',
+              'Tap the heart icon on any product to save\nit to your wishlist',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,

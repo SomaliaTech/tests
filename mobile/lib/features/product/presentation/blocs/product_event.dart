@@ -9,11 +9,18 @@ abstract class ProductEvent extends Equatable {
 
 class GetCategoriesEvent extends ProductEvent {}
 
+class GetSubcategoriesEvent extends ProductEvent {
+  final String parentId;
+  const GetSubcategoriesEvent(this.parentId);
+
+  @override
+  List<Object?> get props => [parentId];
+}
+
 class GetFeaturedProductsEvent extends ProductEvent {}
 
 class SearchProductsEvent extends ProductEvent {
   final String? query;
-
   const SearchProductsEvent(this.query);
 
   @override
@@ -24,7 +31,6 @@ class ResetProductStateEvent extends ProductEvent {}
 
 class GetProductsByCategoryEvent extends ProductEvent {
   final String categoryId;
-
   const GetProductsByCategoryEvent(this.categoryId);
 
   @override
@@ -33,7 +39,6 @@ class GetProductsByCategoryEvent extends ProductEvent {
 
 class GetProductByIdEvent extends ProductEvent {
   final String productId;
-
   const GetProductByIdEvent(this.productId);
 
   @override

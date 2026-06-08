@@ -13,7 +13,7 @@
 	<string>Allow access to camera to take profile picture</string>
 
 	<key>CFBundleDisplayName</key>
-	<string>Mobile</string>
+	<string>Haldoor</string>
 
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

@@ -148,9 +148,7 @@ class AddressSelectionModal extends StatelessWidget {
               border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
             ),
             child: ElevatedButton(
-              onPressed: () {
-                // Navigate to add new address
-              },
+              onPressed: () {},
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF2ED573),

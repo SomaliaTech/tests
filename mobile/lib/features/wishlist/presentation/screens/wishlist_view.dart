@@ -1,26 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/wishlist/presentation/widgets/empty_wishlist_view.dart';
-import 'package:mobile/features/wishlist/presentation/widgets/wishlist_app_bar.dart';
-import 'package:mobile/features/wishlist/presentation/widgets/wishlist_list_view.dart';
-import 'package:mobile/features/wishlist/presentation/provider/wishlist_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/features/wishlist/presentation/widgets/wishlist_item_card.dart';
+import 'package:toastification/toastification.dart';
+import '../bloc/wishlist_bloc.dart';
+import '../bloc/wishlist_event.dart';
+import '../bloc/wishlist_state.dart';
 
-class WishlistView extends StatelessWidget {
-  const WishlistView({super.key});
+class WishlistListView extends StatelessWidget {
+  const WishlistListView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: const WishlistAppBar(),
-      body: Consumer<WishlistProvider>(
-        builder: (context, provider, child) {
-          if (provider.isWishlistEmpty) {
-            return const EmptyWishlistView();
-          }
-          return const WishlistListView();
-        },
-      ),
+    return BlocBuilder<WishlistBloc, WishlistState>(
+      builder: (context, state) {
+        if (state is WishlistLoaded) {
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            itemCount: state.items.length,
+            itemBuilder: (context, index) {
+              final item = state.items[index];
+              return WishlistItemCard(
+                item: item,
+                onRemove: () {
+                  context.read<WishlistBloc>().add(
+                    RemoveFromWishlistEvent(item.id),
+                  );
+                  toastification.show(
+                    title: const Text('Removed'),
+                    description: Text('${item.name} removed from wishlist'),
+                    type: ToastificationType.success,
+                    style: ToastificationStyle.fillColored,
+                    autoCloseDuration: const Duration(seconds: 2),
+                  );
+                },
+                onAddToCart: () {
+                  toastification.show(
+                    title: const Text('Added to Cart'),
+                    description: Text('${item.name} added to cart'),
+                    type: ToastificationType.success,
+                    style: ToastificationStyle.fillColored,
+                    autoCloseDuration: const Duration(seconds: 2),
+                  );
+                },
+              );
+            },
+          );
+        }
+        return const SizedBox.shrink();
+      },
     );
   }
 }

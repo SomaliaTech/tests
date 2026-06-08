@@ -3,6 +3,7 @@ import 'package:mobile/features/product/domain/usecases/get_categories.dart';
 import 'package:mobile/features/product/domain/usecases/get_featured_products.dart';
 import 'package:mobile/features/product/domain/usecases/get_product_by_id.dart';
 import 'package:mobile/features/product/domain/usecases/get_products_by_category.dart';
+import 'package:mobile/features/product/domain/usecases/get_subcategories.dart';
 import 'package:mobile/features/product/domain/usecases/search_products.dart';
 
 import 'product_event.dart';
@@ -10,6 +11,7 @@ import 'product_state.dart';
 
 class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final GetCategories getCategories;
+  final GetSubcategories getSubcategories; // Add this
   final GetFeaturedProducts getFeaturedProducts;
   final GetProductsByCategory getProductsByCategory;
   final SearchProducts searchProducts;
@@ -17,6 +19,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
 
   ProductBloc({
     required this.getCategories,
+    required this.getSubcategories, // Add this
     required this.getFeaturedProducts,
     required this.getProductsByCategory,
     required this.searchProducts,
@@ -28,6 +31,16 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       result.fold(
         (failure) => emit(CategoriesError(failure.message)),
         (categories) => emit(CategoriesLoaded(categories)),
+      );
+    });
+
+    on<GetSubcategoriesEvent>((event, emit) async {
+      // Add this
+      emit(SubcategoriesLoading());
+      final result = await getSubcategories(event.parentId);
+      result.fold(
+        (failure) => emit(SubcategoriesError(failure.message)),
+        (subcategories) => emit(SubcategoriesLoaded(subcategories)),
       );
     });
 

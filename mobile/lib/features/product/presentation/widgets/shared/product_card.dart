@@ -7,12 +7,11 @@ class ProductCard extends StatelessWidget {
   final Product product;
 
   const ProductCard({super.key, required this.product});
+
   @override
   Widget build(BuildContext context) {
-    print(product);
     return GestureDetector(
       onTap: () {
-        // Navigate to product detail
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -42,15 +41,16 @@ class ProductCard extends StatelessWidget {
                 borderRadius: const BorderRadius.all(Radius.circular(12)),
                 child: Stack(
                   children: [
-                    // if (product.imageUrls.isNotEmpty)
                     Image.network(
-                      // product.imageUrls.first,
-                      "https://mtunda.ug/cdn/shop/files/MT3U3ref_VW_34FR_watch-case-45-aluminum-pink-cell-s9_VW_34FR_watch-face-45-aluminum-pink-s9_VW_34FR_WF_CO.jpg?v=1713163571&width=1445",
+                      product.imageUrls.isNotEmpty
+                          ? product.imageUrls.first
+                          : "https://via.placeholder.com/800x800",
                       height: 160,
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
+                          height: 160,
                           width: double.infinity,
                           color: Colors.grey.shade200,
                           child: const Icon(
@@ -60,22 +60,6 @@ class ProductCard extends StatelessWidget {
                           ),
                         );
                       },
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: const Icon(
-                          Iconsax.verify,
-                          size: 16,
-                          color: Color(0xFF2ED573),
-                        ),
-                      ),
                     ),
                   ],
                 ),

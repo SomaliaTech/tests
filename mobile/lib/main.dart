@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/core/common/widgets/navigation.dart';
-import 'package:mobile/core/theme/theme.dart';
-import 'package:mobile/core/services/injection_container.dart'; // 🟢 Import your new injector
-import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
+import 'package:toastification/toastification.dart';
+import 'core/services/injection_container.dart';
+import 'core/theme/theme.dart';
+import 'features/product/presentation/blocs/product_bloc.dart';
+import 'features/wishlist/presentation/bloc/wishlist_bloc.dart';
+import 'core/common/widgets/navigation.dart';
 
 void main() async {
-  // Ensure framework channels are initialized before kicking off dependencies
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🟢 Run the dependency tree construction
+  // Initialize dependencies
   await initDependencies();
 
   runApp(const MyApp());
@@ -20,16 +21,19 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        // 🟢 GetIt automatically resolves the Bloc and all its underlying requirements!
-        BlocProvider(create: (context) => sl<ProductBloc>()),
-      ],
-      child: MaterialApp(
-        title: 'HALDOOR',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        home: const MainNavigationScreen(),
+    // Only ONE ToastificationWrapper at the root
+    return ToastificationWrapper(
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (context) => sl<ProductBloc>()),
+          BlocProvider(create: (context) => sl<WishlistBloc>()), // Add this
+        ],
+        child: MaterialApp(
+          title: 'HALDOOR',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          home: const MainNavigationScreen(),
+        ),
       ),
     );
   }

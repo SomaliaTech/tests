@@ -42,6 +42,8 @@ class ProductHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+
+              // Wishlist Button
             ],
           ),
         ),

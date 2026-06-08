@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
+import 'package:mobile/features/product/domain/entities/product.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_event.dart';
 import 'package:mobile/features/product/presentation/blocs/product_state.dart';
@@ -15,6 +15,12 @@ import 'package:mobile/features/product/presentation/widgets/product/payment_opt
 import 'package:mobile/features/product/presentation/widgets/product/product_header.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_info.dart';
 import 'package:toastification/toastification.dart';
+
+// Wishlist imports
+import '../../../wishlist/presentation/bloc/wishlist_bloc.dart';
+import '../../../wishlist/presentation/bloc/wishlist_event.dart';
+import '../../../wishlist/presentation/bloc/wishlist_state.dart';
+import '../../../wishlist/domain/entities/wishlist_item.dart';
 
 class ProductDetailView extends StatefulWidget {
   final String productId;
@@ -31,11 +37,54 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   String? selectedSize;
   int quantity = 1;
   Address? _selectedAddress;
+  bool _isInWishlist = false;
 
   @override
   void initState() {
     super.initState();
     context.read<ProductBloc>().add(GetProductByIdEvent(widget.productId));
+    _checkWishlistStatus();
+  }
+
+  void _checkWishlistStatus() {
+    final state = context.read<WishlistBloc>().state;
+    if (state is WishlistLoaded) {
+      _isInWishlist = state.items.any((item) => item.id == widget.productId);
+      setState(() {});
+    }
+  }
+
+  void _toggleWishlist(Product product) {
+    if (_isInWishlist) {
+      context.read<WishlistBloc>().add(RemoveFromWishlistEvent(product.id));
+      toastification.show(
+        title: const Text('Removed from Wishlist'),
+        description: Text('${product.name} removed from wishlist'),
+        type: ToastificationType.success,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+      setState(() => _isInWishlist = false);
+    } else {
+      final wishlistItem = WishlistItem(
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
+        brand: product.brand,
+        rating: product.rating,
+        categoryId: product.categoryId,
+      );
+      context.read<WishlistBloc>().add(AddToWishlistEvent(wishlistItem));
+      toastification.show(
+        title: const Text('Added to Wishlist'),
+        description: Text('${product.name} added to wishlist'),
+        type: ToastificationType.success,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+      setState(() => _isInWishlist = true);
+    }
   }
 
   void _showAddressSelection() {
@@ -82,18 +131,32 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: BlocListener<ProductBloc, ProductState>(
-        listener: (context, state) {
-          if (state is ProductDetailError) {
-            toastification.show(
-              title: const Text('Error'),
-              description: Text(state.message),
-              type: ToastificationType.error,
-              style: ToastificationStyle.fillColored,
-              autoCloseDuration: const Duration(seconds: 3),
-            );
-          }
-        },
+      body: MultiBlocListener(
+        listeners: [
+          BlocListener<ProductBloc, ProductState>(
+            listener: (context, state) {
+              if (state is ProductDetailError) {
+                toastification.show(
+                  title: const Text('Error'),
+                  description: Text(state.message),
+                  type: ToastificationType.error,
+                  style: ToastificationStyle.fillColored,
+                  autoCloseDuration: const Duration(seconds: 3),
+                );
+              }
+            },
+          ),
+          BlocListener<WishlistBloc, WishlistState>(
+            listener: (context, state) {
+              if (state is WishlistLoaded) {
+                _isInWishlist = state.items.any(
+                  (item) => item.id == widget.productId,
+                );
+                setState(() {});
+              }
+            },
+          ),
+        ],
         child: BlocBuilder<ProductBloc, ProductState>(
           buildWhen: (previous, current) =>
               current is ProductDetailLoading ||
@@ -170,15 +233,9 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                     left: 0,
                     right: 0,
                     child: BottomActionBar(
-                      onFavoriteTap: () {
-                        toastification.show(
-                          title: const Text('Success'),
-                          description: const Text('Added to favorites'),
-                          type: ToastificationType.success,
-                          style: ToastificationStyle.fillColored,
-                          autoCloseDuration: const Duration(seconds: 2),
-                        );
-                      },
+                      productName: product.name,
+                      isInWishlist: _isInWishlist,
+                      onFavoriteTap: () => _toggleWishlist(product),
                       onBuyNowTap: () {
                         if (_selectedAddress == null) {
                           _showAddressSelection();
@@ -231,7 +288,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2ED573).withOpacity(0.1),
+        color: const Color(0xFF2ED573).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF2ED573)),
       ),

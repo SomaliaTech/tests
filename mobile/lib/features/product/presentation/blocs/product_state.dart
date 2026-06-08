@@ -33,6 +33,27 @@ class CategoriesError extends ProductState {
 }
 
 // ==========================================
+// 📂 Subcategory States
+// ==========================================
+class SubcategoriesLoading extends ProductState {}
+
+class SubcategoriesLoaded extends ProductState {
+  final List<Category> subcategories;
+  const SubcategoriesLoaded(this.subcategories);
+
+  @override
+  List<Object?> get props => [subcategories];
+}
+
+class SubcategoriesError extends ProductState {
+  final String message;
+  const SubcategoriesError(this.message);
+
+  @override
+  List<Object?> get props => [message];
+}
+
+// ==========================================
 // 🏷️ Featured Products Loading States
 // ==========================================
 class FeaturedProductsLoading extends ProductState {}

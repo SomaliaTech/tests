@@ -4,11 +4,15 @@ import 'package:iconsax/iconsax.dart';
 class BottomActionBar extends StatelessWidget {
   final VoidCallback onFavoriteTap;
   final VoidCallback onBuyNowTap;
+  final bool isInWishlist;
+  final String productName;
 
   const BottomActionBar({
     super.key,
     required this.onFavoriteTap,
     required this.onBuyNowTap,
+    required this.productName,
+    required this.isInWishlist,
   });
 
   @override
@@ -29,7 +33,11 @@ class BottomActionBar extends StatelessWidget {
               ),
               child: IconButton(
                 onPressed: onFavoriteTap,
-                icon: const Icon(Iconsax.heart, color: Color(0xFF2ED573)),
+                icon: Icon(
+                  isInWishlist ? Iconsax.heart5 : Iconsax.heart,
+                  color: isInWishlist ? Colors.red : Colors.black87,
+                  size: 22,
+                ),
                 padding: EdgeInsets.zero,
               ),
             ),
