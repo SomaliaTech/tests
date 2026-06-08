@@ -40,8 +40,16 @@ class HotDealsSection extends StatelessWidget {
           ),
           const SizedBox(height: 15),
           BlocBuilder<ProductBloc, ProductState>(
+            // Build ONLY when it relates directly to featured list state changes
+            buildWhen: (previous, current) =>
+                current is FeaturedProductsLoading ||
+                current is FeaturedProductsLoaded ||
+                current is FeaturedProductsError,
             builder: (context, state) {
-              if (state is ProductsLoaded && state.products.isNotEmpty) {
+              if (state is FeaturedProductsLoaded) {
+                if (state.products.isEmpty) {
+                  return const Center(child: Text("No hot deals found."));
+                }
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -57,9 +65,9 @@ class HotDealsSection extends StatelessWidget {
                     return ProductCard(product: state.products[index]);
                   },
                 );
-              } else if (state is ProductLoading) {
+              } else if (state is FeaturedProductsLoading) {
                 return const Center(child: CircularProgressIndicator());
-              } else if (state is ProductError) {
+              } else if (state is FeaturedProductsError) {
                 return Center(child: Text(state.message));
               }
               return const SizedBox.shrink();

@@ -20,43 +20,39 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     required this.searchProducts,
   }) : super(ProductInitial()) {
     on<GetCategoriesEvent>((event, emit) async {
-      emit(ProductLoading());
-      try {
-        final categories = await getCategories();
-        emit(CategoriesLoaded(categories));
-      } catch (e) {
-        emit(ProductError(e.toString()));
-      }
+      emit(CategoriesLoading());
+      final result = await getCategories();
+      result.fold(
+        (failure) => emit(CategoriesError(failure.message)),
+        (categories) => emit(CategoriesLoaded(categories)),
+      );
     });
 
     on<GetFeaturedProductsEvent>((event, emit) async {
-      emit(ProductLoading());
-      try {
-        final products = await getFeaturedProducts(limit: 10);
-        emit(ProductsLoaded(products));
-      } catch (e) {
-        emit(ProductError(e.toString()));
-      }
+      emit(FeaturedProductsLoading());
+      final result = await getFeaturedProducts(limit: 10);
+      result.fold(
+        (failure) => emit(FeaturedProductsError(failure.message)),
+        (products) => emit(FeaturedProductsLoaded(products)),
+      );
     });
 
     on<GetProductsByCategoryEvent>((event, emit) async {
       emit(ProductLoading());
-      try {
-        final products = await getProductsByCategory(event.categoryId);
-        emit(ProductsLoaded(products));
-      } catch (e) {
-        emit(ProductError(e.toString()));
-      }
+      final result = await getProductsByCategory(event.categoryId);
+      result.fold(
+        (failure) => emit(ProductError(failure.message)),
+        (products) => emit(ProductsLoaded(products)),
+      );
     });
 
     on<SearchProductsEvent>((event, emit) async {
       emit(ProductLoading());
-      try {
-        final products = await searchProducts(query: event.query);
-        emit(ProductsLoaded(products));
-      } catch (e) {
-        emit(ProductError(e.toString()));
-      }
+      final result = await searchProducts(query: event.query);
+      result.fold(
+        (failure) => emit(ProductError(failure.message)),
+        (products) => emit(ProductsLoaded(products)),
+      );
     });
   }
 }

@@ -1,4 +1,6 @@
-class Category {
+import 'package:equatable/equatable.dart';
+
+class Category extends Equatable {
   final String id;
   final String name;
   final String slug;
@@ -12,4 +14,7 @@ class Category {
     this.description,
     this.parentId,
   });
+
+  @override
+  List<Object?> get props => [id, name, slug, description, parentId];
 }

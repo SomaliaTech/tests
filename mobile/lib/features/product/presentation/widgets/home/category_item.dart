@@ -19,34 +19,38 @@ class CategoryItem extends StatelessWidget {
           ),
         );
       },
-      child: Column(
-        children: [
-          Container(
-            width: 65,
-            height: 65,
-            decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.09),
-              shape: BoxShape.circle,
+      child: SizedBox(
+        width: 75,
+        child: Column(
+          children: [
+            Container(
+              width: 65,
+              height: 65,
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.09),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _getIconForCategory(category.name),
+                size: 32,
+                color: Colors.green,
+              ),
             ),
-            child: Icon(
-              _getIconForCategory(category.name),
-              size: 32,
-              color: Colors.green,
+            const SizedBox(height: 8),
+            Text(
+              category.name,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF333333),
+                letterSpacing: 0.3,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            category.name,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF333333),
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
