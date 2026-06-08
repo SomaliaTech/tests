@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
-
-import { PrismaModule } from '../prisma/prisma.module';
+import { ProductsController } from './products.controller';
+import { ProductsService } from './products.service';
 import { CloudinaryModule } from '../cloudinary/cloudinary.module';
-import { ProductsController } from './product.controller';
-import { ProductsService } from './product.service';
+// DrizzleModule is already @Global(), no need to import
 
 @Module({
-  imports: [PrismaModule, CloudinaryModule],
+  imports: [CloudinaryModule],
   controllers: [ProductsController],
   providers: [ProductsService],
   exports: [ProductsService],

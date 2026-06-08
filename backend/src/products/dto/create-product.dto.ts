@@ -1,7 +1,7 @@
 import {
   IsString,
   IsOptional,
-  IsDecimal,
+  IsNumber,
   IsInt,
   IsBoolean,
   IsUUID,
@@ -9,37 +9,39 @@ import {
   IsUrl,
   Min,
   MaxLength,
+  IsDecimal,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
   @MaxLength(255)
-  name!: string;
+  name: string;
 
   @IsString()
   @MaxLength(255)
-  slug!: string;
+  @IsOptional()
+  slug?: string;
 
   @IsString()
   @IsOptional()
   description?: string;
 
   @Type(() => Number)
-  @IsDecimal()
-  price!: number;
+  @IsNumber({ maxDecimalPlaces: 2 })
+  price: number;
 
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  stock!: number;
+  stock: number;
 
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 
   @IsUUID()
-  categoryId!: string;
+  categoryId: string;
 
   @IsArray()
   @IsOptional()
@@ -49,31 +51,26 @@ export class CreateProductDto {
 
 export class CreateProductVariantDto {
   @IsUUID()
-  colorId!: string;
+  colorId: string;
 
   @IsUUID()
-  sizeId!: string;
+  sizeId: string;
 
   @IsString()
-  sku!: string;
+  sku: string;
 
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  stock!: number;
+  stock: number;
 
   @Type(() => Number)
   @IsOptional()
-  @IsDecimal()
+  @IsNumber({ maxDecimalPlaces: 2 })
   price?: number;
-}
-
-export class UploadImageDto {
-  @IsUrl()
-  imageUrl!: string;
 }
 
 export class UploadBase64ImageDto {
   @IsString()
-  base64Image!: string;
+  base64Image: string;
 }

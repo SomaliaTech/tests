@@ -1,11 +1,20 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { DrizzleModule } from './drizzle/drizzle.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
-import { PrismaModule } from './prisma/prisma.module';
-import { ProductsModule } from './products/product.module';
-import { configureCloudinary } from './cloudinary/cloudinary.provider';
+import { ProductsModule } from './products/products.module';
+import { CategoriesController } from './categories/categories.controller';
+import { CategoriesModule } from './categories/categories.module';
 
-configureCloudinary();
 @Module({
-  imports: [PrismaModule, CloudinaryModule, ProductsModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    DrizzleModule, // Make sure this is imported
+    CloudinaryModule,
+    CategoriesModule,
+    ProductsModule,
+    CategoriesModule,
+  ],
+  controllers: [CategoriesController],
 })
 export class AppModule {}
