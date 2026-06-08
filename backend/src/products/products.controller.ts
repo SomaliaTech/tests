@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import {
   CreateProductDto,
@@ -15,6 +16,7 @@ import {
 } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
+import { SearchProductDto } from './dto/search-product.dto';
 
 @Controller('products')
 export class ProductsController {
@@ -23,6 +25,62 @@ export class ProductsController {
   @Post()
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);
+  }
+
+  // ========================================================
+  // ✨ STATIC GET ENDPOINTS (Must stay on top)
+  // ========================================================
+
+  @Get()
+  findAll() {
+    return this.productsService.findAll();
+  }
+
+  @Get('search')
+  async searchProducts(@Query() searchDto: SearchProductDto) {
+    return this.productsService.searchProducts(searchDto.search || '', {
+      categoryId: searchDto.categoryId,
+      minPrice: searchDto.minPrice,
+      maxPrice: searchDto.maxPrice,
+      brand: searchDto.brand,
+      sortBy: searchDto.sortBy,
+      page: searchDto.page,
+      limit: searchDto.limit,
+    });
+  }
+
+  @Get('filters')
+  async getFilters() {
+    return this.productsService.getProductFilters();
+  }
+
+  @Get('featured')
+  async getFeatured(@Query('limit') limit?: string) {
+    return this.productsService.getFeaturedProducts(
+      limit ? parseInt(limit) : 10,
+    );
+  }
+
+  // ========================================================
+  // ⚡ DYNAMIC/PARAMETERIZED ENDPOINTS (Must stay on bottom)
+  // ========================================================
+
+  @Get('slug/:slug')
+  findBySlug(@Param('slug') slug: string) {
+    return this.productsService.findBySlug(slug);
+  }
+
+  @Get('category/:categoryId')
+  async getByCategory(
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Query() filters: any,
+  ) {
+    return this.productsService.getProductsByCategory(categoryId, filters);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.productsService.findOne(id);
   }
 
   @Post(':id/images/urls')
@@ -47,21 +105,6 @@ export class ProductsController {
     @Body() createVariantDto: CreateProductVariantDto,
   ) {
     return this.productsService.addVariant(id, createVariantDto);
-  }
-
-  @Get()
-  findAll() {
-    return this.productsService.findAll();
-  }
-
-  @Get('slug/:slug')
-  findBySlug(@Param('slug') slug: string) {
-    return this.productsService.findBySlug(slug);
-  }
-
-  @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.productsService.findOne(id);
   }
 
   @Patch(':id')

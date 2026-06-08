@@ -11,32 +11,24 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// MediaAsset Table
-export const mediaAssets = pgTable(
-  'media_assets',
+// Category Table with self-referencing for subcategories
+// Category Table with self-referencing for subcategories
+export const categories = pgTable(
+  'categories',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    url: varchar('url', { length: 500 }).notNull(),
-    publicId: varchar('public_id', { length: 255 }).notNull().unique(),
-    productId: uuid('product_id'),
+    name: varchar('name', { length: 255 }).notNull().unique(),
+    slug: varchar('slug', { length: 255 }).notNull().unique(),
+    description: text('description'),
+    iconId: uuid('icon_id').unique(),
+    parentId: uuid('parent_id'), // Add this for subcategories
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
-    productIdx: index('product_idx').on(table.productId),
+    parentIdx: index('category_parent_idx').on(table.parentId),
   }),
 );
-
-// Category Table
-export const categories = pgTable('categories', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull().unique(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
-  description: text('description'),
-  iconId: uuid('icon_id').unique(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
 
 // Product Table
 export const products = pgTable(
@@ -47,16 +39,48 @@ export const products = pgTable(
     slug: varchar('slug', { length: 255 }).unique(),
     description: text('description'),
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }), // For sales
+    costPerItem: decimal('cost_per_item', { precision: 10, scale: 2 }),
     stock: integer('stock').notNull().default(0),
+    sku: varchar('sku', { length: 255 }).unique(),
+    barcode: varchar('barcode', { length: 255 }),
+    weight: decimal('weight', { precision: 8, scale: 2 }),
     isActive: boolean('is_active').notNull().default(true),
+    isFeatured: boolean('is_featured').default(false),
     categoryId: uuid('category_id').notNull(),
+    brand: varchar('brand', { length: 255 }),
+    tags: text('tags'), // Comma-separated tags for search
+    seoTitle: varchar('seo_title', { length: 255 }),
+    seoDescription: text('seo_description'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
-    categoryIdx: index('category_idx').on(table.categoryId),
-    activeIdx: index('active_idx').on(table.isActive),
-    slugIdx: index('slug_idx').on(table.slug),
+    categoryIdx: index('products_category_idx').on(table.categoryId),
+    activeIdx: index('products_active_idx').on(table.isActive),
+    featuredIdx: index('products_featured_idx').on(table.isFeatured),
+    slugIdx: index('products_slug_idx').on(table.slug),
+    skuIdx: index('products_sku_idx').on(table.sku),
+    brandIdx: index('products_brand_idx').on(table.brand),
+  }),
+);
+
+// MediaAsset Table
+export const mediaAssets = pgTable(
+  'media_assets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    url: varchar('url', { length: 500 }).notNull(),
+    publicId: varchar('public_id', { length: 255 }).notNull().unique(),
+    productId: uuid('product_id'),
+    isMain: boolean('is_main').default(false),
+    altText: varchar('alt_text', { length: 255 }),
+    order: integer('order').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    productIdx: index('media_product_idx').on(table.productId),
   }),
 );
 
@@ -84,16 +108,18 @@ export const productVariants = pgTable(
   {
     id: uuid('id').defaultRandom().primaryKey(),
     productId: uuid('product_id').notNull(),
-    colorId: uuid('color_id').notNull(),
-    sizeId: uuid('size_id').notNull(),
+    colorId: uuid('color_id'),
+    sizeId: uuid('size_id'),
     sku: varchar('sku', { length: 255 }).notNull().unique(),
     stock: integer('stock').notNull().default(0),
     price: decimal('price', { precision: 10, scale: 2 }),
+    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }),
+    imageId: uuid('image_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
-    productColorSizeUnique: index('product_color_size_unique').on(
+    productColorSizeUnique: index('variant_product_color_size_idx').on(
       table.productId,
       table.colorId,
       table.sizeId,
@@ -113,14 +139,20 @@ export const orders = pgTable(
     orderNumber: varchar('order_number', { length: 255 }).notNull().unique(),
     customerName: varchar('customer_name', { length: 255 }).notNull(),
     customerEmail: varchar('customer_email', { length: 255 }).notNull(),
+    customerPhone: varchar('customer_phone', { length: 50 }),
+    shippingAddress: text('shipping_address'),
     totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
     status: varchar('status', { length: 50 }).notNull().default('PENDING'),
+    paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
+    paymentMethod: varchar('payment_method', { length: 50 }),
+    notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     statusIdx: index('order_status_idx').on(table.status),
     emailIdx: index('order_email_idx').on(table.customerEmail),
+    orderNumberIdx: index('order_number_idx').on(table.orderNumber),
   }),
 );
 
@@ -133,10 +165,11 @@ export const orderItems = pgTable(
     productVariantId: uuid('product_variant_id').notNull(),
     productName: varchar('product_name', { length: 255 }).notNull(),
     variantSku: varchar('variant_sku', { length: 255 }).notNull(),
-    colorName: varchar('color_name', { length: 100 }).notNull(),
-    sizeName: varchar('size_name', { length: 100 }).notNull(),
+    colorName: varchar('color_name', { length: 100 }),
+    sizeName: varchar('size_name', { length: 100 }),
     unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
     quantity: integer('quantity').notNull(),
+    totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -145,19 +178,13 @@ export const orderItems = pgTable(
   }),
 );
 
-// Define Relations
-export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
-  product: one(products, {
-    fields: [mediaAssets.productId],
-    references: [products.id],
-  }),
-  category: one(categories, {
-    fields: [mediaAssets.productId],
+// Relations
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  parent: one(categories, {
+    fields: [categories.parentId],
     references: [categories.id],
   }),
-}));
-
-export const categoriesRelations = relations(categories, ({ many, one }) => ({
+  children: many(categories),
   products: many(products),
   icon: one(mediaAssets, {
     fields: [categories.iconId],
@@ -174,12 +201,11 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   variants: many(productVariants),
 }));
 
-export const colorsRelations = relations(colors, ({ many }) => ({
-  variants: many(productVariants),
-}));
-
-export const sizesRelations = relations(sizes, ({ many }) => ({
-  variants: many(productVariants),
+export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
+  product: one(products, {
+    fields: [mediaAssets.productId],
+    references: [products.id],
+  }),
 }));
 
 export const productVariantsRelations = relations(

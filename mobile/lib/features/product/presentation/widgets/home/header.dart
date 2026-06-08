@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/cart/presentation/screens/cart_view.dart';
-import 'package:mobile/features/cart/presentation/screens/cart_screen.dart';
-import 'package:mobile/features/notifications/presentation/screens/notifications_screen.dart';
 
 class Header extends StatelessWidget {
-  const Header({super.key});
+  final Function(String)? onSearch;
+
+  const Header({super.key, this.onSearch});
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +25,7 @@ class Header extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     "HALDOOR",
                     style: TextStyle(
                       fontSize: 28,
@@ -49,12 +48,7 @@ class Header extends StatelessWidget {
                         children: [
                           IconButton(
                             onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => CartScreen(),
-                                ),
-                              );
+                              // Navigate to cart
                             },
                             icon: const Icon(
                               Iconsax.shopping_cart,
@@ -64,7 +58,6 @@ class Header extends StatelessWidget {
                           Positioned(
                             right: 8,
                             top: 8,
-
                             child: Container(
                               padding: const EdgeInsets.all(2),
                               decoration: const BoxDecoration(
@@ -100,6 +93,7 @@ class Header extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: TextField(
+                  onSubmitted: onSearch,
                   decoration: InputDecoration(
                     hintText: "Search product here",
                     hintStyle: TextStyle(color: Colors.grey[400]),

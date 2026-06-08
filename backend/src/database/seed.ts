@@ -1,6 +1,10 @@
-// const { Pool } = require('pg');
-// require('dotenv').config();
-// const { v4: uuidv4 } = require('uuid');
+// import { drizzle } from 'drizzle-orm/node-postgres';
+// import { Pool } from 'pg';
+// import * as dotenv from 'dotenv';
+// import { v4 as uuidv4 } from 'uuid';
+// import { sql } from 'drizzle-orm';
+
+// dotenv.config();
 
 // async function seed() {
 //   const pool = new Pool({
@@ -8,516 +12,640 @@
 //     ssl: { rejectUnauthorized: false },
 //   });
 
+//   const db = drizzle(pool);
+
 //   console.log('🌱 Starting database seed...');
 
 //   try {
 //     // Clear existing data
 //     console.log('Clearing existing data...');
-//     await pool.query(`TRUNCATE TABLE order_items CASCADE`);
-//     await pool.query(`TRUNCATE TABLE orders CASCADE`);
-//     await pool.query(`TRUNCATE TABLE product_variants CASCADE`);
-//     await pool.query(`TRUNCATE TABLE media_assets CASCADE`);
-//     await pool.query(`TRUNCATE TABLE products CASCADE`);
-//     await pool.query(`TRUNCATE TABLE categories CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE order_items CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE orders CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE product_variants CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE media_assets CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE products CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE categories CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE colors CASCADE`);
+//     await db.execute(sql`TRUNCATE TABLE sizes CASCADE`);
 //     console.log('✓ Existing data cleared');
 
-//     // Categories data
-//     const categoriesData = [
-//       {
-//         name: 'Internet',
-//         slug: 'internet',
-//         description: 'Internet services, plans, and equipment',
-//       },
+//     // Parent Categories with subcategories structure
+//     const parentCategories = [
 //       {
 //         name: 'Electronics',
 //         slug: 'electronics',
 //         description: 'Electronic devices, gadgets, and accessories',
-//       },
-//       {
-//         name: 'Home & Kitchen',
-//         slug: 'home-kitchen',
-//         description: 'Home appliances, kitchenware, and furniture',
-//       },
-//       {
-//         name: 'Cosmetics',
-//         slug: 'cosmetics',
-//         description: 'Beauty products, makeup, and skincare',
+//         subcategories: [
+//           {
+//             name: 'Smartphones',
+//             slug: 'smartphones',
+//             description: 'Mobile phones and accessories',
+//           },
+//           {
+//             name: 'Laptops & Computers',
+//             slug: 'laptops-computers',
+//             description: 'Notebooks, desktops, and accessories',
+//           },
+//           {
+//             name: 'Audio & Headphones',
+//             slug: 'audio-headphones',
+//             description: 'Headphones, speakers, and audio equipment',
+//           },
+//           {
+//             name: 'Cameras & Photography',
+//             slug: 'cameras-photography',
+//             description: 'Digital cameras, lenses, and accessories',
+//           },
+//           {
+//             name: 'Gaming',
+//             slug: 'gaming',
+//             description: 'Gaming consoles, accessories, and games',
+//           },
+//           {
+//             name: 'TV & Home Theater',
+//             slug: 'tv-home-theater',
+//             description: 'Televisions, soundbars, and home theater systems',
+//           },
+//           {
+//             name: 'Wearable Technology',
+//             slug: 'wearable-tech',
+//             description: 'Smartwatches, fitness trackers, and wearables',
+//           },
+//         ],
 //       },
 //       {
 //         name: 'Fashion',
 //         slug: 'fashion',
 //         description: 'Clothing, shoes, and accessories',
+//         subcategories: [
+//           {
+//             name: "Men's Clothing",
+//             slug: 'mens-clothing',
+//             description: 'Shirts, pants, jackets for men',
+//           },
+//           {
+//             name: "Women's Clothing",
+//             slug: 'womens-clothing',
+//             description: 'Dresses, tops, skirts for women',
+//           },
+//           {
+//             name: "Kids' Clothing",
+//             slug: 'kids-clothing',
+//             description: 'Clothing for children',
+//           },
+//           { name: 'Shoes', slug: 'shoes', description: 'Footwear for all' },
+//           {
+//             name: 'Accessories',
+//             slug: 'accessories',
+//             description: 'Bags, watches, belts, and jewelry',
+//           },
+//           {
+//             name: 'Sportswear',
+//             slug: 'sportswear',
+//             description: 'Activewear and athletic clothing',
+//           },
+//         ],
 //       },
 //       {
-//         name: 'Jewelry',
-//         slug: 'jewelry',
-//         description: 'Necklaces, rings, bracelets, and earrings',
+//         name: 'Home & Living',
+//         slug: 'home-living',
+//         description: 'Home appliances, kitchenware, and furniture',
+//         subcategories: [
+//           {
+//             name: 'Furniture',
+//             slug: 'furniture',
+//             description: 'Sofas, tables, chairs, and beds',
+//           },
+//           {
+//             name: 'Kitchen Appliances',
+//             slug: 'kitchen-appliances',
+//             description: 'Refrigerators, ovens, microwaves',
+//           },
+//           {
+//             name: 'Home Decor',
+//             slug: 'home-decor',
+//             description: 'Decoration, lighting, and artwork',
+//           },
+//           {
+//             name: 'Bedding & Bath',
+//             slug: 'bedding-bath',
+//             description: 'Sheets, towels, and bathroom accessories',
+//           },
+//           {
+//             name: 'Garden & Outdoor',
+//             slug: 'garden-outdoor',
+//             description: 'Patio furniture, gardening tools',
+//           },
+//           {
+//             name: 'Tools & Home Improvement',
+//             slug: 'tools-improvement',
+//             description: 'Power tools, hardware',
+//           },
+//         ],
 //       },
 //       {
-//         name: 'Children',
-//         slug: 'children',
-//         description: 'Kids clothing, toys, and baby products',
+//         name: 'Beauty & Personal Care',
+//         slug: 'beauty-personal-care',
+//         description: 'Cosmetics, skincare, and personal care products',
+//         subcategories: [
+//           {
+//             name: 'Makeup',
+//             slug: 'makeup',
+//             description: 'Cosmetics and makeup products',
+//           },
+//           {
+//             name: 'Skincare',
+//             slug: 'skincare',
+//             description: 'Facial care, moisturizers, serums',
+//           },
+//           {
+//             name: 'Hair Care',
+//             slug: 'hair-care',
+//             description: 'Shampoos, conditioners, styling products',
+//           },
+//           {
+//             name: 'Fragrances',
+//             slug: 'fragrances',
+//             description: 'Perfumes and colognes',
+//           },
+//           {
+//             name: 'Personal Care',
+//             slug: 'personal-care',
+//             description: 'Oral care, shaving, deodorants',
+//           },
+//         ],
 //       },
 //       {
-//         name: 'Supplements',
-//         slug: 'supplements',
-//         description: 'Vitamins, minerals, and health supplements',
+//         name: 'Sports & Outdoors',
+//         slug: 'sports-outdoors',
+//         description: 'Sports equipment, outdoor gear, and fitness',
+//         subcategories: [
+//           {
+//             name: 'Exercise & Fitness',
+//             slug: 'exercise-fitness',
+//             description: 'Equipment, weights, yoga mats',
+//           },
+//           {
+//             name: 'Outdoor Recreation',
+//             slug: 'outdoor-recreation',
+//             description: 'Camping, hiking, climbing gear',
+//           },
+//           {
+//             name: 'Team Sports',
+//             slug: 'team-sports',
+//             description: 'Basketball, soccer, football equipment',
+//           },
+//           {
+//             name: 'Cycling',
+//             slug: 'cycling',
+//             description: 'Bikes, helmets, accessories',
+//           },
+//         ],
+//       },
+//       {
+//         name: 'Health & Wellness',
+//         slug: 'health-wellness',
+//         description: 'Vitamins, supplements, and health products',
+//         subcategories: [
+//           {
+//             name: 'Vitamins & Supplements',
+//             slug: 'vitamins-supplements',
+//             description: 'Dietary supplements and vitamins',
+//           },
+//           {
+//             name: 'Wellness',
+//             slug: 'wellness',
+//             description: 'Wellness products and self-care',
+//           },
+//           {
+//             name: 'Medical Supplies',
+//             slug: 'medical-supplies',
+//             description: 'First aid, braces, supports',
+//           },
+//         ],
+//       },
+//       {
+//         name: 'Books & Media',
+//         slug: 'books-media',
+//         description: 'Books, magazines, and media',
+//         subcategories: [
+//           {
+//             name: 'Fiction Books',
+//             slug: 'fiction-books',
+//             description: 'Novels and fiction',
+//           },
+//           {
+//             name: 'Non-Fiction Books',
+//             slug: 'nonfiction-books',
+//             description: 'Educational and informative books',
+//           },
+//           { name: 'E-Books', slug: 'ebooks', description: 'Digital books' },
+//           {
+//             name: 'Audiobooks',
+//             slug: 'audiobooks',
+//             description: 'Audio books',
+//           },
+//         ],
+//       },
+//       {
+//         name: 'Toys & Games',
+//         slug: 'toys-games',
+//         description: 'Toys, games, and hobbies',
+//         subcategories: [
+//           {
+//             name: 'Action Figures',
+//             slug: 'action-figures',
+//             description: 'Collectible figures',
+//           },
+//           {
+//             name: 'Board Games',
+//             slug: 'board-games',
+//             description: 'Family and strategy games',
+//           },
+//           {
+//             name: 'Educational Toys',
+//             slug: 'educational-toys',
+//             description: 'Learning and development toys',
+//           },
+//           {
+//             name: 'Remote Control',
+//             slug: 'remote-control',
+//             description: 'RC cars, drones, helicopters',
+//           },
+//         ],
 //       },
 //     ];
 
-//     const categories = {};
+//     const categoriesMap = new Map();
 
-//     // Insert categories
-//     for (const cat of categoriesData) {
-//       const id = uuidv4();
-//       await pool.query(
-//         `INSERT INTO categories (id, name, slug, description) VALUES ($1, $2, $3, $4)`,
-//         [id, cat.name, cat.slug, cat.description],
-//       );
-//       categories[cat.name] = id;
-//       console.log(`✓ Created category: ${cat.name}`);
+//     // Insert parent categories and subcategories
+//     for (const parent of parentCategories) {
+//       // Insert parent category
+//       const parentId = uuidv4();
+//       await db.execute(sql`
+//         INSERT INTO categories (id, name, slug, description)
+//         VALUES (${parentId}, ${parent.name}, ${parent.slug}, ${parent.description})
+//       `);
+//       categoriesMap.set(parent.name, parentId);
+//       console.log(`✓ Created parent category: ${parent.name}`);
+
+//       // Insert subcategories
+//       for (const subcat of parent.subcategories) {
+//         const subcatId = uuidv4();
+//         await db.execute(sql`
+//           INSERT INTO categories (id, name, slug, description, parent_id)
+//           VALUES (${subcatId}, ${subcat.name}, ${subcat.slug}, ${subcat.description}, ${parentId})
+//         `);
+//         categoriesMap.set(subcat.name, subcatId);
+//         console.log(`  ✓ Created subcategory: ${subcat.name}`);
+//       }
 //     }
+
+//     // Colors
+//     const colors = [
+//       { name: 'Black', code: '#000000' },
+//       { name: 'White', code: '#FFFFFF' },
+//       { name: 'Red', code: '#FF0000' },
+//       { name: 'Blue', code: '#0000FF' },
+//       { name: 'Green', code: '#00FF00' },
+//       { name: 'Yellow', code: '#FFFF00' },
+//       { name: 'Purple', code: '#800080' },
+//       { name: 'Orange', code: '#FFA500' },
+//       { name: 'Pink', code: '#FFC0CB' },
+//       { name: 'Gray', code: '#808080' },
+//     ];
+
+//     for (const color of colors) {
+//       const colorId = uuidv4();
+//       await db.execute(sql`
+//         INSERT INTO colors (id, name, code) VALUES (${colorId}, ${color.name}, ${color.code})
+//       `);
+//     }
+//     console.log(`✓ Created ${colors.length} colors`);
+
+//     // Sizes
+//     const sizes = [
+//       { name: 'Extra Small', value: 'XS' },
+//       { name: 'Small', value: 'S' },
+//       { name: 'Medium', value: 'M' },
+//       { name: 'Large', value: 'L' },
+//       { name: 'Extra Large', value: 'XL' },
+//       { name: 'XXL', value: 'XXL' },
+//     ];
+
+//     for (const size of sizes) {
+//       const sizeId = uuidv4();
+//       await db.execute(sql`
+//         INSERT INTO sizes (id, name, value) VALUES (${sizeId}, ${size.name}, ${size.value})
+//       `);
+//     }
+//     console.log(`✓ Created ${sizes.length} sizes`);
 
 //     // Products data
 //     const productsData = [
-//       // Internet Products
+//       // Electronics - Smartphones
 //       {
-//         name: 'Fiber Optic Internet - 100 Mbps',
-//         slug: 'fiber-100mbps',
-//         price: 49.99,
-//         stock: 999,
-//         description:
-//           'High-speed fiber optic internet with 100 Mbps download/upload',
-//         category: 'Internet',
-//       },
-//       {
-//         name: 'Fiber Optic Internet - 500 Mbps',
-//         slug: 'fiber-500mbps',
-//         price: 79.99,
-//         stock: 999,
-//         description: 'Ultra-fast fiber optic internet with 500 Mbps speed',
-//         category: 'Internet',
-//       },
-//       {
-//         name: 'Fiber Optic Internet - 1 Gbps',
-//         slug: 'fiber-1gbps',
-//         price: 99.99,
-//         stock: 999,
-//         description: 'Blazing fast 1 Gbps fiber optic internet',
-//         category: 'Internet',
-//       },
-//       {
-//         name: 'Wi-Fi 6 Router',
-//         slug: 'wifi-6-router',
-//         price: 199.99,
+//         name: 'iPhone 15 Pro Max',
+//         slug: 'iphone-15-pro-max',
+//         category: 'Smartphones',
+//         price: 1199.99,
 //         stock: 50,
-//         description: 'Next-gen Wi-Fi 6 router with mesh support',
-//         category: 'Internet',
+//         brand: 'Apple',
+//         description: 'A17 Pro chip, 256GB, Titanium design',
+//         tags: 'apple,iphone,smartphone,5g',
 //       },
 //       {
-//         name: 'Mesh Wi-Fi System (3-pack)',
-//         slug: 'mesh-wifi-3pack',
-//         price: 299.99,
+//         name: 'Samsung Galaxy S24 Ultra',
+//         slug: 'samsung-galaxy-s24-ultra',
+//         category: 'Smartphones',
+//         price: 1199.99,
+//         stock: 45,
+//         brand: 'Samsung',
+//         description: '256GB, 200MP camera, S Pen included',
+//         tags: 'samsung,galaxy,smartphone,android',
+//       },
+//       {
+//         name: 'Google Pixel 8 Pro',
+//         slug: 'google-pixel-8-pro',
+//         category: 'Smartphones',
+//         price: 999.99,
 //         stock: 30,
-//         description: 'Whole home mesh Wi-Fi coverage',
-//         category: 'Internet',
+//         brand: 'Google',
+//         description: 'AI-powered camera, 128GB',
+//         tags: 'google,pixel,smartphone,android',
 //       },
 
-//       // Electronics Products (15 products)
+//       // Electronics - Laptops
 //       {
 //         name: 'MacBook Pro 14"',
 //         slug: 'macbook-pro-14',
+//         category: 'Laptops & Computers',
 //         price: 1999.99,
 //         stock: 25,
-//         description: 'Apple M3 chip, 16GB RAM, 512GB SSD',
-//         category: 'Electronics',
+//         brand: 'Apple',
+//         description: 'M3 chip, 16GB RAM, 512GB SSD',
+//         tags: 'apple,macbook,laptop,pro',
 //       },
 //       {
 //         name: 'Dell XPS 15',
 //         slug: 'dell-xps-15',
+//         category: 'Laptops & Computers',
 //         price: 1799.99,
 //         stock: 20,
+//         brand: 'Dell',
 //         description: 'Intel i7, 32GB RAM, 1TB SSD',
-//         category: 'Electronics',
+//         tags: 'dell,xps,laptop,windows',
 //       },
 //       {
-//         name: 'Sony WH-1000XM5 Headphones',
+//         name: 'LG Gram 17',
+//         slug: 'lg-gram-17',
+//         category: 'Laptops & Computers',
+//         price: 1499.99,
+//         stock: 15,
+//         brand: 'LG',
+//         description: 'Ultra-lightweight, 17" display',
+//         tags: 'lg,gram,laptop,lightweight',
+//       },
+
+//       // Electronics - Audio
+//       {
+//         name: 'Sony WH-1000XM5',
 //         slug: 'sony-wh1000xm5',
+//         category: 'Audio & Headphones',
 //         price: 399.99,
 //         stock: 45,
-//         description: 'Noise-cancelling wireless headphones',
-//         category: 'Electronics',
+//         brand: 'Sony',
+//         description: 'Noise-cancelling headphones',
+//         tags: 'sony,headphones,noise-cancelling,wireless',
 //       },
 //       {
 //         name: 'Apple AirPods Pro 2',
 //         slug: 'airpods-pro-2',
+//         category: 'Audio & Headphones',
 //         price: 249.99,
 //         stock: 60,
+//         brand: 'Apple',
 //         description: 'Active noise cancellation, spatial audio',
-//         category: 'Electronics',
+//         tags: 'apple,airpods,earbuds,wireless',
 //       },
 //       {
-//         name: 'Samsung 65" 4K TV',
-//         slug: 'samsung-65-4k-tv',
-//         price: 899.99,
-//         stock: 15,
-//         description: 'QLED 4K Smart TV with HDR',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'LG OLED 55" TV',
-//         slug: 'lg-oled-55',
-//         price: 1299.99,
-//         stock: 12,
-//         description: 'OLED evo 4K Smart TV',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'iPad Pro 12.9"',
-//         slug: 'ipad-pro-129',
-//         price: 1099.99,
-//         stock: 30,
-//         description: 'M2 chip, 128GB, Wi-Fi',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'Samsung Galaxy S24 Ultra',
-//         slug: 'galaxy-s24-ultra',
-//         price: 1199.99,
-//         stock: 40,
-//         description: '256GB, Titanium, 200MP camera',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'iPhone 15 Pro Max',
-//         slug: 'iphone-15-pro-max',
-//         price: 1199.99,
+//         name: 'Bose QuietComfort',
+//         slug: 'bose-quietcomfort',
+//         category: 'Audio & Headphones',
+//         price: 349.99,
 //         stock: 35,
-//         description: '256GB, A17 Pro chip',
-//         category: 'Electronics',
+//         brand: 'Bose',
+//         description: 'Comfortable noise-cancelling headphones',
+//         tags: 'bose,headphones,noise-cancelling',
 //       },
-//       {
-//         name: 'Google Pixel 8 Pro',
-//         slug: 'pixel-8-pro',
-//         price: 999.99,
-//         stock: 28,
-//         description: '128GB, AI-powered camera',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'Canon EOS R5 Camera',
-//         slug: 'canon-eos-r5',
-//         price: 3899.99,
-//         stock: 8,
-//         description: '45MP, 8K video, professional camera',
-//         category: 'Electronics',
-//       },
-//       {
-//         name: 'DJI Mini 4 Pro Drone',
-//         slug: 'dji-mini-4-pro',
-//         price: 759.99,
-//         stock: 15,
-//         description: '4K HDR video, 34 min flight time',
-//         category: 'Electronics',
-//       },
+
+//       // Electronics - Gaming
 //       {
 //         name: 'PlayStation 5',
 //         slug: 'ps5',
+//         category: 'Gaming',
 //         price: 499.99,
 //         stock: 50,
+//         brand: 'Sony',
 //         description: 'Next-gen gaming console',
-//         category: 'Electronics',
+//         tags: 'sony,playstation,gaming,console',
 //       },
 //       {
 //         name: 'Xbox Series X',
 //         slug: 'xbox-series-x',
+//         category: 'Gaming',
 //         price: 499.99,
 //         stock: 45,
+//         brand: 'Microsoft',
 //         description: '4K gaming console',
-//         category: 'Electronics',
+//         tags: 'microsoft,xbox,gaming,console',
 //       },
 //       {
 //         name: 'Nintendo Switch OLED',
 //         slug: 'nintendo-switch-oled',
+//         category: 'Gaming',
 //         price: 349.99,
 //         stock: 60,
-//         description: 'Handheld gaming console with OLED screen',
-//         category: 'Electronics',
+//         brand: 'Nintendo',
+//         description: 'Handheld gaming console',
+//         tags: 'nintendo,switch,gaming,handheld',
 //       },
 
-//       // Home & Kitchen Products
+//       // Electronics - TVs
 //       {
-//         name: 'Instant Pot Duo 7-in-1',
-//         slug: 'instant-pot-duo',
-//         price: 89.99,
-//         stock: 75,
-//         description: 'Pressure cooker, slow cooker, rice cooker',
-//         category: 'Home & Kitchen',
+//         name: 'Samsung 65" 4K TV',
+//         slug: 'samsung-65-4k-tv',
+//         category: 'TV & Home Theater',
+//         price: 899.99,
+//         stock: 15,
+//         brand: 'Samsung',
+//         description: 'QLED 4K Smart TV',
+//         tags: 'samsung,tv,4k,smart-tv',
 //       },
 //       {
-//         name: 'Ninja Blender',
-//         slug: 'ninja-blender',
-//         price: 99.99,
-//         stock: 60,
-//         description: '1000W professional blender',
-//         category: 'Home & Kitchen',
-//       },
-//       {
-//         name: 'Dyson V15 Vacuum',
-//         slug: 'dyson-v15',
-//         price: 699.99,
-//         stock: 20,
-//         description: 'Cordless vacuum with laser detection',
-//         category: 'Home & Kitchen',
-//       },
-//       {
-//         name: 'Memory Foam Mattress',
-//         slug: 'memory-foam-mattress',
-//         price: 399.99,
-//         stock: 25,
-//         description: 'Queen size, gel-infused memory foam',
-//         category: 'Home & Kitchen',
-//       },
-//       {
-//         name: 'Air Fryer 5.8QT',
-//         slug: 'air-fryer-58qt',
-//         price: 119.99,
-//         stock: 50,
-//         description: 'Digital air fryer with 7 presets',
-//         category: 'Home & Kitchen',
+//         name: 'LG OLED 55" TV',
+//         slug: 'lg-oled-55',
+//         category: 'TV & Home Theater',
+//         price: 1299.99,
+//         stock: 12,
+//         brand: 'LG',
+//         description: 'OLED evo 4K Smart TV',
+//         tags: 'lg,oled,tv,4k',
 //       },
 
-//       // Cosmetics Products
-//       {
-//         name: 'Foundation Liquid Makeup',
-//         slug: 'foundation-liquid',
-//         price: 29.99,
-//         stock: 150,
-//         description: 'Long-wear, full coverage foundation',
-//         category: 'Cosmetics',
-//       },
-//       {
-//         name: 'Mascara Volume Express',
-//         slug: 'mascara-volume',
-//         price: 12.99,
-//         stock: 200,
-//         description: 'Dramatic volume and length',
-//         category: 'Cosmetics',
-//       },
-//       {
-//         name: 'Lipstick Matte Collection',
-//         slug: 'lipstick-matte',
-//         price: 19.99,
-//         stock: 180,
-//         description: 'Long-lasting matte lipstick',
-//         category: 'Cosmetics',
-//       },
-//       {
-//         name: 'Eyeshadow Palette 12 Colors',
-//         slug: 'eyeshadow-palette',
-//         price: 39.99,
-//         stock: 100,
-//         description: 'Neutral and bold shades',
-//         category: 'Cosmetics',
-//       },
-//       {
-//         name: 'Skincare Set (5 pcs)',
-//         slug: 'skincare-set',
-//         price: 59.99,
-//         stock: 80,
-//         description: 'Cleanser, toner, serum, moisturizer, sunscreen',
-//         category: 'Cosmetics',
-//       },
-
-//       // Fashion Products
+//       // Fashion - Men's Clothing
 //       {
 //         name: 'Classic Denim Jeans',
 //         slug: 'classic-denim-jeans',
+//         category: "Men's Clothing",
 //         price: 59.99,
 //         stock: 120,
+//         brand: "Levi's",
 //         description: 'Regular fit, blue denim jeans',
-//         category: 'Fashion',
-//       },
-//       {
-//         name: 'Cotton T-Shirt (Pack of 3)',
-//         slug: 'cotton-tshirt-pack',
-//         price: 29.99,
-//         stock: 200,
-//         description: '100% cotton, various colors',
-//         category: 'Fashion',
+//         tags: 'jeans,denim,mens,clothing',
 //       },
 //       {
 //         name: 'Leather Jacket',
 //         slug: 'leather-jacket',
+//         category: "Men's Clothing",
 //         price: 199.99,
 //         stock: 40,
-//         description: 'Genuine leather, classic biker style',
-//         category: 'Fashion',
-//       },
-//       {
-//         name: 'Running Shoes',
-//         slug: 'running-shoes',
-//         price: 89.99,
-//         stock: 85,
-//         description: 'Lightweight, cushioned running shoes',
-//         category: 'Fashion',
-//       },
-//       {
-//         name: 'Winter Coat',
-//         slug: 'winter-coat',
-//         price: 149.99,
-//         stock: 55,
-//         description: 'Warm insulated winter parka',
-//         category: 'Fashion',
+//         brand: 'Schott',
+//         description: 'Genuine leather jacket',
+//         tags: 'jacket,leather,mens,clothing',
 //       },
 
-//       // Jewelry Products
+//       // Fashion - Women's Clothing
 //       {
-//         name: 'Gold Necklace',
-//         slug: 'gold-necklace',
-//         price: 299.99,
-//         stock: 30,
-//         description: '14k gold, 18" chain',
-//         category: 'Jewelry',
-//       },
-//       {
-//         name: 'Diamond Engagement Ring',
-//         slug: 'diamond-ring',
-//         price: 1999.99,
-//         stock: 10,
-//         description: '0.5 carat diamond, 14k white gold',
-//         category: 'Jewelry',
-//       },
-//       {
-//         name: 'Silver Earrings',
-//         slug: 'silver-earrings',
-//         price: 49.99,
-//         stock: 75,
-//         description: '925 sterling silver, cubic zirconia',
-//         category: 'Jewelry',
-//       },
-//       {
-//         name: 'Leather Bracelet',
-//         slug: 'leather-bracelet',
-//         price: 29.99,
-//         stock: 100,
-//         description: 'Braided leather with magnetic clasp',
-//         category: 'Jewelry',
-//       },
-//       {
-//         name: 'Pearl Necklace',
-//         slug: 'pearl-necklace',
-//         price: 149.99,
-//         stock: 25,
-//         description: 'Freshwater pearls, 16" length',
-//         category: 'Jewelry',
-//       },
-
-//       // Children Products
-//       {
-//         name: 'Baby Onesie (Pack of 5)',
-//         slug: 'baby-onesie',
-//         price: 24.99,
-//         stock: 150,
-//         description: '100% cotton, newborn size',
-//         category: 'Children',
-//       },
-//       {
-//         name: 'LEGO Classic Set',
-//         slug: 'lego-classic',
-//         price: 39.99,
-//         stock: 90,
-//         description: '500 pieces, creative building set',
-//         category: 'Children',
-//       },
-//       {
-//         name: 'Kids Tablet',
-//         slug: 'kids-tablet',
-//         price: 99.99,
-//         stock: 60,
-//         description: '7" screen, parental controls, kids case',
-//         category: 'Children',
-//       },
-//       {
-//         name: 'Stroller',
-//         slug: 'stroller',
-//         price: 199.99,
-//         stock: 25,
-//         description: 'Lightweight, foldable baby stroller',
-//         category: 'Children',
-//       },
-//       {
-//         name: 'Educational Toys Set',
-//         slug: 'educational-toys',
+//         name: 'Summer Dress',
+//         slug: 'summer-dress',
+//         category: "Women's Clothing",
 //         price: 49.99,
 //         stock: 80,
-//         description: 'ABC blocks, numbers, shapes',
-//         category: 'Children',
+//         brand: 'Zara',
+//         description: 'Floral print summer dress',
+//         tags: 'dress,womens,summer,clothing',
+//       },
+//       {
+//         name: 'Cashmere Sweater',
+//         slug: 'cashmere-sweater',
+//         category: "Women's Clothing",
+//         price: 129.99,
+//         stock: 35,
+//         brand: 'Ralph Lauren',
+//         description: 'Luxury cashmere sweater',
+//         tags: 'sweater,cashmere,womens,clothing',
 //       },
 
-//       // Supplements Products
+//       // Home & Living - Furniture
 //       {
-//         name: 'Vitamin D3 1000 IU',
-//         slug: 'vitamin-d3',
-//         price: 19.99,
-//         stock: 200,
-//         description: 'Bone health and immune support',
-//         category: 'Supplements',
+//         name: 'Sectional Sofa',
+//         slug: 'sectional-sofa',
+//         category: 'Furniture',
+//         price: 899.99,
+//         stock: 10,
+//         brand: 'IKEA',
+//         description: 'L-shaped sectional sofa',
+//         tags: 'sofa,furniture,living-room',
 //       },
 //       {
-//         name: 'Omega-3 Fish Oil',
-//         slug: 'omega-3',
+//         name: 'Dining Table Set',
+//         slug: 'dining-table-set',
+//         category: 'Furniture',
+//         price: 499.99,
+//         stock: 15,
+//         brand: 'Ashley',
+//         description: '6-person dining table with chairs',
+//         tags: 'dining,table,furniture',
+//       },
+
+//       // Beauty - Makeup
+//       {
+//         name: 'Foundation Liquid',
+//         slug: 'foundation-liquid',
+//         category: 'Makeup',
 //         price: 29.99,
-//         stock: 180,
-//         description: 'Heart and brain health supplement',
-//         category: 'Supplements',
+//         stock: 150,
+//         brand: 'Maybelline',
+//         description: 'Long-wear foundation',
+//         tags: 'makeup,foundation,cosmetics',
 //       },
 //       {
-//         name: 'Whey Protein Powder',
+//         name: 'Lipstick Set',
+//         slug: 'lipstick-set',
+//         category: 'Makeup',
+//         price: 39.99,
+//         stock: 100,
+//         brand: 'MAC',
+//         description: '5-piece lipstick collection',
+//         tags: 'lipstick,makeup,cosmetics',
+//       },
+
+//       // Sports - Fitness
+//       {
+//         name: 'Yoga Mat',
+//         slug: 'yoga-mat',
+//         category: 'Exercise & Fitness',
+//         price: 29.99,
+//         stock: 200,
+//         brand: 'Lululemon',
+//         description: 'Non-slip yoga mat',
+//         tags: 'yoga,fitness,exercise',
+//       },
+//       {
+//         name: 'Dumbbell Set',
+//         slug: 'dumbbell-set',
+//         category: 'Exercise & Fitness',
+//         price: 89.99,
+//         stock: 50,
+//         brand: 'Bowflex',
+//         description: 'Adjustable dumbbell set',
+//         tags: 'weights,dumbbells,fitness',
+//       },
+
+//       // Health - Supplements
+//       {
+//         name: 'Whey Protein',
 //         slug: 'whey-protein',
+//         category: 'Vitamins & Supplements',
 //         price: 59.99,
 //         stock: 120,
-//         description: 'Chocolate flavor, 2lb container',
-//         category: 'Supplements',
+//         brand: 'Optimum Nutrition',
+//         description: 'Chocolate flavor, 2lb',
+//         tags: 'protein,health,supplements',
 //       },
 //       {
-//         name: 'Multivitamin for Men',
-//         slug: 'multivitamin-men',
+//         name: 'Multivitamin',
+//         slug: 'multivitamin',
+//         category: 'Vitamins & Supplements',
 //         price: 24.99,
-//         stock: 150,
+//         stock: 200,
+//         brand: 'Centrum',
 //         description: 'Complete daily nutrition',
-//         category: 'Supplements',
-//       },
-//       {
-//         name: 'Probiotic 50 Billion CFU',
-//         slug: 'probiotic',
-//         price: 34.99,
-//         stock: 100,
-//         description: 'Digestive health support',
-//         category: 'Supplements',
+//         tags: 'vitamins,health,supplements',
 //       },
 //     ];
 
 //     // Insert products
 //     let productCount = 0;
 //     for (const product of productsData) {
-//       const categoryId = categories[product.category];
+//       const categoryId = categoriesMap.get(product.category);
 //       if (categoryId) {
 //         const productId = uuidv4();
-//         await pool.query(
-//           `INSERT INTO products (id, name, slug, description, price, stock, is_active, category_id)
-//            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-//           [
-//             productId,
-//             product.name,
-//             product.slug,
-//             product.description,
-//             product.price.toString(),
-//             product.stock,
-//             true,
-//             categoryId,
-//           ],
-//         );
+//         await db.execute(sql`
+//           INSERT INTO products (id, name, slug, description, price, stock, is_active, category_id, brand, tags, created_at, updated_at)
+//           VALUES (${productId}, ${product.name}, ${product.slug}, ${product.description}, ${product.price.toString()}, ${product.stock}, true, ${categoryId}, ${product.brand}, ${product.tags}, NOW(), NOW())
+//         `);
+
+//         // Add product images (sample)
+//         for (let i = 0; i < 2; i++) {
+//           const imageId = uuidv4();
+//           await db.execute(sql`
+//             INSERT INTO media_assets (id, url, public_id, product_id)
+//             VALUES (${imageId}, ${`https://picsum.photos/id/${100 + productCount + i}/800/800`}, ${`product_${productId}_${i}`}, ${productId})
+//           `);
+//         }
+
 //         productCount++;
 //         console.log(
 //           `  ✓ Created product: ${product.name} (${product.category})`,
@@ -527,7 +655,12 @@
 
 //     console.log(`\n✅ Seed completed successfully!`);
 //     console.log(`📊 Statistics:`);
-//     console.log(`   - ${Object.keys(categories).length} categories created`);
+//     console.log(`   - ${parentCategories.length} parent categories created`);
+//     console.log(
+//       `   - ${categoriesMap.size - parentCategories.length} subcategories created`,
+//     );
+//     console.log(`   - ${colors.length} colors created`);
+//     console.log(`   - ${sizes.length} sizes created`);
 //     console.log(`   - ${productCount} products created`);
 //   } catch (error) {
 //     console.error('❌ Seed failed:', error);
@@ -536,4 +669,7 @@
 //   }
 // }
 
-// seed();
+// seed().catch((error) => {
+//   console.error('❌ Seed failed:', error);
+//   process.exit(1);
+// });
