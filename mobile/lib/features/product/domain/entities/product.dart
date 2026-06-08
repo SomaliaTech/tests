@@ -14,11 +14,9 @@ class Product extends Equatable {
   final List<String> imageUrls;
   final List<ProductVariant> variants;
   final DateTime createdAt;
-
-  // Additional properties for product detail
-  final List<String>? colors;
-  final List<String>? sizes;
-  final List<String>? features;
+  final List<String> colors;
+  final List<String> sizes;
+  final List<String> features;
   final double? rating;
   final int? reviewCount;
 
@@ -36,12 +34,15 @@ class Product extends Equatable {
     required this.imageUrls,
     required this.variants,
     required this.createdAt,
-    this.colors,
-    this.sizes,
-    this.features,
+    this.colors = const [],
+    this.sizes = const [],
+    this.features = const [],
     this.rating,
     this.reviewCount,
   });
+
+  String get formattedPrice => '\$${price.toStringAsFixed(2)}';
+  String get ratingString => rating?.toStringAsFixed(1) ?? '0.0';
 
   @override
   List<Object?> get props => [
@@ -60,13 +61,6 @@ class Product extends Equatable {
     rating,
     reviewCount,
   ];
-
-  String get formattedPrice => '\$${price.toStringAsFixed(2)}';
-
-  double get discountedPrice {
-    // You can add discount logic here
-    return price;
-  }
 }
 
 class ProductVariant extends Equatable {

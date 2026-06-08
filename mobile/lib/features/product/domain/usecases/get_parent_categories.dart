@@ -2,12 +2,12 @@ import '../../../../core/utils/typedefs.dart';
 import '../entities/category.dart';
 import '../repositories/category_repository.dart';
 
-class GetCategories {
+class GetParentCategories {
   final CategoryRepository repository;
 
-  const GetCategories(this.repository);
+  const GetParentCategories(this.repository);
 
   ResultFuture<List<Category>> call() async {
-    return await repository.getCategories();
+    return await repository.getParentCategories();
   }
 }

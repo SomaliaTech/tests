@@ -1,9 +1,9 @@
 import '../../../../core/utils/typedefs.dart';
 import '../entities/category.dart';
-import '../repositories/product_repository.dart';
+import '../repositories/category_repository.dart';
 
 class GetSubcategories {
-  final ProductRepository repository;
+  final CategoryRepository repository;
 
   const GetSubcategories(this.repository);
 

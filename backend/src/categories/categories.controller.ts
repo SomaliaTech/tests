@@ -36,7 +36,13 @@ export class CategoriesController {
   async findAll() {
     return this.drizzle.db.select().from(categories);
   }
-
+  @Get('sub/:parentId')
+  async getSubcategories(@Param('parentId', ParseUUIDPipe) parentId: string) {
+    return this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.parentId, parentId));
+  }
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     const [category] = await this.drizzle.db

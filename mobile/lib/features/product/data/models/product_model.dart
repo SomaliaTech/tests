@@ -47,38 +47,6 @@ class ProductModel {
       return [];
     }
 
-    // Parse colors (if your API returns colors)
-    List<String> parseColors(dynamic colorsData) {
-      if (colorsData == null) return [];
-      if (colorsData is List) {
-        return colorsData.map((c) => c.toString()).toList();
-      }
-      return ['Black', 'White', 'Red', 'Blue']; // Default colors for demo
-    }
-
-    // Parse sizes (if your API returns sizes)
-    List<String> parseSizes(dynamic sizesData) {
-      if (sizesData == null) return [];
-      if (sizesData is List) {
-        return sizesData.map((s) => s.toString()).toList();
-      }
-      return ['XS', 'S', 'M', 'L', 'XL']; // Default sizes for demo
-    }
-
-    // Parse features
-    List<String> parseFeatures(dynamic featuresData) {
-      if (featuresData == null) return [];
-      if (featuresData is List) {
-        return featuresData.map((f) => f.toString()).toList();
-      }
-      return [
-        'High quality material',
-        'Premium design',
-        'Fast shipping',
-        '24/7 customer support',
-      ];
-    }
-
     return Product(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -95,9 +63,11 @@ class ProductModel {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
           : DateTime.now(),
-      colors: parseColors(json['colors']),
-      sizes: parseSizes(json['sizes']),
-      features: parseFeatures(json['features']),
+      colors:
+          (json['colors'] as List?)?.map((c) => c.toString()).toList() ?? [],
+      sizes: (json['sizes'] as List?)?.map((s) => s.toString()).toList() ?? [],
+      features:
+          (json['features'] as List?)?.map((f) => f.toString()).toList() ?? [],
       rating: (json['rating'] as num?)?.toDouble() ?? 4.5,
       reviewCount: json['reviewCount'] as int? ?? 0,
     );

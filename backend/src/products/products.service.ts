@@ -405,7 +405,28 @@ export class ProductsService {
     return variant;
   }
 
-  // ✅ COMPLETE FIX FOR SEARCH METHOD TYPE ERRORS
+  // =========================================================================
+  async getFeaturedProducts(limit: number = 10) {
+    return this.drizzle.db.query.products.findMany({
+      where: eq(products.isActive, true),
+      orderBy: [desc(products.createdAt)],
+      limit: limit,
+      with: {
+        category: true,
+        images: true, // ✅ Joins mediaAssets automatically for your Flutter app
+        variants: {
+          with: {
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+  }
+
+  // =========================================================================
+  // 🚀 FIXED SEARCH: Eliminates the N+1 loop query performance bottleneck
+  // =========================================================================
   async searchProducts(
     searchTerm: string,
     filters?: {
@@ -422,13 +443,7 @@ export class ProductsService {
     const limit = filters?.limit || 20;
     const offset = (page - 1) * limit;
 
-    // ✅ FIX: Explicitly specify 'any' to handle chain mutations safely
-    let query: any = this.drizzle.db.select().from(products);
-
-    // ✅ FIX: Explicitly type condition list as Drizzle SQL array
-    const conditions: SQL[] = [];
-
-    conditions.push(eq(products.isActive, true));
+    const conditions: SQL[] = [eq(products.isActive, true)];
 
     if (searchTerm && searchTerm.trim()) {
       const searchPattern = `%${searchTerm.toLowerCase()}%`;
@@ -454,61 +469,51 @@ export class ProductsService {
       );
     }
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-
+    // Get your sorting condition configured properly
+    let orderExpression: SQL = desc(products.createdAt);
     if (filters?.sortBy) {
       switch (filters.sortBy) {
         case 'price_asc':
-          query = query.orderBy(sql`CAST(${products.price} AS DECIMAL) ASC`);
+          orderExpression = sql`CAST(${products.price} AS DECIMAL) ASC`;
           break;
         case 'price_desc':
-          query = query.orderBy(sql`CAST(${products.price} AS DECIMAL) DESC`);
+          orderExpression = sql`CAST(${products.price} AS DECIMAL) DESC`;
           break;
         case 'newest':
-          query = query.orderBy(sql`${products.createdAt} DESC`);
+          orderExpression = desc(products.createdAt);
           break;
         case 'popular':
-          query = query.orderBy(sql`${products.stock} DESC`);
+          orderExpression = desc(products.stock);
           break;
       }
-    } else {
-      query = query.orderBy(sql`${products.createdAt} DESC`);
     }
 
+    // 1. Fetch count directly
     const countResult = await this.drizzle.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(and(...conditions));
 
     const total = Number(countResult[0]?.count) || 0;
-    const results = await query.limit(limit).offset(offset);
 
-    const productsWithRelations = await Promise.all(
-      results.map(async (product: any) => {
-        const images = await this.drizzle.db
-          .select()
-          .from(mediaAssets)
-          .where(eq(mediaAssets.productId, product.id));
-
-        const variants = await this.drizzle.db
-          .select()
-          .from(productVariants)
-          .where(eq(productVariants.productId, product.id));
-
-        const [category] = await this.drizzle.db
-          .select()
-          .from(categories)
-          .where(eq(categories.id, product.categoryId));
-
-        return {
-          ...product,
-          images,
-          variants,
-          category,
-        };
-      }),
+    // 2. Efficient query execution utilizing relational loading joins natively
+    const productsWithRelations = await this.drizzle.db.query.products.findMany(
+      {
+        where: and(...conditions),
+        orderBy: [orderExpression],
+        limit: limit,
+        offset: offset,
+        with: {
+          category: true,
+          images: true, // ✅ Fetches images efficiently
+          variants: {
+            with: {
+              color: true,
+              size: true,
+            },
+          },
+        },
+      },
     );
 
     return {
@@ -518,15 +523,6 @@ export class ProductsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
-  }
-
-  async getFeaturedProducts(limit: number = 10) {
-    return this.drizzle.db
-      .select()
-      .from(products)
-      .where(eq(products.isActive, true))
-      .orderBy(sql`${products.createdAt} DESC`)
-      .limit(limit);
   }
 
   // ✅ COMPLETE FIX FOR GET CATEGORY METHOD TYPE ERRORS

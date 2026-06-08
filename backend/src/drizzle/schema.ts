@@ -13,20 +13,23 @@ import { relations } from 'drizzle-orm';
 
 // Category Table with self-referencing for subcategories
 // Category Table with self-referencing for subcategories
+// Update the categories table
 export const categories = pgTable(
   'categories',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    name: varchar('name', { length: 255 }).notNull().unique(),
+    name: varchar('name', { length: 255 }).notNull(), // Remove .unique()
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     description: text('description'),
     iconId: uuid('icon_id').unique(),
-    parentId: uuid('parent_id'), // Add this for subcategories
+    parentId: uuid('parent_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     parentIdx: index('category_parent_idx').on(table.parentId),
+    slugIdx: index('category_slug_idx').on(table.slug),
+    nameIdx: index('category_name_idx').on(table.name), // Add index for performance
   }),
 );
 

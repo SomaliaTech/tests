@@ -15,6 +15,8 @@ class Category extends Equatable {
     this.parentId,
   });
 
+  bool get isParent => parentId == null;
+
   @override
   List<Object?> get props => [id, name, slug, description, parentId];
 }

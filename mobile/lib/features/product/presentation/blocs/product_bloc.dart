@@ -11,19 +11,19 @@ import 'product_state.dart';
 
 class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final GetCategories getCategories;
-  final GetSubcategories getSubcategories; // Add this
+  final GetSubcategories getSubcategories;
   final GetFeaturedProducts getFeaturedProducts;
   final GetProductsByCategory getProductsByCategory;
   final SearchProducts searchProducts;
-  final GetProductById getProductById;
+  final GetProductById getProductById; // Fixed: Use GetProductById
 
   ProductBloc({
     required this.getCategories,
-    required this.getSubcategories, // Add this
+    required this.getSubcategories,
     required this.getFeaturedProducts,
     required this.getProductsByCategory,
     required this.searchProducts,
-    required this.getProductById,
+    required this.getProductById, // Fixed parameter name
   }) : super(ProductInitial()) {
     on<GetCategoriesEvent>((event, emit) async {
       emit(CategoriesLoading());
@@ -35,7 +35,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     });
 
     on<GetSubcategoriesEvent>((event, emit) async {
-      // Add this
       emit(SubcategoriesLoading());
       final result = await getSubcategories(event.parentId);
       result.fold(
