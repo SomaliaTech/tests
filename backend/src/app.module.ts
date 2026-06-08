@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { ProductsModule } from './products/product.module';
+import { configureCloudinary } from './cloudinary/cloudinary.provider';
 
+configureCloudinary();
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [PrismaModule, CloudinaryModule, ProductsModule],
 })
 export class AppModule {}

@@ -23,7 +23,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
   bool _isDefault = false;
 
   final List<String> _labels = ['Home', 'Work', 'Other'];
-  final List<String> _countries = ['Somalia', 'Kenya', 'Ethiopia', 'Djibouti'];
+  final List<String> _countries = ['Wabari', 'Shangahani', 'Warta'];
 
   @override
   void dispose() {
@@ -155,27 +155,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
             const SizedBox(height: 16),
 
             // Street Address
-            const Text(
-              'Street Address *',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _streetController,
-              decoration: InputDecoration(
-                hintText: 'Enter your street address',
-                hintStyle: TextStyle(color: Colors.grey[400]),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-              ),
-              validator: (value) =>
-                  value?.isEmpty ?? true ? 'Please enter street address' : null,
-            ),
             const SizedBox(height: 16),
 
             // City and ZIP Code Row
@@ -187,14 +166,14 @@ class _AddAddressFormState extends State<AddAddressForm> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'City *',
+                        'House Number *',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _cityController,
                         decoration: InputDecoration(
-                          hintText: 'Enter city',
+                          hintText: 'House Number',
                           hintStyle: TextStyle(color: Colors.grey[400]),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -211,49 +190,46 @@ class _AddAddressFormState extends State<AddAddressForm> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ZIP Code *',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _zipController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          hintText: 'Enter ZIP code',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                        ),
-                        validator: (value) => value?.isEmpty ?? true
-                            ? 'Please enter ZIP code'
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
+                // Expanded(
+                //   child: Column(
+                //     crossAxisAlignment: CrossAxisAlignment.start,
+                //     children: [
+                //       const Text(
+                //         'ZIP Code *',
+                //         style: TextStyle(fontWeight: FontWeight.w600),
+                //       ),
+                //       const SizedBox(height: 8),
+                //       TextFormField(
+                //         controller: _zipController,
+                //         keyboardType: TextInputType.number,
+                //         decoration: InputDecoration(
+                //           hintText: 'Enter ZIP code',
+                //           hintStyle: TextStyle(color: Colors.grey[400]),
+                //           border: OutlineInputBorder(
+                //             borderRadius: BorderRadius.circular(12),
+                //           ),
+                //           contentPadding: const EdgeInsets.symmetric(
+                //             horizontal: 16,
+                //             vertical: 14,
+                //           ),
+                //         ),
+                //         validator: (value) => value?.isEmpty ?? true
+                //             ? 'Please enter ZIP code'
+                //             : null,
+                //       ),
+                //     ],
+                //   ),
+                // ),
               ],
             ),
             const SizedBox(height: 16),
 
             // Country
-            const Text(
-              'Country *',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
+            const Text('City *', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _selectedCountry,
-              hint: const Text('Select country'),
+              hint: const Text('Select City'),
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

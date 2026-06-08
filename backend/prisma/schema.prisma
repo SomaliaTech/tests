@@ -1,100 +1,104 @@
-// prisma/schema.prisma
-
 generator client {
-  provider = "prisma-client" // Correct for Prisma 6 Rust-based client
+  provider = "prisma-client"
   output   = "../src/generated/prisma"
+  
 }
 
 datasource db {
   provider = "postgresql"
-  // Note: In Prisma 6, the URL is omitted here. It will be read from your .env file.
 }
 
-// ==========================================
-// MEDIA & ASSETS
-// ==========================================
-// Renamed from 'imageCloudinary'. Using a generic name (MediaAsset) is a 
-// production best practice. If you ever switch from Cloudinary to AWS S3, 
-// you won't have to change your database schema!
 model MediaAsset {
-  id         Int      @id @default(autoincrement())
+  id         String      @id @default(uuid())
   url        String
-  publicId   String   @unique // Renamed from public_id to follow camelCase convention
-  
-  // 1. Relation to Product (One-to-Many: A product can have multiple images)
-  productId  Int?
-  product    Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  // 2. Reverse side of the 1:1 relation with Category (for the category icon)
+  publicId   String      @unique
+  productId  String?
+  product    Product?    @relation(fields: [productId], references: [id], onDelete: Cascade)
   categoryIcon Category? @relation("CategoryIcon")
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([productId]) // Speeds up querying images for a specific product
+  @@index([productId])
 }
 
-// ==========================================
-// CATALOG
-// ==========================================
 model Category {
-  id          Int          @id @default(autoincrement())
-  name        String       @unique
-  slug        String       @unique // Added for SEO-friendly URLs (e.g., /categories/electronics)
+  id          String      @id @default(uuid())
+  name        String      @unique
+  slug        String      @unique
   description String?
-  
-  // One-to-One relation with MediaAsset for the category icon/image
-  iconId      Int?         @unique
-  icon        MediaAsset?  @relation("CategoryIcon", fields: [iconId], references: [id], onDelete: SetNull)
-
+  iconId      String?     @unique
+  icon        MediaAsset? @relation("CategoryIcon", fields: [iconId], references: [id], onDelete: SetNull)
   products    Product[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 model Product {
-  id          Int          @id @default(autoincrement())
+  id          String      @id @default(uuid())
   name        String
-  slug        String       @unique // Added for SEO-friendly URLs (e.g., /products/gaming-laptop)
   description String?
-  
-  // One-to-Many relation with MediaAsset (pulls all images for this product)
   images      MediaAsset[]
-  
-  price       Decimal      @db.Decimal(10, 2)
-  stock       Int          @default(0)
-  isActive    Boolean      @default(true) // Added for "soft disabling" products without deleting them
-  
-  categoryId  Int
-  // Changed to Restrict: Prevents accidental deletion of a Category if it still has products!
-  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict) 
-  
-  orderItems  OrderItem[]
-  
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  price       Decimal     @db.Decimal(10, 2)
+  stock       Int         @default(0)
+  isActive    Boolean     @default(true)
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variants    ProductVariant[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   @@index([categoryId])
-  @@index([slug])
-  @@index([isActive]) // Speeds up filtering only active products
+  @@index([isActive])
 }
 
-// ==========================================
-// ORDERS
-// ==========================================
+model Color {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique
+  variants  ProductVariant[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Size {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  value     String   @unique
+  variants  ProductVariant[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  colorId   String
+  color     Color    @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  sizeId    String
+  size      Size     @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  sku       String   @unique
+  stock     Int      @default(0)
+  price     Decimal? @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orderItems OrderItem[]
+
+  @@unique([productId, colorId, sizeId])
+  @@index([productId])
+  @@index([colorId])
+  @@index([sizeId])
+  @@index([sku])
+}
+
 model Order {
-  id            Int         @id @default(autoincrement())
-  orderNumber   String      @unique // Added for user-friendly order tracking (e.g., ORD-12345)
-  
-  // Placeholders until we implement Auth/Users
-  customerName  String      
-  customerEmail String      
-  
+  id            String      @id @default(uuid())
+  orderNumber   String      @unique
+  customerName  String
+  customerEmail String
   totalAmount   Decimal     @db.Decimal(10, 2)
   status        OrderStatus @default(PENDING)
-  
   items         OrderItem[]
-  
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -103,26 +107,21 @@ model Order {
 }
 
 model OrderItem {
-  id        Int     @id @default(autoincrement())
-  
-  orderId   Int
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  productId Int
-  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  
-  // --- CRITICAL PRODUCTION FEATURE: SNAPSHOT DATA ---
-  // We save the name and price AT THE TIME of purchase.
-  // This ensures historical orders don't change if you update the product name/price later.
-  productName String 
-  unitPrice   Decimal @db.Decimal(10, 2) 
-  
-  quantity    Int
-  
-  createdAt   DateTime @default(now())
+  id               String         @id @default(uuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Restrict)
+  productName      String
+  variantSku       String
+  colorName        String
+  sizeName         String
+  unitPrice        Decimal        @db.Decimal(10, 2)
+  quantity         Int
+  createdAt        DateTime       @default(now())
 
   @@index([orderId])
-  @@index([productId])
+  @@index([productVariantId])
 }
 
 enum OrderStatus {
