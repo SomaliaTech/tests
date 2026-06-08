@@ -161,34 +161,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'House Number *',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _cityController,
-                        decoration: InputDecoration(
-                          hintText: 'House Number',
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                        ),
-                        validator: (value) =>
-                            value?.isEmpty ?? true ? 'Please enter city' : null,
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(width: 16),
                 // Expanded(
                 //   child: Column(
