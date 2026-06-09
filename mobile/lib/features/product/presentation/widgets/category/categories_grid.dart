@@ -41,7 +41,7 @@ class CategoriesGrid extends StatelessWidget {
           return const Center(
             child: SizedBox(height: 100, child: CircularProgressIndicator()),
           );
-        } else if (state is CategoriesError) {
+        } else if (state is CategoryError) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(16.0),

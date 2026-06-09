@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:equatable/equatable.dart';
 
 enum OrderStatus { delivered, processing, shipped, cancelled }
 

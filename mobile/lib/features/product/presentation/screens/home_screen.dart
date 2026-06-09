@@ -11,9 +11,8 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Remove ToastificationWrapper from here
+    // Only load featured products here (categories are handled by CategoriesSection)
     final bloc = context.read<ProductBloc>();
-    bloc.add(GetCategoriesEvent());
     bloc.add(GetFeaturedProductsEvent());
 
     return Scaffold(

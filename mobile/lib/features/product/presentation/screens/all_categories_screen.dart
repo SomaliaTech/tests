@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
-import 'package:mobile/features/product/presentation/blocs/category_event.dart';
-import 'package:mobile/features/product/presentation/blocs/category_state.dart';
+import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/features/product/presentation/widgets/home/category_item.dart';
+import '../blocs/category_bloc.dart';
+import '../blocs/category_event.dart';
+import '../blocs/category_state.dart';
 
 class AllCategoriesScreen extends StatelessWidget {
   const AllCategoriesScreen({super.key});
@@ -26,13 +27,15 @@ class AllCategoriesScreen extends StatelessWidget {
       ),
       body: BlocProvider(
         create: (context) =>
-            context.read<CategoryBloc>()..add(GetParentCategoriesEvent()),
+            sl<CategoryBloc>()..add(GetParentCategoriesEvent()),
         child: BlocBuilder<CategoryBloc, CategoryState>(
           builder: (context, state) {
             if (state is ParentCategoriesLoaded) {
+              // Show only parent categories
               if (state.categories.isEmpty) {
                 return const Center(child: Text('No categories available.'));
               }
+
               return GridView.builder(
                 padding: const EdgeInsets.all(15),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -48,7 +51,7 @@ class AllCategoriesScreen extends StatelessWidget {
               );
             } else if (state is CategoriesLoading) {
               return const Center(child: CircularProgressIndicator());
-            } else if (state is CategoriesError) {
+            } else if (state is CategoryError) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,

@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:mobile/core/services/auth_ijdection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/network_info.dart';
 import 'product_injection.dart';
@@ -25,4 +26,5 @@ Future<void> initDependencies() async {
   registerProductDependencies(sl);
   registerCategoryDependencies(sl);
   registerWishlistDependencies(sl);
+  authRegisterDependencies(sl);
 }

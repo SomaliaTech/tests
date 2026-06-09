@@ -11,9 +11,10 @@ class GetCategoriesEvent extends CategoryEvent {}
 
 class GetParentCategoriesEvent extends CategoryEvent {}
 
-class GetSubcategoriesEvent extends CategoryEvent {
+class GetCategorySubcategoriesEvent extends CategoryEvent {
+  // Changed name to avoid conflict
   final String parentId;
-  const GetSubcategoriesEvent(this.parentId);
+  const GetCategorySubcategoriesEvent(this.parentId);
 
   @override
   List<Object?> get props => [parentId];
@@ -25,12 +26,4 @@ class GetCategoryByIdEvent extends CategoryEvent {
 
   @override
   List<Object?> get props => [id];
-}
-
-class GetCategoryBySlugEvent extends CategoryEvent {
-  final String slug;
-  const GetCategoryBySlugEvent(this.slug);
-
-  @override
-  List<Object?> get props => [slug];
 }

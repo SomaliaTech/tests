@@ -21,7 +21,9 @@ class CategoryBloc extends Bloc<CategoryEvent, CategoryState> {
   }) : super(CategoryInitial()) {
     on<GetCategoriesEvent>(_onGetCategories);
     on<GetParentCategoriesEvent>(_onGetParentCategories);
-    on<GetSubcategoriesEvent>(_onGetSubcategories);
+    on<GetCategorySubcategoriesEvent>(
+      _onGetSubcategories,
+    ); // Updated to use new event name
     on<GetCategoryByIdEvent>(_onGetCategoryById);
   }
 
@@ -32,7 +34,7 @@ class CategoryBloc extends Bloc<CategoryEvent, CategoryState> {
     emit(CategoriesLoading());
     final result = await getCategories();
     result.fold(
-      (failure) => emit(CategoriesError(failure.message)),
+      (failure) => emit(CategoryError(failure.message)),
       (categories) => emit(CategoriesLoaded(categories)),
     );
   }
@@ -44,20 +46,20 @@ class CategoryBloc extends Bloc<CategoryEvent, CategoryState> {
     emit(CategoriesLoading());
     final result = await getParentCategories();
     result.fold(
-      (failure) => emit(CategoriesError(failure.message)),
+      (failure) => emit(CategoryError(failure.message)),
       (categories) => emit(ParentCategoriesLoaded(categories)),
     );
   }
 
   Future<void> _onGetSubcategories(
-    GetSubcategoriesEvent event,
+    GetCategorySubcategoriesEvent event,
     Emitter<CategoryState> emit,
   ) async {
-    emit(CategoriesLoading());
+    emit(CategorySubcategoriesLoading());
     final result = await getSubcategories(event.parentId);
     result.fold(
-      (failure) => emit(CategoriesError(failure.message)),
-      (subcategories) => emit(SubcategoriesLoaded(subcategories)),
+      (failure) => emit(CategoryError(failure.message)),
+      (subcategories) => emit(CategorySubcategoriesLoaded(subcategories)),
     );
   }
 
@@ -68,7 +70,7 @@ class CategoryBloc extends Bloc<CategoryEvent, CategoryState> {
     emit(CategoriesLoading());
     final result = await getCategoryById(event.id);
     result.fold(
-      (failure) => emit(CategoriesError(failure.message)),
+      (failure) => emit(CategoryError(failure.message)),
       (category) => emit(CategoryLoaded(category)),
     );
   }

@@ -1,0 +1,133 @@
+// lib/features/auth/presentation/bloc/auth_bloc.dart
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
+import '../../domain/usecases/check_auth_status.dart';
+import '../../domain/usecases/get_current_user.dart';
+import '../../domain/usecases/logout.dart';
+import '../../domain/usecases/send_otp.dart';
+import '../../domain/usecases/upload_profile_image.dart';
+import '../../domain/usecases/verify_otp.dart';
+import 'auth_event.dart';
+import 'auth_state.dart';
+
+class AuthBloc extends Bloc<AuthEvent, AuthState> {
+  final SendOtp sendOtp;
+  final VerifyOtp verifyOtp;
+  final CompleteProfile completeProfile;
+  final UploadProfileImage uploadProfileImage;
+  final GetCurrentUser getCurrentUser;
+  final CheckAuthStatus checkAuthStatus;
+  final Logout logout;
+
+  AuthBloc({
+    required this.sendOtp,
+    required this.verifyOtp,
+    required this.completeProfile,
+    required this.uploadProfileImage,
+    required this.getCurrentUser,
+    required this.checkAuthStatus,
+    required this.logout,
+  }) : super(AuthInitial()) {
+    on<SendOtpEvent>(_onSendOtp);
+    on<VerifyOtpEvent>(_onVerifyOtp);
+    on<CompleteProfileEvent>(_onCompleteProfile);
+    on<UploadProfileImageEvent>(_onUploadProfileImage);
+    on<CheckAuthStatusEvent>(_onCheckAuthStatus);
+    on<LogoutEvent>(_onLogout);
+  }
+
+  Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    final result = await sendOtp(event.phoneNumber);
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (debugOtp) => emit(OtpSent(debugOtp)),
+    );
+  }
+
+  Future<void> _onVerifyOtp(
+    VerifyOtpEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+
+    // DEBUG: Log before calling use case
+    print('🔐 Verifying OTP:');
+    print('   Phone: ${event.phoneNumber}');
+    print('   Code: ${event.otpCode}');
+
+    final result = await verifyOtp(event.phoneNumber, event.otpCode);
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (data) => emit(OtpVerified(data.token, data.user)),
+    );
+  }
+
+  Future<void> _onCompleteProfile(
+    CompleteProfileEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await completeProfile(
+      name: event.name,
+      email: event.email,
+      profileImageUrl: event.profileImageUrl,
+    );
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (data) => emit(ProfileCompleted(data.token, data.user)),
+    );
+  }
+
+  Future<void> _onUploadProfileImage(
+    UploadProfileImageEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await uploadProfileImage(event.base64Image);
+    result.fold(
+      (failure) => emit(AuthError(failure.message)),
+      (imageUrl) => emit(ProfileImageUploaded(imageUrl)),
+    );
+  }
+
+  Future<void> _onCheckAuthStatus(
+    CheckAuthStatusEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthChecking());
+
+    final isAuthenticated = await checkAuthStatus();
+
+    if (isAuthenticated) {
+      // Get current user details
+      final userResult = await getCurrentUser();
+      userResult.fold(
+        (failure) {
+          // Token might be invalid/expired, clear and show unauthenticated
+          logout.call();
+          emit(Unauthenticated());
+        },
+        (user) async {
+          // Get token from storage
+          final token = await getCurrentToken();
+          emit(Authenticated(user, token ?? ''));
+        },
+      );
+    } else {
+      emit(Unauthenticated());
+    }
+  }
+
+  Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    await logout.call();
+    emit(Unauthenticated());
+  }
+
+  Future<String?> getCurrentToken() async {
+    // This would need access to storage service
+    // For now, we'll handle it in the repository
+    return null;
+  }
+}

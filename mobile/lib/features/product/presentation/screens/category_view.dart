@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/product/domain/entities/product.dart';
+import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
+import 'package:mobile/features/product/presentation/blocs/category_event.dart';
+import 'package:mobile/features/product/presentation/blocs/category_state.dart';
 import 'package:toastification/toastification.dart';
 import '../blocs/product_bloc.dart';
 import '../blocs/product_event.dart';
@@ -33,7 +35,11 @@ class _CategoryViewState extends State<CategoryView> {
   }
 
   void _loadData() {
-    context.read<ProductBloc>().add(GetSubcategoriesEvent(widget.categoryId));
+    // Load subcategories using CategoryBloc
+    context.read<CategoryBloc>().add(
+      GetCategorySubcategoriesEvent(widget.categoryId),
+    );
+    // Load products for the selected category
     context.read<ProductBloc>().add(
       GetProductsByCategoryEvent(widget.categoryId),
     );
@@ -46,9 +52,11 @@ class _CategoryViewState extends State<CategoryView> {
     if (query.isNotEmpty) {
       context.read<ProductBloc>().add(SearchProductsEvent(query));
     } else {
-      context.read<ProductBloc>().add(
-        GetProductsByCategoryEvent(widget.categoryId),
-      );
+      // Reload products for current category
+      final targetId = _selectedSubCategoryId == 'all'
+          ? widget.categoryId
+          : _selectedSubCategoryId;
+      context.read<ProductBloc>().add(GetProductsByCategoryEvent(targetId));
     }
   }
 
@@ -58,16 +66,10 @@ class _CategoryViewState extends State<CategoryView> {
       _searchQuery = '';
       _searchController.clear();
     });
-    // Load products for selected subcategory
-    if (subCategoryId == 'all') {
-      context.read<ProductBloc>().add(
-        GetProductsByCategoryEvent(widget.categoryId),
-      );
-    } else {
-      context.read<ProductBloc>().add(
-        GetProductsByCategoryEvent(subCategoryId),
-      );
-    }
+
+    // Load products for selected subcategory or parent category
+    final targetId = subCategoryId == 'all' ? widget.categoryId : subCategoryId;
+    context.read<ProductBloc>().add(GetProductsByCategoryEvent(targetId));
   }
 
   @override
@@ -145,13 +147,13 @@ class _CategoryViewState extends State<CategoryView> {
   }
 
   Widget _buildSubCategories() {
-    return BlocBuilder<ProductBloc, ProductState>(
+    return BlocBuilder<CategoryBloc, CategoryState>(
       buildWhen: (previous, current) =>
-          current is SubcategoriesLoading ||
-          current is SubcategoriesLoaded ||
-          current is SubcategoriesError,
+          current is CategorySubcategoriesLoading ||
+          current is CategorySubcategoriesLoaded ||
+          current is CategoryError,
       builder: (context, state) {
-        if (state is SubcategoriesLoading) {
+        if (state is CategorySubcategoriesLoading) {
           return const SizedBox(
             height: 50,
             child: Center(
@@ -167,19 +169,22 @@ class _CategoryViewState extends State<CategoryView> {
           );
         }
 
-        if (state is SubcategoriesLoaded) {
+        if (state is CategorySubcategoriesLoaded) {
           final subCategories = state.subcategories;
 
+          // Note: Even if subCategories from backend is empty,
+          // we still might want to show the "All" chip if there are main products.
           return Container(
             height: 50,
             margin: const EdgeInsets.only(bottom: 8),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: subCategories.length + 1, // +1 for "All"
+              // Always +1 to account for our local, artificial "All" chip
+              itemCount: subCategories.length + 1,
               itemBuilder: (context, index) {
+                // 1. Render the hardcoded "All" Chip at position 0
                 if (index == 0) {
-                  // "All" option
                   final isSelected = _selectedSubCategoryId == 'all';
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -211,6 +216,7 @@ class _CategoryViewState extends State<CategoryView> {
                   );
                 }
 
+                // 2. Render actual subcategories from your backend
                 final subCategory = subCategories[index - 1];
                 final isSelected = _selectedSubCategoryId == subCategory.id;
 
@@ -247,10 +253,6 @@ class _CategoryViewState extends State<CategoryView> {
           );
         }
 
-        if (state is SubcategoriesError) {
-          return const SizedBox.shrink();
-        }
-
         return const SizedBox.shrink();
       },
     );
@@ -271,7 +273,26 @@ class _CategoryViewState extends State<CategoryView> {
       },
       builder: (context, state) {
         if (state is ProductsLoaded) {
-          final filteredProducts = _filterProducts(state.products);
+          final products = state.products;
+
+          // Filter by search query if needed
+          var filteredProducts = products;
+          if (_searchQuery.isNotEmpty) {
+            filteredProducts = products.where((product) {
+              final nameMatch = product.name.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              );
+              final descMatch = product.description.toLowerCase().contains(
+                _searchQuery.toLowerCase(),
+              );
+              final brandMatch =
+                  product.brand?.toLowerCase().contains(
+                    _searchQuery.toLowerCase(),
+                  ) ??
+                  false;
+              return nameMatch || descMatch || brandMatch;
+            }).toList();
+          }
 
           if (filteredProducts.isEmpty) {
             return Center(
@@ -352,27 +373,5 @@ class _CategoryViewState extends State<CategoryView> {
         );
       },
     );
-  }
-
-  List<Product> _filterProducts(List<Product> products) {
-    var filtered = products;
-
-    // Filter by search query
-    if (_searchQuery.isNotEmpty) {
-      filtered = filtered.where((product) {
-        final nameMatch = product.name.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
-        final descMatch = product.description.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
-        final brandMatch =
-            product.brand?.toLowerCase().contains(_searchQuery.toLowerCase()) ??
-            false;
-        return nameMatch || descMatch || brandMatch;
-      }).toList();
-    }
-
-    return filtered;
   }
 }

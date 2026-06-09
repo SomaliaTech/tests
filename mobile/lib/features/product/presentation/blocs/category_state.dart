@@ -30,9 +30,12 @@ class ParentCategoriesLoaded extends CategoryState {
   List<Object?> get props => [categories];
 }
 
-class SubcategoriesLoaded extends CategoryState {
+class CategorySubcategoriesLoading extends CategoryState {} // Changed name
+
+class CategorySubcategoriesLoaded extends CategoryState {
+  // Changed name
   final List<Category> subcategories;
-  const SubcategoriesLoaded(this.subcategories);
+  const CategorySubcategoriesLoaded(this.subcategories);
 
   @override
   List<Object?> get props => [subcategories];
@@ -47,9 +50,9 @@ class CategoryLoaded extends CategoryState {
 }
 
 // Error States
-class CategoriesError extends CategoryState {
+class CategoryError extends CategoryState {
   final String message;
-  const CategoriesError(this.message);
+  const CategoryError(this.message);
 
   @override
   List<Object?> get props => [message];
