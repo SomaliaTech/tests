@@ -85,7 +85,7 @@ class WishlistItemCard extends StatelessWidget {
                   item.name,
 
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                   ),
@@ -98,7 +98,7 @@ class WishlistItemCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     item.brand!,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
                   ),
 
                   const SizedBox(height: 4),
@@ -107,7 +107,7 @@ class WishlistItemCard extends StatelessWidget {
                 Text(
                   item.formattedPrice,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2ED573),
                   ),

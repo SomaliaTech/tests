@@ -15,6 +15,20 @@
       "when": 1780913473066,
       "tag": "0001_careless_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780999329872,
+      "tag": "0002_lame_living_mummy",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781027457370,
+      "tag": "0003_wandering_patch",
+      "breakpoints": true
     }
   ]
 }

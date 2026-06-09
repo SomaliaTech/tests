@@ -1,4 +1,3 @@
-// lib/features/auth/presentation/bloc/auth_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
 import '../../domain/usecases/check_auth_status.dart';
@@ -97,26 +96,36 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthChecking());
 
-    final isAuthenticated = await checkAuthStatus();
+    final result = await checkAuthStatus();
 
-    if (isAuthenticated) {
-      // Get current user details
-      final userResult = await getCurrentUser();
-      userResult.fold(
-        (failure) {
-          // Token might be invalid/expired, clear and show unauthenticated
-          logout.call();
+    // Use fold to unwrap the Either value from the usecase result
+    await result.fold(
+      (failure) async {
+        // If checking auth failed structurally, treat it as unauthenticated
+        emit(Unauthenticated());
+      },
+      (isAuthenticated) async {
+        if (isAuthenticated) {
+          // Get current user details
+          final userResult = await getCurrentUser();
+
+          await userResult.fold(
+            (failure) async {
+              // Token might be invalid/expired, clear and show unauthenticated
+              await logout.call();
+              emit(Unauthenticated());
+            },
+            (user) async {
+              // Get token from storage
+              final token = await getCurrentToken();
+              emit(Authenticated(user, token ?? ''));
+            },
+          );
+        } else {
           emit(Unauthenticated());
-        },
-        (user) async {
-          // Get token from storage
-          final token = await getCurrentToken();
-          emit(Authenticated(user, token ?? ''));
-        },
-      );
-    } else {
-      emit(Unauthenticated());
-    }
+        }
+      },
+    );
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {

@@ -10,7 +10,7 @@ import {
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { categories } from '../drizzle/schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
-import { eq } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 @Controller('categories')
@@ -36,6 +36,16 @@ export class CategoriesController {
   async findAll() {
     return this.drizzle.db.select().from(categories);
   }
+
+  // Add this endpoint for parent categories
+  @Get('parents')
+  async getParentCategories() {
+    return this.drizzle.db
+      .select()
+      .from(categories)
+      .where(isNull(categories.parentId));
+  }
+
   @Get('sub/:parentId')
   async getSubcategories(@Param('parentId', ParseUUIDPipe) parentId: string) {
     return this.drizzle.db
@@ -43,6 +53,7 @@ export class CategoriesController {
       .from(categories)
       .where(eq(categories.parentId, parentId));
   }
+
   @Get(':id')
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     const [category] = await this.drizzle.db

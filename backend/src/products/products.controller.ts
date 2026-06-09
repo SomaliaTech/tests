@@ -61,6 +61,12 @@ export class ProductsController {
     );
   }
 
+  // Debug endpoint to test category products
+  @Get('debug/category/:categoryId')
+  async debugCategory(@Param('categoryId', ParseUUIDPipe) categoryId: string) {
+    return this.productsService.debugCategory(categoryId);
+  }
+
   // ========================================================
   // ⚡ DYNAMIC/PARAMETERIZED ENDPOINTS (Must stay on bottom)
   // ========================================================

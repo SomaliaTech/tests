@@ -2,9 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/order_history/presentation/screens/order_history_screen.dart';
-import 'package:mobile/features/settings/presentation/widgets/logout_button.dart';
-import 'package:mobile/features/settings/presentation/widgets/menu_item.dart';
-import 'package:mobile/features/settings/presentation/widgets/profile_section.dart';
+import 'package:mobile/features/profile/presentation/widgets/logout_button.dart';
+import 'package:mobile/features/profile/presentation/widgets/menu_item.dart';
+import 'package:mobile/features/profile/presentation/widgets/profile_section.dart';
 import 'package:mobile/features/support/presentation/screens/support_screen.dart';
 
 class SettingsView extends StatelessWidget {

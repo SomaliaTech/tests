@@ -5,7 +5,8 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ProductsModule } from './products/products.module';
 import { CategoriesController } from './categories/categories.controller';
 import { CategoriesModule } from './categories/categories.module';
-
+import { AuthModule } from './auth/auth.module';
+import { MarketsModule } from './markets/markets.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -14,6 +15,8 @@ import { CategoriesModule } from './categories/categories.module';
     CategoriesModule,
     ProductsModule,
     CategoriesModule,
+    AuthModule,
+    MarketsModule,
   ],
   controllers: [CategoriesController],
 })

@@ -1,65 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/features/profile/domain/entities/market.dart';
+import 'package:mobile/features/profile/domain/usecases/get_markets.dart';
+import 'package:toastification/toastification.dart';
+import '../bloc/profile_bloc.dart';
+import '../bloc/profile_event.dart';
+import '../bloc/profile_state.dart';
+import '../widgets/profile_form.dart';
+import '../widgets/profile_header.dart';
+import '../widgets/profile_image_picker.dart';
+import '../widgets/warning_section.dart';
+import '../widgets/market_dropdown.dart';
 
-import 'package:mobile/features/profile/presentation/widgets/market_dropdown.dart';
+import '../../../../core/services/injection_container.dart';
 
-import 'package:mobile/features/profile/presentation/widgets/profile_form.dart';
-import 'package:mobile/features/profile/presentation/widgets/profile_header.dart';
-import 'package:mobile/features/profile/presentation/widgets/profile_image_picker.dart';
-import 'package:mobile/features/profile/presentation/widgets/warning_section.dart';
-import 'package:mobile/features/profile/presentation/providers/profile_provider.dart';
-import 'package:provider/provider.dart';
-
-class ProfileView extends StatelessWidget {
+class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
 
-  void _showAlert(BuildContext context, String title, String message) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+  @override
+  State<ProfileView> createState() => _ProfileViewState();
+}
+
+class _ProfileViewState extends State<ProfileView> {
+  bool _isMarketDropdownOpen = false;
+  List<Market> _markets = [];
+  Market? _selectedMarket;
+  String _name = '';
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<ProfileBloc>().add(LoadProfileEvent());
+    _loadMarkets();
+  }
+
+  Future<void> _loadMarkets() async {
+    final result = await sl<GetMarkets>()();
+    result.fold(
+      (failure) => setState(() => _markets = []),
+      (markets) => setState(() => _markets = markets),
     );
   }
 
   void _showConfirmationDialog(
-    BuildContext context,
     String title,
     String message,
     VoidCallback onConfirm,
   ) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                onConfirm();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: title == 'Logout' ? null : Colors.red,
-              ),
-              child: Text(title == 'Logout' ? 'Logout' : 'Delete'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onConfirm();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -67,89 +74,114 @@ class ProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      body: Consumer<ProfileProvider>(
-        builder: (context, provider, child) {
-          return Stack(
-            children: [
-              Column(
-                children: [
-                  ProfileHeader(onBackPressed: () => Navigator.pop(context)),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          ProfileImagePicker(
-                            imagePath: provider.profile.profileImage,
-                            onImagePicked: provider.updateProfileImage,
-                          ),
-                          ProfileForm(
-                            profile: provider.profile,
-                            onNameChanged: provider.updateName,
-                            onMarketTap: provider.toggleMarketDropdown,
-                            onUpdatePressed: () async {
-                              final success = await provider.updateProfile();
-                              if (success) {
-                                _showAlert(
-                                  context,
-                                  'Success',
-                                  'Profile updated successfully!',
-                                );
-                              } else {
-                                _showAlert(
-                                  context,
-                                  'Error',
-                                  'Please fill all fields',
-                                );
-                              }
-                            },
+      body: BlocConsumer<ProfileBloc, ProfileState>(
+        listener: (context, state) {
+          if (state is ProfileError) {
+            toastification.show(
+              title: const Text('Error'),
+              description: Text(state.message),
+              type: ToastificationType.error,
+            );
+          } else if (state is ProfileUpdated) {
+            toastification.show(
+              title: const Text('Success'),
+              description: const Text('Profile updated successfully!'),
+              type: ToastificationType.success,
+            );
+          } else if (state is AccountDeleted) {
+            Navigator.pushReplacementNamed(context, '/');
+          } else if (state is ProfileImageUploaded) {
+            toastification.show(
+              title: const Text('Success'),
+              description: const Text('Profile image updated!'),
+              type: ToastificationType.success,
+            );
+          }
+        },
+        builder: (context, state) {
+          if (state is ProfileLoading && state is! ProfileLoaded) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                            isUpdating: provider.isUpdating,
-                          ),
-                          WarningSection(
-                            onWhatsAppPressed: () {
-                              provider.contactWhatsApp();
-                              _showAlert(
-                                context,
-                                'WhatsApp',
-                                'Opening WhatsApp...',
-                              );
-                            },
-                            onDeletePressed: () {
-                              _showConfirmationDialog(
-                                context,
-                                'Account Deletion',
-                                'This action cannot be undone. All your data will be permanently lost.',
-                                () async {
-                                  await provider.deleteAccount();
-                                  _showAlert(
-                                    context,
-                                    'Account Deleted',
-                                    'Your account has been deleted.',
-                                  );
-                                  Navigator.pushReplacementNamed(context, '/');
-                                },
-                              );
-                            },
-                          ),
-                        ],
+          if (state is ProfileLoaded) {
+            final profile = state.profile;
+            if (_name.isEmpty) _name = profile.name;
+
+            return Stack(
+              children: [
+                Column(
+                  children: [
+                    ProfileHeader(onBackPressed: () => Navigator.pop(context)),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            ProfileImagePicker(
+                              imageUrl: profile.profileImage,
+                              onImagePicked: (base64Image) {
+                                context.read<ProfileBloc>().add(
+                                  UploadProfileImageEvent(base64Image),
+                                );
+                              },
+                            ),
+                            ProfileForm(
+                              profile: profile,
+                              selectedMarket: _selectedMarket,
+                              onNameChanged: (name) => _name = name,
+                              onMarketTap: () {
+                                setState(() => _isMarketDropdownOpen = true);
+                              },
+                              onUpdatePressed: () {
+                                context.read<ProfileBloc>().add(
+                                  UpdateProfileEvent(
+                                    name: _name,
+                                    email: profile.email,
+                                    marketId: _selectedMarket?.id,
+                                  ),
+                                );
+                              },
+                              isUpdating: state is ProfileLoading,
+                            ),
+                            WarningSection(
+                              onWhatsAppPressed: () {
+                                // Open WhatsApp
+                              },
+                              onDeletePressed: () {
+                                _showConfirmationDialog(
+                                  'Delete Account',
+                                  'Are you sure? This action cannot be undone.',
+                                  () {
+                                    context.read<ProfileBloc>().add(
+                                      DeleteAccountEvent(),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              MarketDropdown(
-                isOpen: provider.isMarketDropdownOpen,
-                selectedMarket: provider.profile.market,
-                markets: provider.markets,
-                onMarketSelected: (market) {
-                  // provider.updateMarket(market);
-                  provider.closeMarketDropdown();
-                },
-                onClose: provider.closeMarketDropdown,
-              ),
-            ],
-          );
+                  ],
+                ),
+                MarketDropdown(
+                  isOpen: _isMarketDropdownOpen,
+                  selectedMarket: _selectedMarket,
+                  markets: _markets,
+                  onMarketSelected: (market) {
+                    setState(() {
+                      _selectedMarket = market;
+                      _isMarketDropdownOpen = false;
+                    });
+                  },
+                  onClose: () => setState(() => _isMarketDropdownOpen = false),
+                ),
+              ],
+            );
+          }
+
+          return const Center(child: CircularProgressIndicator());
         },
       ),
     );

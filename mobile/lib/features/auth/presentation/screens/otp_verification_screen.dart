@@ -39,6 +39,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is OtpVerified) {
+          print(widget.phoneNumber);
           if (state.user.hasProfile) {
             Navigator.of(
               context,

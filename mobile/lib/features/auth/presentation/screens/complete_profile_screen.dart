@@ -36,6 +36,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
       try {
         final bytes = await picked.readAsBytes();
+        // Construct standard Data URI string for backend parsing
         final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
 
         context.read<AuthBloc>().add(UploadProfileImageEvent(base64Image));
@@ -103,8 +104,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-
-                // Profile Image
                 GestureDetector(
                   onTap: _uploading ? null : _pickImage,
                   child: Stack(
@@ -148,8 +147,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
                 const SizedBox(height: 32),
-
-                // Name Field
                 TextFormField(
                   controller: nameController,
                   decoration: InputDecoration(
@@ -179,8 +176,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                       v == null || v.isEmpty ? 'Name is required' : null,
                 ),
                 const SizedBox(height: 20),
-
-                // Email Field
                 TextFormField(
                   controller: emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -209,8 +204,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // Complete Button
                 BlocBuilder<AuthBloc, AuthState>(
                   builder: (context, state) {
                     final isLoading = state is AuthLoading;

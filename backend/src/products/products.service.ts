@@ -20,7 +20,7 @@ import {
   colors,
   sizes,
 } from '../drizzle/schema';
-import { eq, and, desc, sql, SQL } from 'drizzle-orm';
+import { eq, and, desc, sql, SQL, or } from 'drizzle-orm';
 
 @Injectable()
 export class ProductsService {
@@ -413,7 +413,7 @@ export class ProductsService {
       limit: limit,
       with: {
         category: true,
-        images: true, // ✅ Joins mediaAssets automatically for your Flutter app
+        images: true,
         variants: {
           with: {
             color: true,
@@ -505,7 +505,7 @@ export class ProductsService {
         offset: offset,
         with: {
           category: true,
-          images: true, // ✅ Fetches images efficiently
+          images: true,
           variants: {
             with: {
               color: true,
@@ -525,7 +525,39 @@ export class ProductsService {
     };
   }
 
-  // ✅ COMPLETE FIX FOR GET CATEGORY METHOD TYPE ERRORS
+  // =========================================================================
+  // 🎯 FIXED: Recursively get ALL descendant category IDs
+  // =========================================================================
+  private async getAllDescendantCategoryIds(
+    parentId: string,
+  ): Promise<string[]> {
+    const allCategoryIds: string[] = [];
+
+    // Use a queue for breadth-first traversal
+    const queue: string[] = [parentId];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+
+      // Get direct children of current category
+      const children = await this.drizzle.db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.parentId, currentId));
+
+      // Add children to results and queue
+      for (const child of children) {
+        allCategoryIds.push(child.id);
+        queue.push(child.id);
+      }
+    }
+
+    return allCategoryIds;
+  }
+
+  // =========================================================================
+  // 🎯 FIXED: Get products by category including ALL nested subcategories
+  // =========================================================================
   async getProductsByCategory(
     categoryId: string,
     filters?: {
@@ -540,62 +572,80 @@ export class ProductsService {
     const limit = filters?.limit || 20;
     const offset = (page - 1) * limit;
 
-    // Fetch subcategories
-    const subcategories = await this.drizzle.db
+    // 1. Fetch the category itself to ensure it exists
+    const category = await this.drizzle.db
       .select()
       .from(categories)
-      .where(eq(categories.parentId, categoryId));
+      .where(eq(categories.id, categoryId))
+      .limit(1);
 
-    // Combine main category ID with all child subcategory IDs
-    const categoryIds = [categoryId, ...subcategories.map((c) => c.id)];
+    if (!category.length) {
+      throw new NotFoundException(`Category with ID ${categoryId} not found`);
+    }
 
-    // Use explicit 'any' type to allow clean query-chaining mutations later
-    let query: any = this.drizzle.db
-      .select()
-      .from(products)
-      .where(
-        and(
-          eq(products.isActive, true),
-          // ✅ FIX: Use native 'inArray' which is type-safe and built for array matching
-          inArray(products.categoryId, categoryIds),
-        ),
-      );
+    // 2. Get ALL descendant category IDs (recursive)
+    const descendantCategoryIds =
+      await this.getAllDescendantCategoryIds(categoryId);
+
+    // 3. Build the target IDs array - include parent + ALL descendants
+    const categoryIds = [categoryId, ...descendantCategoryIds];
+
+    console.log('📦 Fetching products for category IDs:', categoryIds);
+    console.log('📊 Total categories to search:', categoryIds.length);
+
+    // 4. Set up explicit SQL filtering array
+    const conditions: SQL[] = [
+      eq(products.isActive, true),
+      inArray(products.categoryId, categoryIds),
+    ];
 
     if (filters?.minPrice !== undefined) {
-      query = query.where(
+      conditions.push(
         sql`CAST(${products.price} AS DECIMAL) >= ${filters.minPrice}`,
       );
     }
 
     if (filters?.maxPrice !== undefined) {
-      query = query.where(
+      conditions.push(
         sql`CAST(${products.price} AS DECIMAL) <= ${filters.maxPrice}`,
       );
     }
 
+    // 5. Configure sorting expressions
+    let orderExpression: SQL = desc(products.createdAt);
     if (filters?.sortBy === 'price_asc') {
-      query = query.orderBy(sql`CAST(${products.price} AS DECIMAL) ASC`);
+      orderExpression = sql`CAST(${products.price} AS DECIMAL) ASC`;
     } else if (filters?.sortBy === 'price_desc') {
-      query = query.orderBy(sql`CAST(${products.price} AS DECIMAL) DESC`);
-    } else {
-      query = query.orderBy(sql`${products.createdAt} DESC`);
+      orderExpression = sql`CAST(${products.price} AS DECIMAL) DESC`;
     }
 
-    const results = await query.limit(limit).offset(offset);
+    // 6. Execute query
+    const results = await this.drizzle.db.query.products.findMany({
+      where: and(...conditions),
+      orderBy: [orderExpression],
+      limit: limit,
+      offset: offset,
+      with: {
+        category: true,
+        images: true,
+        variants: {
+          with: {
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
 
-    // Get your total count for pagination calculations
+    // 7. Get total count
     const countResult = await this.drizzle.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
-      .where(
-        and(
-          eq(products.isActive, true),
-          // ✅ FIX: Match the type-safe inArray syntax here too
-          inArray(products.categoryId, categoryIds),
-        ),
-      );
+      .where(and(...conditions));
 
     const total = Number(countResult[0]?.count) || 0;
+
+    console.log(`✅ Found ${total} products for categories:`, categoryIds);
 
     return {
       products: results,
@@ -605,6 +655,60 @@ export class ProductsService {
       totalPages: Math.ceil(total / limit),
     };
   }
+
+  // =========================================================================
+  // 🔍 Debug endpoint to help troubleshoot category issues
+  // =========================================================================
+  async debugCategory(categoryId: string) {
+    // Get the category
+    const category = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, categoryId))
+      .limit(1);
+
+    // Get ALL descendant categories recursively
+    const allDescendantIds = await this.getAllDescendantCategoryIds(categoryId);
+
+    // Get direct subcategories (one level only)
+    const directSubcategories = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.parentId, categoryId));
+
+    // Get products in parent category
+    const parentProducts = await this.drizzle.db
+      .select()
+      .from(products)
+      .where(
+        and(eq(products.categoryId, categoryId), eq(products.isActive, true)),
+      );
+
+    // Get products in ALL descendant categories
+    const allDescendantProducts =
+      allDescendantIds.length > 0
+        ? await this.drizzle.db
+            .select()
+            .from(products)
+            .where(
+              and(
+                inArray(products.categoryId, allDescendantIds),
+                eq(products.isActive, true),
+              ),
+            )
+        : [];
+
+    return {
+      category: category[0] || null,
+      directSubcategoriesCount: directSubcategories.length,
+      allDescendantCategoriesCount: allDescendantIds.length,
+      allDescendantCategoryIds: allDescendantIds,
+      parentProductCount: parentProducts.length,
+      descendantProductCount: allDescendantProducts.length,
+      totalProducts: parentProducts.length + allDescendantProducts.length,
+    };
+  }
+
   async getProductFilters() {
     // Get unique prices or categories
     const priceRange = await this.drizzle.db

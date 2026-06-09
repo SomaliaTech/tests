@@ -1,51 +1,17 @@
-import 'package:equatable/equatable.dart';
+import '../../domain/entities/profile.dart';
 
-enum Market { mogadishu, hargeisa, jowhar }
+class ProfileModel {
+  const ProfileModel._();
 
-extension MarketExtension on Market {
-  String get displayName {
-    switch (this) {
-      case Market.mogadishu:
-        return 'Mogadishu';
-      case Market.hargeisa:
-        return 'Hargeisa';
-      case Market.jowhar:
-        return 'Jowhar';
-    }
-  }
-}
-
-class ProfileData extends Equatable {
-  final String name;
-  final String phone;
-  final Market? market;
-  final String? profileImage;
-  final int points;
-
-  const ProfileData({
-    required this.name,
-    required this.phone,
-    this.market,
-    this.profileImage,
-    this.points = 0,
-  });
-
-  ProfileData copyWith({
-    String? name,
-    String? phone,
-    Market? market,
-    String? profileImage,
-    int? points,
-  }) {
-    return ProfileData(
-      name: name ?? this.name,
-      phone: phone ?? this.phone,
-      market: market ?? this.market,
-      profileImage: profileImage ?? this.profileImage,
-      points: points ?? this.points,
+  static Profile fromJson(Map<String, dynamic> json) {
+    return Profile(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? '',
+      phoneNumber: json['phoneNumber'] as String,
+      email: json['email'] as String?,
+      profileImage: json['profileImage'] as String?,
+      marketId: json['marketId'] as String?,
+      marketName: json['marketName'] as String?,
     );
   }
-
-  @override
-  List<Object?> get props => [name, phone, market, profileImage, points];
 }

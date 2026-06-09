@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/profile/data/models/profile_model.dart';
+import 'package:mobile/features/profile/domain/entities/market.dart';
 
 class MarketDropdown extends StatelessWidget {
   final bool isOpen;
@@ -65,7 +65,7 @@ class MarketDropdown extends StatelessWidget {
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: BorderSide(
-                            color: selectedMarket == market
+                            color: selectedMarket?.id == market.id
                                 ? const Color(0xFF2ED573)
                                 : const Color(0xFFEEEEEE),
                           ),
@@ -78,15 +78,15 @@ class MarketDropdown extends StatelessWidget {
                             market.displayName,
                             style: TextStyle(
                               fontSize: 16,
-                              color: selectedMarket == market
+                              color: selectedMarket?.id == market.id
                                   ? const Color(0xFF2ED573)
                                   : const Color(0xFF333333),
-                              fontWeight: selectedMarket == market
+                              fontWeight: selectedMarket?.id == market.id
                                   ? FontWeight.w600
                                   : FontWeight.normal,
                             ),
                           ),
-                          if (selectedMarket == market)
+                          if (selectedMarket?.id == market.id)
                             const Icon(
                               Iconsax.tick_circle,
                               size: 20,

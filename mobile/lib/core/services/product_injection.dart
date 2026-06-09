@@ -2,11 +2,9 @@ import 'package:get_it/get_it.dart';
 import '../../features/product/data/datasources/product_remote_datasource.dart';
 import '../../features/product/data/repositories/product_repository_impl.dart';
 import '../../features/product/domain/repositories/product_repository.dart';
-import '../../features/product/domain/usecases/get_categories.dart';
 import '../../features/product/domain/usecases/get_featured_products.dart';
 import '../../features/product/domain/usecases/get_product_by_id.dart';
 import '../../features/product/domain/usecases/get_products_by_category.dart';
-import '../../features/product/domain/usecases/get_subcategories.dart';
 import '../../features/product/domain/usecases/search_products.dart';
 import '../../features/product/presentation/blocs/product_bloc.dart';
 

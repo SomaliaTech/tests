@@ -1,4 +1,3 @@
-// lib/features/auth/domain/repositories/auth_repository.dart
 import '../../../../core/utils/typedefs.dart';
 import '../entities/user.dart';
 
@@ -15,6 +14,9 @@ abstract class AuthRepository {
   });
   ResultFuture<User> getCurrentUser();
   ResultFuture<String> uploadProfileImage(String base64Image);
-  Future<void> logout();
-  Future<bool> isAuthenticated();
+  ResultFuture<bool> checkAuthStatus();
+  ResultFuture<void> logout();
+  // Add this method
+  Future<bool>
+  isAuthenticated(); // Note: not wrapped in ResultFuture because it's a local check
 }

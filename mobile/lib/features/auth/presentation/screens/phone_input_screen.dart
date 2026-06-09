@@ -7,10 +7,27 @@ import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import 'otp_verification_screen.dart';
 
-class PhoneInputScreen extends StatelessWidget {
-  final TextEditingController phoneController = TextEditingController();
+class PhoneInputScreen extends StatefulWidget {
+  const PhoneInputScreen({super.key});
 
-  PhoneInputScreen({super.key});
+  @override
+  State<PhoneInputScreen> createState() => _PhoneInputScreenState();
+}
+
+class _PhoneInputScreenState extends State<PhoneInputScreen> {
+  late final TextEditingController phoneController;
+
+  @override
+  void initState() {
+    super.initState();
+    phoneController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    phoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,12 +39,11 @@ class PhoneInputScreen extends StatelessWidget {
             title: const Text('✓ OTP Sent Successfully'),
             description: Text('Your verification code: ${state.debugOtp}'),
             type: ToastificationType.success,
-            autoCloseDuration: const Duration(seconds: 5),
+            autoCloseDuration: const Duration(seconds: 15),
             style: ToastificationStyle.fillColored,
             alignment: Alignment.topCenter,
           );
 
-          // Normalize format cleanly to pass downstream
           final rawPhone = phoneController.text.trim().replaceAll(
             RegExp(r'\D'),
             '',
@@ -189,13 +205,9 @@ class PhoneInputScreen extends StatelessWidget {
                           ? null
                           : () {
                               final rawPhone = phoneController.text.trim();
-                              String cleanNumber = rawPhone.replaceAll(
-                                RegExp(r'\D'),
-                                '',
-                              );
 
-                              if (!cleanNumber.startsWith('61') ||
-                                  cleanNumber.length != 9) {
+                              if (!rawPhone.startsWith('61') ||
+                                  rawPhone.length != 9) {
                                 toastification.show(
                                   context: context,
                                   title: const Text('Invalid Number'),
@@ -208,10 +220,8 @@ class PhoneInputScreen extends StatelessWidget {
                                 return;
                               }
 
-                              // Pre-normalize it here so backend gets '+25261...' directly
-                              final formattedToSend = '+252$cleanNumber';
                               context.read<AuthBloc>().add(
-                                SendOtpEvent(formattedToSend),
+                                SendOtpEvent(rawPhone),
                               );
                             },
                       style: ElevatedButton.styleFrom(

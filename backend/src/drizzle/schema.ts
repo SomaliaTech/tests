@@ -11,14 +11,12 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Category Table with self-referencing for subcategories
-// Category Table with self-referencing for subcategories
-// Update the categories table
+// Category Table
 export const categories = pgTable(
   'categories',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    name: varchar('name', { length: 255 }).notNull(), // Remove .unique()
+    name: varchar('name', { length: 255 }).notNull(),
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     description: text('description'),
     iconId: uuid('icon_id').unique(),
@@ -29,7 +27,7 @@ export const categories = pgTable(
   (table) => ({
     parentIdx: index('category_parent_idx').on(table.parentId),
     slugIdx: index('category_slug_idx').on(table.slug),
-    nameIdx: index('category_name_idx').on(table.name), // Add index for performance
+    nameIdx: index('category_name_idx').on(table.name),
   }),
 );
 
@@ -42,7 +40,7 @@ export const products = pgTable(
     slug: varchar('slug', { length: 255 }).unique(),
     description: text('description'),
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
-    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }), // For sales
+    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }),
     costPerItem: decimal('cost_per_item', { precision: 10, scale: 2 }),
     stock: integer('stock').notNull().default(0),
     sku: varchar('sku', { length: 255 }).unique(),
@@ -52,7 +50,7 @@ export const products = pgTable(
     isFeatured: boolean('is_featured').default(false),
     categoryId: uuid('category_id').notNull(),
     brand: varchar('brand', { length: 255 }),
-    tags: text('tags'), // Comma-separated tags for search
+    tags: text('tags'),
     seoTitle: varchar('seo_title', { length: 255 }),
     seoDescription: text('seo_description'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -149,6 +147,7 @@ export const orders = pgTable(
     paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
     paymentMethod: varchar('payment_method', { length: 50 }),
     notes: text('notes'),
+    userId: uuid('user_id'), // Add this line
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -156,6 +155,7 @@ export const orders = pgTable(
     statusIdx: index('order_status_idx').on(table.status),
     emailIdx: index('order_email_idx').on(table.customerEmail),
     orderNumberIdx: index('order_number_idx').on(table.orderNumber),
+    userIdIdx: index('order_user_id_idx').on(table.userId), // Add this for performance
   }),
 );
 
@@ -178,6 +178,26 @@ export const orderItems = pgTable(
   (table) => ({
     orderIdx: index('order_item_order_idx').on(table.orderId),
     variantIdx: index('order_item_variant_idx').on(table.productVariantId),
+  }),
+);
+
+// Users Table
+export const users = pgTable(
+  'users',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    phoneNumber: varchar('phone_number', { length: 20 }).notNull().unique(),
+    email: varchar('email', { length: 255 }),
+    name: varchar('name', { length: 255 }),
+    profileImage: varchar('profile_image', { length: 500 }),
+    isVerified: boolean('is_verified').default(false),
+    otpCode: varchar('otp_code', { length: 6 }),
+    otpExpiresAt: timestamp('otp_expires_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
   }),
 );
 
@@ -230,8 +250,12 @@ export const productVariantsRelations = relations(
   }),
 );
 
-export const ordersRelations = relations(orders, ({ many }) => ({
+export const ordersRelations = relations(orders, ({ one, many }) => ({
   items: many(orderItems),
+  user: one(users, {
+    fields: [orders.userId],
+    references: [users.id],
+  }),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -244,3 +268,16 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
     references: [productVariants.id],
   }),
 }));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  orders: many(orders),
+}));
+export const markets = pgTable('markets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  city: varchar('city', { length: 255 }),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});

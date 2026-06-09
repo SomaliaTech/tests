@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/profile/data/models/profile_model.dart';
+import 'package:mobile/features/profile/domain/entities/market.dart';
 
 class MarketDropdown extends StatelessWidget {
   final bool isOpen;

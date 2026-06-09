@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:iconsax/iconsax.dart';
 
 class WarningSection extends StatelessWidget {
   final VoidCallback onWhatsAppPressed;

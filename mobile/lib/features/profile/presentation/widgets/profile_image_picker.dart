@@ -4,12 +4,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:iconsax/iconsax.dart';
 
 class ProfileImagePicker extends StatelessWidget {
-  final String? imagePath;
-  final ValueChanged<String?> onImagePicked;
+  final String? imageUrl;
+  final Function(String) onImagePicked;
 
   const ProfileImagePicker({
     super.key,
-    required this.imagePath,
+    required this.imageUrl,
     required this.onImagePicked,
   });
 
@@ -21,8 +21,14 @@ class ProfileImagePicker extends StatelessWidget {
     );
 
     if (result != null) {
-      onImagePicked(result.path);
+      final bytes = await result.readAsBytes();
+      final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      onImagePicked(base64Image);
     }
+  }
+
+  String base64Encode(List<int> bytes) {
+    return String.fromCharCodes(bytes);
   }
 
   @override
@@ -35,10 +41,10 @@ class ProfileImagePicker extends StatelessWidget {
           children: [
             Stack(
               children: [
-                if (imagePath != null)
+                if (imageUrl != null && imageUrl!.isNotEmpty)
                   ClipOval(
-                    child: Image.file(
-                      File(imagePath!),
+                    child: Image.network(
+                      imageUrl!,
                       width: 100,
                       height: 100,
                       fit: BoxFit.cover,
