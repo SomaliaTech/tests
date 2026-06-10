@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/core/common/widgets/loading_category.dart';
 import 'package:mobile/features/product/presentation/screens/all_categories_screen.dart';
 import 'package:mobile/features/product/presentation/widgets/home/category_item.dart';
+
 import 'package:toastification/toastification.dart';
 import '../../blocs/category_bloc.dart';
 import '../../blocs/category_event.dart';
@@ -78,12 +80,7 @@ class CategoriesSection extends StatelessWidget {
                     },
                   );
                 } else if (state is CategoriesLoading) {
-                  return const Center(
-                    child: SizedBox(
-                      height: 100,
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
+                  return const LoadingCategory();
                 } else if (state is CategoryError) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     toastification.show(
@@ -96,7 +93,7 @@ class CategoriesSection extends StatelessWidget {
                   });
                   return const SizedBox.shrink();
                 }
-                return const SizedBox.shrink();
+                return const LoadingCategory();
               },
             ),
           ],

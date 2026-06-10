@@ -8,9 +8,11 @@ import 'package:mobile/features/product/presentation/blocs/product_event.dart';
 import 'package:mobile/features/product/presentation/blocs/product_state.dart';
 import 'package:mobile/features/product/presentation/widgets/address/address_selection_modal.dart';
 import 'package:mobile/features/product/presentation/widgets/home/selection_options.dart';
+import 'package:mobile/features/product/presentation/widgets/loading/loading_product_detail.dart';
 import 'package:mobile/features/product/presentation/widgets/product/bottom_action_bar.dart';
 import 'package:mobile/features/product/presentation/widgets/product/description_tab.dart';
 import 'package:mobile/features/product/presentation/widgets/product/image_carousel.dart';
+
 import 'package:mobile/features/product/presentation/widgets/product/payment_options_modal.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_header.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_info.dart';
@@ -248,7 +250,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                 ],
               );
             } else if (state is ProductDetailLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return const LoadingProductDetail();
             } else if (state is ProductDetailError) {
               return Center(
                 child: Column(
@@ -276,7 +278,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                 ),
               );
             }
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingProductDetail();
           },
         ),
       ),

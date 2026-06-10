@@ -3,6 +3,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_event.dart';
 import 'package:mobile/features/product/presentation/blocs/category_state.dart';
+
+import 'package:mobile/features/product/presentation/widgets/loading/loading_product_card.dart';
+import 'package:mobile/features/product/presentation/widgets/loading/loading_subcategories.dart';
+
 import 'package:toastification/toastification.dart';
 import '../blocs/product_bloc.dart';
 import '../blocs/product_event.dart';
@@ -35,11 +39,9 @@ class _CategoryViewState extends State<CategoryView> {
   }
 
   void _loadData() {
-    // Load subcategories using CategoryBloc
     context.read<CategoryBloc>().add(
       GetCategorySubcategoriesEvent(widget.categoryId),
     );
-    // Load products for the selected category
     context.read<ProductBloc>().add(
       GetProductsByCategoryEvent(widget.categoryId),
     );
@@ -52,7 +54,6 @@ class _CategoryViewState extends State<CategoryView> {
     if (query.isNotEmpty) {
       context.read<ProductBloc>().add(SearchProductsEvent(query));
     } else {
-      // Reload products for current category
       final targetId = _selectedSubCategoryId == 'all'
           ? widget.categoryId
           : _selectedSubCategoryId;
@@ -67,9 +68,14 @@ class _CategoryViewState extends State<CategoryView> {
       _searchController.clear();
     });
 
-    // Load products for selected subcategory or parent category
     final targetId = subCategoryId == 'all' ? widget.categoryId : subCategoryId;
     context.read<ProductBloc>().add(GetProductsByCategoryEvent(targetId));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -154,36 +160,20 @@ class _CategoryViewState extends State<CategoryView> {
           current is CategoryError,
       builder: (context, state) {
         if (state is CategorySubcategoriesLoading) {
-          return const SizedBox(
-            height: 50,
-            child: Center(
-              child: SizedBox(
-                height: 30,
-                width: 30,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF2ED573),
-                ),
-              ),
-            ),
-          );
+          return const LoadingSubcategories();
         }
 
         if (state is CategorySubcategoriesLoaded) {
           final subCategories = state.subcategories;
 
-          // Note: Even if subCategories from backend is empty,
-          // we still might want to show the "All" chip if there are main products.
           return Container(
             height: 50,
             margin: const EdgeInsets.only(bottom: 8),
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              // Always +1 to account for our local, artificial "All" chip
               itemCount: subCategories.length + 1,
               itemBuilder: (context, index) {
-                // 1. Render the hardcoded "All" Chip at position 0
                 if (index == 0) {
                   final isSelected = _selectedSubCategoryId == 'all';
                   return Padding(
@@ -216,7 +206,6 @@ class _CategoryViewState extends State<CategoryView> {
                   );
                 }
 
-                // 2. Render actual subcategories from your backend
                 final subCategory = subCategories[index - 1];
                 final isSelected = _selectedSubCategoryId == subCategory.id;
 
@@ -275,7 +264,6 @@ class _CategoryViewState extends State<CategoryView> {
         if (state is ProductsLoaded) {
           final products = state.products;
 
-          // Filter by search query if needed
           var filteredProducts = products;
           if (_searchQuery.isNotEmpty) {
             filteredProducts = products.where((product) {
@@ -344,8 +332,18 @@ class _CategoryViewState extends State<CategoryView> {
             },
           );
         } else if (state is ProductLoading) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 15,
+              mainAxisExtent: 250,
+            ),
+            itemCount: 6,
+            itemBuilder: (context, index) {
+              return const LoadingProductCard();
+            },
           );
         } else if (state is ProductError) {
           return Center(
@@ -368,8 +366,18 @@ class _CategoryViewState extends State<CategoryView> {
           );
         }
 
-        return const Center(
-          child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 15,
+            mainAxisExtent: 250,
+          ),
+          itemCount: 6,
+          itemBuilder: (context, index) {
+            return const LoadingProductCard();
+          },
         );
       },
     );
