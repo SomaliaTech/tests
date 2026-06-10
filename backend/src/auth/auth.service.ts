@@ -119,6 +119,7 @@ export class AuthService {
   async verifyOtp(phoneNumber: string, otpCode: string) {
     console.log(phoneNumber);
     console.log(otpCode);
+
     const user = await this.drizzle.db
       .select()
       .from(users)
@@ -153,6 +154,11 @@ export class AuthService {
     // Generate JWT token
     const token = this.generateToken(currentUser.id, phoneNumber);
 
+    // IMPORTANT: Check if user has profile (name exists and is not empty)
+    const hasProfile = !!(
+      currentUser.name && currentUser.name.trim().length > 0
+    );
+
     return {
       message: 'OTP verified successfully',
       token,
@@ -160,7 +166,7 @@ export class AuthService {
         id: currentUser.id,
         phoneNumber: currentUser.phoneNumber,
         isVerified: true,
-        hasProfile: !!currentUser.name,
+        hasProfile: hasProfile, // This is the key flag
         name: currentUser.name,
         email: currentUser.email,
         profileImage: currentUser.profileImage,
@@ -236,10 +242,10 @@ export class AuthService {
         email: updatedUser.email,
         profileImage: updatedUser.profileImage,
         isVerified: updatedUser.isVerified,
+        hasProfile: true, // Always true after completing profile
       },
     };
   }
-
   async getMe(userId: string) {
     const [user] = await this.drizzle.db
       .select()
@@ -250,6 +256,8 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const hasProfile = !!(user.name && user.name.trim().length > 0);
+
     return {
       id: user.id,
       phoneNumber: user.phoneNumber,
@@ -257,6 +265,7 @@ export class AuthService {
       email: user.email,
       profileImage: user.profileImage,
       isVerified: user.isVerified,
+      hasProfile: hasProfile,
     };
   }
 

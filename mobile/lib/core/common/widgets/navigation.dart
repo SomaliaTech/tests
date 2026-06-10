@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/theme.dart';
 import 'package:mobile/features/chat/presentation/screens/chat_view.dart';
 import 'package:mobile/features/product/presentation/screens/home_screen.dart';
-import 'package:mobile/features/settings/presentation/screens/settings_screen.dart';
+import 'package:mobile/features/profile/presentation/screens/settings_screen.dart';
 import 'package:mobile/features/wishlist/presentation/screens/wishlist_screen.dart';
 import 'package:iconsax/iconsax.dart';
 

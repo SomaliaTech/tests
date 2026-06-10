@@ -1,4 +1,3 @@
-// lib/features/auth/domain/entities/user.dart
 import 'package:equatable/equatable.dart';
 
 class User extends Equatable {
@@ -7,6 +6,7 @@ class User extends Equatable {
   final String? name;
   final String? email;
   final String? profileImage;
+  final String? marketId;
   final bool isVerified;
   final bool hasProfile;
 
@@ -16,8 +16,9 @@ class User extends Equatable {
     this.name,
     this.email,
     this.profileImage,
-    this.isVerified = false,
-    this.hasProfile = false,
+    this.marketId,
+    required this.isVerified,
+    required this.hasProfile,
   });
 
   @override
@@ -27,6 +28,7 @@ class User extends Equatable {
     name,
     email,
     profileImage,
+    marketId,
     isVerified,
     hasProfile,
   ];

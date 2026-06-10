@@ -134,7 +134,10 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade50,
-                        border: Border.all(color: Colors.grey.shade300),
+                        border: Border.all(
+                          color: Colors.grey.shade300,
+                          width: 1.5,
+                        ),
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(16),
                           bottomLeft: Radius.circular(16),
@@ -150,44 +153,55 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                         ),
                       ),
                     ),
-
                     Expanded(
-                      child: TextField(
-                        controller: phoneController,
-                        keyboardType: TextInputType.phone,
-                        maxLength: 9,
-                        style: const TextStyle(fontSize: 18),
-                        decoration: InputDecoration(
-                          hintText: '61 XXXXXXXXX',
-                          hintStyle: TextStyle(color: Colors.grey.shade400),
-                          counterText: '',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: const BorderRadius.only(
-                              topRight: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
+                      child: SizedBox(
+                        height: 56,
+                        child: TextField(
+                          controller: phoneController,
+                          keyboardType: TextInputType.phone,
+                          maxLength: 9,
+                          style: const TextStyle(fontSize: 18),
+                          decoration: InputDecoration(
+                            hintText: '61 XXXXXXXXX',
+                            hintStyle: TextStyle(color: Colors.grey.shade400),
+                            counterText: '',
+                            border: OutlineInputBorder(
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
+                              ),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                                width: 1.5,
+                              ),
                             ),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: const BorderRadius.only(
-                              topRight: Radius.circular(16),
-                              bottomRight: Radius.circular(16),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
+                              ),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                                width: 1.5,
+                              ),
                             ),
-                            borderSide: const BorderSide(
-                              color: Color(0xFF2ED573),
-                              width: 2,
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
+                              ),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF2ED573),
+                                width: 2.0,
+                              ),
                             ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 16,
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 18,
-                          ),
-                          filled: true,
-                          fillColor: Colors.grey.shade50,
                         ),
                       ),
                     ),

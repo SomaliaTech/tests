@@ -5,6 +5,7 @@ import 'package:mobile/core/common/widgets/navigation.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_event.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
@@ -34,6 +35,7 @@ class MyApp extends StatelessWidget {
           BlocProvider(create: (context) => sl<ProductBloc>()),
           BlocProvider(create: (context) => sl<WishlistBloc>()),
           BlocProvider(create: (context) => sl<ProfileBloc>()),
+          BlocProvider(create: (context) => sl<CategoryBloc>()),
         ],
         child: MaterialApp(
           title: 'HALDOOR',
