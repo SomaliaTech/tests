@@ -50,11 +50,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthLoading());
 
-    // DEBUG: Log before calling use case
-    print('🔐 Verifying OTP:');
-    print('   Phone: ${event.phoneNumber}');
-    print('   Code: ${event.otpCode}');
-
     final result = await verifyOtp(event.phoneNumber, event.otpCode);
     result.fold(
       (failure) => emit(AuthError(failure.message)),
@@ -69,7 +64,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     final result = await completeProfile(
       name: event.name,
-      email: event.email,
       profileImageUrl: event.profileImageUrl,
     );
     result.fold(

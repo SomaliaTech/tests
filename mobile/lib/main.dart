@@ -63,8 +63,6 @@ class MyApp extends StatelessWidget {
               } else if (state is Authenticated) {
                 return const MainNavigationScreen();
               } else {
-                // Returns PhoneInputScreen directly on Unauthenticated states,
-                // allowing internal pushes to safely handle OtpSent and loading states.
                 return const PhoneInputScreen();
               }
             },

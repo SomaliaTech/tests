@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/cart/presentation/screens/cart_screen.dart';
+import 'package:mobile/features/notifications/presentation/screens/notifications_screen.dart';
 
 class Header extends StatelessWidget {
   final Function(String)? onSearch;
@@ -37,7 +39,15 @@ class Header extends StatelessWidget {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () {},
+                        onPressed: () {
+                          // Navigate to cart
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NotificationsScreen(),
+                            ),
+                          );
+                        },
                         icon: const Icon(
                           Iconsax.notification,
                           color: Colors.white,
@@ -49,6 +59,12 @@ class Header extends StatelessWidget {
                           IconButton(
                             onPressed: () {
                               // Navigate to cart
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CartScreen(),
+                                ),
+                              );
                             },
                             icon: const Icon(
                               Iconsax.shopping_cart,

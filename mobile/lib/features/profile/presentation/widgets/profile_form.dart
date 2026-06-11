@@ -24,7 +24,6 @@ class ProfileForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final nameController = TextEditingController(text: profile.name);
-    final emailController = TextEditingController(text: profile.email ?? '');
     final phoneController = TextEditingController(text: profile.phoneNumber);
 
     return Container(
@@ -65,31 +64,6 @@ class ProfileForm extends StatelessWidget {
               onChanged: onNameChanged,
               decoration: InputDecoration(
                 hintText: 'Full Name',
-                hintStyle: const TextStyle(color: Color(0xFF999999)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 14,
-                ),
-              ),
-            ),
-          ),
-
-          // Email
-          Container(
-            margin: const EdgeInsets.only(bottom: 15),
-            child: TextField(
-              controller: emailController,
-              onChanged: (value) {},
-              decoration: InputDecoration(
-                hintText: 'Email (optional)',
                 hintStyle: const TextStyle(color: Color(0xFF999999)),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

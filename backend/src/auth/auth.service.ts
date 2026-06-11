@@ -293,9 +293,17 @@ export class AuthService {
   }
 
   private generateToken(userId: string, phoneNumber: string): string {
-    return this.jwtService.sign({
-      sub: userId,
-      phoneNumber,
-    });
+    // 364 days expiry (in seconds: 364 * 24 * 60 * 60)
+    const expiresIn = 364 * 24 * 60 * 60;
+
+    return this.jwtService.sign(
+      {
+        sub: userId,
+        phoneNumber,
+      },
+      {
+        expiresIn: expiresIn,
+      },
+    );
   }
 }

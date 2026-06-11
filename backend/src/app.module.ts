@@ -7,6 +7,7 @@ import { CategoriesController } from './categories/categories.controller';
 import { CategoriesModule } from './categories/categories.module';
 import { AuthModule } from './auth/auth.module';
 import { MarketsModule } from './markets/markets.module';
+import { OrdersModule } from './orders/orders.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -17,6 +18,7 @@ import { MarketsModule } from './markets/markets.module';
     CategoriesModule,
     AuthModule,
     MarketsModule,
+    OrdersModule,
   ],
   controllers: [CategoriesController],
 })

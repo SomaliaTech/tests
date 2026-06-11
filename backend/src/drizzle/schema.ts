@@ -11,7 +11,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Category Table
+// ==========================================
+// CATEGORY TABLE (Multi-level hierarchy)
+// ==========================================
 export const categories = pgTable(
   'categories',
   {
@@ -31,7 +33,9 @@ export const categories = pgTable(
   }),
 );
 
-// Product Table
+// ==========================================
+// PRODUCT TABLE
+// ==========================================
 export const products = pgTable(
   'products',
   {
@@ -66,7 +70,9 @@ export const products = pgTable(
   }),
 );
 
-// MediaAsset Table
+// ==========================================
+// MEDIA ASSETS TABLE (Images)
+// ==========================================
 export const mediaAssets = pgTable(
   'media_assets',
   {
@@ -85,7 +91,9 @@ export const mediaAssets = pgTable(
   }),
 );
 
-// Color Table
+// ==========================================
+// COLORS TABLE
+// ==========================================
 export const colors = pgTable('colors', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 100 }).notNull().unique(),
@@ -94,7 +102,9 @@ export const colors = pgTable('colors', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Size Table
+// ==========================================
+// SIZES TABLE
+// ==========================================
 export const sizes = pgTable('sizes', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 100 }).notNull().unique(),
@@ -103,7 +113,9 @@ export const sizes = pgTable('sizes', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Product Variant Table
+// ==========================================
+// PRODUCT VARIANTS TABLE (Color & Size combinations)
+// ==========================================
 export const productVariants = pgTable(
   'product_variants',
   {
@@ -132,56 +144,9 @@ export const productVariants = pgTable(
   }),
 );
 
-// Order Table
-export const orders = pgTable(
-  'orders',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    orderNumber: varchar('order_number', { length: 255 }).notNull().unique(),
-    customerName: varchar('customer_name', { length: 255 }).notNull(),
-    customerEmail: varchar('customer_email', { length: 255 }).notNull(),
-    customerPhone: varchar('customer_phone', { length: 50 }),
-    shippingAddress: text('shipping_address'),
-    totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
-    status: varchar('status', { length: 50 }).notNull().default('PENDING'),
-    paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
-    paymentMethod: varchar('payment_method', { length: 50 }),
-    notes: text('notes'),
-    userId: uuid('user_id'), // Add this line
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (table) => ({
-    statusIdx: index('order_status_idx').on(table.status),
-    emailIdx: index('order_email_idx').on(table.customerEmail),
-    orderNumberIdx: index('order_number_idx').on(table.orderNumber),
-    userIdIdx: index('order_user_id_idx').on(table.userId), // Add this for performance
-  }),
-);
-
-// Order Item Table
-export const orderItems = pgTable(
-  'order_items',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    orderId: uuid('order_id').notNull(),
-    productVariantId: uuid('product_variant_id').notNull(),
-    productName: varchar('product_name', { length: 255 }).notNull(),
-    variantSku: varchar('variant_sku', { length: 255 }).notNull(),
-    colorName: varchar('color_name', { length: 100 }),
-    sizeName: varchar('size_name', { length: 100 }),
-    unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
-    quantity: integer('quantity').notNull(),
-    totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => ({
-    orderIdx: index('order_item_order_idx').on(table.orderId),
-    variantIdx: index('order_item_variant_idx').on(table.productVariantId),
-  }),
-);
-
-// Users Table
+// ==========================================
+// USERS TABLE
+// ==========================================
 export const users = pgTable(
   'users',
   {
@@ -201,7 +166,180 @@ export const users = pgTable(
   }),
 );
 
-// Relations
+// ==========================================
+// ADDRESSES TABLE
+// ==========================================
+export const addresses = pgTable(
+  'addresses',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: varchar('label', { length: 50 }).notNull(), // 'Home', 'Office', 'Other'
+    fullAddress: text('full_address').notNull(),
+    phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
+    isDefault: boolean('is_default').default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('address_user_idx').on(table.userId),
+  }),
+);
+
+// ==========================================
+// MARKETS TABLE
+// ==========================================
+export const markets = pgTable('markets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  city: varchar('city', { length: 255 }),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// CART ITEMS TABLE
+// ==========================================
+export const cartItems = pgTable(
+  'cart_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    productVariantId: uuid('product_variant_id')
+      .notNull()
+      .references(() => productVariants.id),
+    quantity: integer('quantity').notNull().default(1),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('cart_user_id_idx').on(table.userId),
+    productVariantIdx: index('cart_product_variant_idx').on(
+      table.productVariantId,
+    ),
+  }),
+);
+
+// ==========================================
+// ORDERS TABLE
+// ==========================================
+export const orders = pgTable(
+  'orders',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderNumber: varchar('order_number', { length: 255 }).notNull().unique(),
+    customerName: varchar('customer_name', { length: 255 }).notNull(),
+    customerEmail: varchar('customer_email', { length: 255 }).notNull(),
+    customerPhone: varchar('customer_phone', { length: 50 }),
+    shippingAddress: text('shipping_address'),
+    totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
+    status: varchar('status', { length: 50 }).notNull().default('PENDING'),
+    paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
+    paymentMethod: varchar('payment_method', { length: 50 }),
+    notes: text('notes'),
+    userId: uuid('user_id').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    statusIdx: index('order_status_idx').on(table.status),
+    emailIdx: index('order_email_idx').on(table.customerEmail),
+    orderNumberIdx: index('order_number_idx').on(table.orderNumber),
+    userIdIdx: index('order_user_id_idx').on(table.userId),
+  }),
+);
+
+// ==========================================
+// ORDER ITEMS TABLE
+// ==========================================
+export const orderItems = pgTable(
+  'order_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    productVariantId: uuid('product_variant_id')
+      .notNull()
+      .references(() => productVariants.id),
+    productName: varchar('product_name', { length: 255 }).notNull(),
+    variantSku: varchar('variant_sku', { length: 255 }).notNull(),
+    colorName: varchar('color_name', { length: 100 }),
+    sizeName: varchar('size_name', { length: 100 }),
+    unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
+    quantity: integer('quantity').notNull(),
+    totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    orderIdx: index('order_item_order_idx').on(table.orderId),
+    variantIdx: index('order_item_variant_idx').on(table.productVariantId),
+  }),
+);
+
+// ==========================================
+// PAYMENT TRANSACTIONS TABLE
+// ==========================================
+export const paymentTransactions = pgTable(
+  'payment_transactions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    transactionId: varchar('transaction_id', { length: 255 }).unique(),
+    amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+    paymentMethod: varchar('payment_method', { length: 50 }).notNull(), // 'evc_plus', 'cash_on_delivery', 'zaad'
+    status: varchar('status', { length: 50 }).notNull().default('PENDING'), // PENDING, COMPLETED, FAILED, REFUNDED
+    paymentDetails: text('payment_details'), // JSON string of payment response
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    orderIdIdx: index('payment_order_id_idx').on(table.orderId),
+    statusIdx: index('payment_status_idx').on(table.status),
+    transactionIdIdx: index('payment_transaction_id_idx').on(
+      table.transactionId,
+    ),
+  }),
+);
+
+// ==========================================
+// NOTIFICATIONS TABLE
+// ==========================================
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: varchar('type', { length: 50 }).notNull(), // 'order', 'promotion', 'system', 'payment'
+    title: varchar('title', { length: 255 }).notNull(),
+    message: text('message').notNull(),
+    isRead: boolean('is_read').default(false),
+    actionText: varchar('action_text', { length: 100 }),
+    actionLink: varchar('action_link', { length: 500 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('notification_user_idx').on(table.userId),
+    typeIdx: index('notification_type_idx').on(table.type),
+    createdAtIdx: index('notification_created_at_idx').on(table.createdAt),
+  }),
+);
+
+// ==========================================
+// RELATIONS
+// ==========================================
+
+// Category Relations
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
     fields: [categories.parentId],
@@ -215,6 +353,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   }),
 }));
 
+// Product Relations
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
@@ -224,6 +363,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   variants: many(productVariants),
 }));
 
+// Media Assets Relations
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   product: one(products, {
     fields: [mediaAssets.productId],
@@ -231,6 +371,7 @@ export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   }),
 }));
 
+// Product Variants Relations
 export const productVariantsRelations = relations(
   productVariants,
   ({ one, many }) => ({
@@ -247,17 +388,52 @@ export const productVariantsRelations = relations(
       references: [sizes.id],
     }),
     orderItems: many(orderItems),
+    cartItems: many(cartItems),
   }),
 );
 
-export const ordersRelations = relations(orders, ({ one, many }) => ({
-  items: many(orderItems),
+// User Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  addresses: many(addresses),
+  orders: many(orders),
+  cartItems: many(cartItems),
+  notifications: many(notifications),
+}));
+
+// Address Relations
+export const addressesRelations = relations(addresses, ({ one }) => ({
   user: one(users, {
-    fields: [orders.userId],
+    fields: [addresses.userId],
     references: [users.id],
   }),
 }));
 
+// Cart Items Relations
+export const cartItemsRelations = relations(cartItems, ({ one }) => ({
+  user: one(users, {
+    fields: [cartItems.userId],
+    references: [users.id],
+  }),
+  variant: one(productVariants, {
+    fields: [cartItems.productVariantId],
+    references: [productVariants.id],
+  }),
+}));
+
+// Order Relations
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  user: one(users, {
+    fields: [orders.userId],
+    references: [users.id],
+  }),
+  items: many(orderItems),
+  payment: one(paymentTransactions, {
+    fields: [orders.id],
+    references: [paymentTransactions.orderId],
+  }),
+}));
+
+// Order Items Relations
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   order: one(orders, {
     fields: [orderItems.orderId],
@@ -269,15 +445,21 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   }),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
-  orders: many(orders),
+// Payment Transactions Relations
+export const paymentTransactionsRelations = relations(
+  paymentTransactions,
+  ({ one }) => ({
+    order: one(orders, {
+      fields: [paymentTransactions.orderId],
+      references: [orders.id],
+    }),
+  }),
+);
+
+// Notifications Relations
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
 }));
-export const markets = pgTable('markets', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
-  city: varchar('city', { length: 255 }),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});

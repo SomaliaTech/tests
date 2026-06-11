@@ -19,7 +19,7 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController nameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
+
   String? _profileImageUrl;
   bool _uploading = false;
 
@@ -175,34 +175,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Name is required' : null,
                 ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: 'Email (optional)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF2ED573),
-                        width: 2,
-                      ),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                  ),
-                ),
+
                 const SizedBox(height: 40),
                 BlocBuilder<AuthBloc, AuthState>(
                   builder: (context, state) {
@@ -215,9 +188,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                 context.read<AuthBloc>().add(
                                   CompleteProfileEvent(
                                     name: nameController.text.trim(),
-                                    email: emailController.text.trim().isEmpty
-                                        ? null
-                                        : emailController.text.trim(),
+
                                     profileImageUrl: _profileImageUrl,
                                   ),
                                 );

@@ -44,7 +44,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     emit(ProfileLoading());
     final result = await updateProfile(
       name: event.name,
-      email: event.email,
       marketId: event.marketId,
     );
     result.fold(
