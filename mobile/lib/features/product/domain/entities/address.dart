@@ -1,4 +1,6 @@
-class Address {
+import 'package:equatable/equatable.dart';
+
+class Address extends Equatable {
   final String id;
   final String label;
   final String fullAddress;
@@ -13,13 +15,25 @@ class Address {
     this.isDefault = false,
   });
 
-  factory Address.mock() {
-    return const Address(
-      id: '1',
-      label: 'Home',
-      fullAddress: '123 Main Street, City, Country',
-      phoneNumber: '+1234567890',
-      isDefault: true,
+  factory Address.fromJson(Map<String, dynamic> json) {
+    return Address(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      fullAddress: json['fullAddress'] as String,
+      phoneNumber: json['phoneNumber'] as String,
+      isDefault: json['isDefault'] as bool? ?? false,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'label': label,
+      'fullAddress': fullAddress,
+      'phoneNumber': phoneNumber,
+      'isDefault': isDefault,
+    };
+  }
+
+  @override
+  List<Object?> get props => [id, label, fullAddress, phoneNumber, isDefault];
 }

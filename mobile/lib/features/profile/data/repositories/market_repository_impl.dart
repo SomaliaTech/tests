@@ -8,7 +8,6 @@ import '../datasources/market_remote_datasource.dart';
 
 class MarketRepositoryImpl implements MarketRepository {
   final MarketRemoteDataSource remoteDataSource;
-
   const MarketRepositoryImpl({required this.remoteDataSource});
 
   @override
@@ -25,23 +24,19 @@ class MarketRepositoryImpl implements MarketRepository {
 
   @override
   ResultFuture<Market> getMarketById(String id) async {
-    try {
-      final markets = await remoteDataSource.getMarkets();
-      final market = markets.firstWhere((m) => m.id == id);
+    final markets = await getMarkets();
+    return markets.fold((failure) => Left(failure), (list) {
+      final market = list.firstWhere((m) => m.id == id);
       return Right(market);
-    } catch (e) {
-      return Left(ServerFailure('Market not found: $e'));
-    }
+    });
   }
 
   @override
   ResultFuture<Market> getMarketBySlug(String slug) async {
-    try {
-      final markets = await remoteDataSource.getMarkets();
-      final market = markets.firstWhere((m) => m.slug == slug);
+    final markets = await getMarkets();
+    return markets.fold((failure) => Left(failure), (list) {
+      final market = list.firstWhere((m) => m.slug == slug);
       return Right(market);
-    } catch (e) {
-      return Left(ServerFailure('Market not found: $e'));
-    }
+    });
   }
 }

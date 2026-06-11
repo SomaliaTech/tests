@@ -1,62 +1,59 @@
 import {
   IsString,
   IsArray,
-  IsUUID,
-  IsInt,
-  Min,
+  ValidateNested,
   IsOptional,
-  IsEnum,
+  IsNotEmpty,
+  IsNumber,
   IsBoolean,
-  IsPhoneNumber,
-  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
+// 1. Define the structure for Order Items
 export class OrderItemDto {
-  @IsUUID()
+  @IsString()
+  @IsNotEmpty()
   productVariantId: string;
 
-  @IsInt()
-  @Min(1)
+  @IsNumber()
   quantity: number;
 }
 
+// 2. Define the structure for the Address
+// (If you already have an AddressDto in another file, you can import it instead)
 export class AddressDto {
   @IsString()
-  @MaxLength(50)
+  @IsNotEmpty()
   label: string;
 
   @IsString()
-  @MaxLength(500)
+  @IsNotEmpty()
   fullAddress: string;
 
   @IsString()
-  @IsPhoneNumber()
+  @IsNotEmpty()
   phoneNumber: string;
 
+  // 🚨 ADDED THIS:
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;
 }
 
+// 3. The Main CreateOrderDto
 export class CreateOrderDto {
   @IsArray()
+  @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 
+  // 🚨 THIS WAS MISSING! Add this to accept the shipping address object
+  @ValidateNested()
   @Type(() => AddressDto)
   shippingAddress: AddressDto;
 
   @IsString()
-  @IsOptional()
-  @MaxLength(255)
-  customerName?: string;
-
-  @IsString()
-  @IsOptional()
-  customerEmail?: string;
-
-  @IsEnum(['evc_plus', 'cash_on_delivery', 'zaad'])
+  @IsNotEmpty()
   paymentMethod: string;
 
   @IsString()

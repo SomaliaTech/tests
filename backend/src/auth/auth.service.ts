@@ -269,10 +269,18 @@ export class AuthService {
     };
   }
 
-  async updateProfile(userId: string, name?: string, email?: string) {
+  async updateProfile(
+    userId: string,
+    name?: string,
+    email?: string,
+    marketId?: string,
+  ) {
     const updateData: any = { updatedAt: new Date() };
+
+    console.log(`userId ${userId} name ${name} makertId ${marketId}`);
     if (name) updateData.name = name;
     if (email) updateData.email = email;
+    if (marketId) updateData.marketId = marketId;
 
     const [updatedUser] = await this.drizzle.db
       .update(users)
@@ -288,6 +296,7 @@ export class AuthService {
         email: updatedUser.email,
         phoneNumber: updatedUser.phoneNumber,
         profileImage: updatedUser.profileImage,
+        marketId: updatedUser.marketId,
       },
     };
   }

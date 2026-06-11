@@ -100,6 +100,7 @@ export class AuthController {
       req.user.userId,
       updateProfileDto.name,
       updateProfileDto.email,
+      updateProfileDto.marketId,
     );
   }
 }

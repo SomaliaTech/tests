@@ -155,6 +155,7 @@ export const users = pgTable(
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 255 }),
     profileImage: varchar('profile_image', { length: 500 }),
+    marketId: uuid('market_id'), // add this line
     isVerified: boolean('is_verified').default(false),
     otpCode: varchar('otp_code', { length: 6 }),
     otpExpiresAt: timestamp('otp_expires_at'),
@@ -163,9 +164,9 @@ export const users = pgTable(
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
+    marketIdIdx: index('users_market_id_idx').on(table.marketId),
   }),
 );
-
 // ==========================================
 // ADDRESSES TABLE
 // ==========================================

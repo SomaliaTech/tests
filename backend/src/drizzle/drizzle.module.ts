@@ -23,11 +23,12 @@ import { DrizzleService, DRIZZLE_DB } from './drizzle.service';
         // Create connection pool for Supabase
         const pool = new Pool({
           connectionString,
-          ssl: {
-            rejectUnauthorized: false, // Required for Supabase
-          },
+          ssl: { rejectUnauthorized: false },
+          max: 20, // Maximum clients in pool
+          idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+          connectionTimeoutMillis: 5000, // Wait 5 seconds for connection
+          keepAlive: true, // Send keep-alive packets
         });
-
         return drizzle(pool, { schema });
       },
     },

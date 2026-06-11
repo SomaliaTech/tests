@@ -10,6 +10,7 @@ class UserModel {
       name: json['name'] as String?,
       email: json['email'] as String?,
       profileImage: json['profileImage'] as String?,
+      marketId: json['marketId'] as String?, // nullable
       isVerified: json['isVerified'] as bool? ?? false,
       hasProfile: json['hasProfile'] as bool? ?? false,
     );

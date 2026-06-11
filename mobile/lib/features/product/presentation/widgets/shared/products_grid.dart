@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/product/domain/entities/product.dart';
 
 import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
-import 'package:mobile/features/product/presentation/widgets/product/product_model.dart';
 
 class ProductsGrid extends StatelessWidget {
   final List<Product> prodcut;
@@ -68,7 +68,7 @@ class _ProductCard extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: const BorderRadius.all(Radius.circular(12)),
                 child: Image.network(
-                  product.images.first,
+                  product.imageUrls.first,
                   height: 160, // 🎯 Matches the parent height
                   width: double.infinity,
                   fit: BoxFit.cover,

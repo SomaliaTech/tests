@@ -11,7 +11,6 @@ abstract class MarketRemoteDataSource {
 
 class MarketRemoteDataSourceImpl implements MarketRemoteDataSource {
   final http.Client client;
-
   MarketRemoteDataSourceImpl({required this.client});
 
   @override
@@ -21,12 +20,11 @@ class MarketRemoteDataSourceImpl implements MarketRemoteDataSource {
         Uri.parse('${ApiConstants.baseUrl}/markets'),
         headers: ApiConstants.headers,
       );
-
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
         return jsonList.map((json) => MarketModel.fromJson(json)).toList();
       } else {
-        throw ServerException('Failed to load markets: ${response.statusCode}');
+        throw ServerException('Failed to load markets');
       }
     } catch (e) {
       throw ServerException('Network error: $e');

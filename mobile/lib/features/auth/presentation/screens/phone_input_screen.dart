@@ -69,7 +69,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        body: SafeArea(
+        body: Padding(
+          padding: const EdgeInsetsGeometry.only(top: 30),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: Column(

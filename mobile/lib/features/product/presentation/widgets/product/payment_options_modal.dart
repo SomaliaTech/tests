@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/order/presentation/bloc/order_bloc.dart';
+import 'package:mobile/features/order/presentation/bloc/order_event.dart';
+import 'package:mobile/features/order/presentation/bloc/order_state.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
 
@@ -41,8 +45,8 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
       color: Color(0xFF2ED573),
     ),
     PaymentMethod(
-      id: 'jeep',
-      name: 'Jeep',
+      id: 'cash_on_delivery',
+      name: 'Cash on Delivery',
       icon: Iconsax.wallet,
       color: Color(0xFF2ED573),
     ),
@@ -50,7 +54,95 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
 
   double get _totalAmount => widget.product.price * widget.quantity;
 
-  Future<void> _processPayment() async {
+  /// Safe way to get Variant ID
+  String get _variantId {
+    if (widget.product.variants == null || widget.product.variants.isEmpty) {
+      return '';
+    }
+
+    try {
+      final variant = widget.product.variants.firstWhere((v) {
+        final colorMatch =
+            widget.selectedColor == null || v.colorName == widget.selectedColor;
+        final sizeMatch =
+            widget.selectedSize == null || v.sizeName == widget.selectedSize;
+        return colorMatch && sizeMatch;
+      }, orElse: () => widget.product.variants.first);
+      return variant.id;
+    } catch (e) {
+      return widget.product.variants.first.id;
+    }
+  }
+
+  Map<String, dynamic> get _orderData {
+    return {
+      'items': [
+        {'productVariantId': _variantId, 'quantity': widget.quantity},
+      ],
+      'shippingAddress': {
+        'label': widget.address.label,
+        'fullAddress': widget.address.fullAddress,
+        'phoneNumber': widget.address.phoneNumber,
+      },
+      'paymentMethod': _selectedPaymentMethod,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<OrderBloc, OrderState>(
+      listener: (context, state) {
+        if (state is OrderCreated) {
+          if (_selectedPaymentMethod != null) {
+            final phoneNumber = _selectedPaymentMethod == 'cash_on_delivery'
+                ? null
+                : widget.address.phoneNumber;
+
+            context.read<OrderBloc>().add(
+              ProcessPaymentEvent(
+                orderId: state.order.id,
+                paymentMethod: _selectedPaymentMethod!,
+                phoneNumber: phoneNumber,
+              ),
+            );
+          } else {
+            setState(() => _isProcessing = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error: Payment method missing')),
+            );
+          }
+        } else if (state is PaymentProcessed) {
+          setState(() => _isProcessing = false);
+          final transactionId =
+              state.paymentResult['transactionId'] ??
+              state.paymentResult['orderNumber'] ??
+              'N/A';
+          _showSuccessDialog(transactionId);
+        } else if (state is OrderError) {
+          // 🚨 Show the new Failed Dialog instead of just a SnackBar
+          setState(() => _isProcessing = false);
+          _showFailedDialog(state.message);
+        }
+      },
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildOrderSummary(),
+            _buildPaymentMethods(),
+            _buildPayButton(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _processPayment() {
     if (_selectedPaymentMethod == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a payment method')),
@@ -58,45 +150,46 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
       return;
     }
 
-    setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(seconds: 2));
-    setState(() => _isProcessing = false);
-
-    if (mounted) {
-      _showSuccessDialog();
+    if (widget.product.variants == null || widget.product.variants.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Product has no available variants')),
+      );
+      return;
     }
+
+    setState(() => _isProcessing = true);
+    context.read<OrderBloc>().add(CreateOrderEvent(_orderData));
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog(String transactionId) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => PaymentSuccessDialog(
-        orderId: 'ORD-${DateTime.now().millisecondsSinceEpoch}',
+        orderId: transactionId,
         onContinue: () {
           Navigator.pop(context); // Close dialog
           Navigator.pop(context); // Close modal
-          Navigator.pop(context); // Go back
+          Navigator.pop(context); // Go back to product detail
         },
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildOrderSummary(),
-          _buildPaymentMethods(),
-          _buildPayButton(),
-        ],
+  // 🚨 NEW METHOD: Show the Payment Failed Dialog
+  void _showFailedDialog(String errorMessage) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => PaymentFailedDialog(
+        errorMessage: errorMessage,
+        onTryAgain: () {
+          Navigator.pop(context); // Close dialog, user can click Pay Now again
+        },
+        onCancel: () {
+          Navigator.pop(context); // Close dialog
+          Navigator.pop(context); // Close payment modal
+        },
       ),
     );
   }
@@ -197,9 +290,12 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Delivery', style: TextStyle(fontSize: 14)),
-              Text(
-                widget.address.fullAddress,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              Expanded(
+                child: Text(
+                  widget.address.fullAddress,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  textAlign: TextAlign.right,
+                ),
               ),
             ],
           ),
@@ -385,6 +481,103 @@ class PaymentSuccessDialog extends StatelessWidget {
                 child: const Text(
                   'Continue Shopping',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 🚨 NEW WIDGET: Payment Failed Dialog
+class PaymentFailedDialog extends StatelessWidget {
+  final String errorMessage;
+  final VoidCallback onTryAgain;
+  final VoidCallback onCancel;
+
+  const PaymentFailedDialog({
+    super.key,
+    required this.errorMessage,
+    required this.onTryAgain,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Iconsax.close_circle,
+                size: 50,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Payment Failed',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: onTryAgain,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2ED573),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: onCancel,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  side: const BorderSide(color: Colors.grey),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
                 ),
               ),
             ),

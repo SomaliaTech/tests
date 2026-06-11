@@ -14,6 +14,7 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddressDto } from './dto/address.dto';
+import { ProcessPaymentDto } from './dto/process-payment.dto';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
@@ -61,6 +62,14 @@ export class OrdersController {
   @Get()
   async getOrders(@Request() req, @Query('status') status?: string) {
     return this.ordersService.getOrders(req.user.userId, status);
+  }
+  @Post(':id/payment')
+  async processPayment(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() paymentData: ProcessPaymentDto,
+  ) {
+    return this.ordersService.processPayment(id, req.user.userId, paymentData);
   }
 
   @Get(':id')
