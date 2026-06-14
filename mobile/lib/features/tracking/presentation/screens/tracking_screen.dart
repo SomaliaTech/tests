@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/tracking/providers/tracking_provider.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/tracking_bloc.dart';
+import '../bloc/tracking_event.dart';
 import 'tracking_view.dart';
+import '../../../../core/services/injection_container.dart';
 
 class TrackingScreen extends StatelessWidget {
   final String orderId;
@@ -10,8 +12,8 @@ class TrackingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => TrackingProvider()..loadOrder(orderId),
+    return BlocProvider(
+      create: (context) => sl<TrackingBloc>()..add(LoadTrackingEvent(orderId)),
       child: TrackingView(orderId: orderId),
     );
   }

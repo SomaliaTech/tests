@@ -21,7 +21,7 @@ class HomeView extends StatelessWidget {
                   CategoriesSection(),
                   SizedBox(height: 16),
                   HotDealsSection(),
-                  SizedBox(height: 100), // Space for bottom navigation
+                  SizedBox(height: 70), // Space for bottom navigation
                 ],
               ),
             ),

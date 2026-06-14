@@ -238,6 +238,13 @@ export class OrdersService {
   }
 
   async getOrderById(orderId: string, userId: string) {
+    // Validate that orderId is a valid UUID format
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(orderId)) {
+      throw new NotFoundException('Invalid order ID format');
+    }
+
     const order = await this.drizzle.db.query.orders.findFirst({
       where: and(eq(orders.id, orderId), eq(orders.userId, userId)),
       with: {
@@ -263,7 +270,6 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
-
   async updateOrderStatus(orderId: string, status: string) {
     const [order] = await this.drizzle.db
       .update(orders)
@@ -413,6 +419,172 @@ export class OrdersService {
       transactionId,
       orderNumber: order.orderNumber,
       order: updatedOrder,
+    };
+  }
+  // ==========================================
+  // 🚀 SUPER OPTIMIZED CART MANAGEMENT
+  // ==========================================
+
+  async getCart(userId: string) {
+    // 🚀 OPTIMIZATION: Fetches Cart -> Variant -> Product -> Images in exactly 1 query!
+    const userCartItems = await this.drizzle.db.query.cartItems.findMany({
+      where: eq(cartItems.userId, userId),
+      with: {
+        variant: {
+          with: {
+            product: {
+              with: {
+                images: true, // 🚀 Automatically fetches product images!
+              },
+            },
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    let subtotal = 0;
+    const items = userCartItems.map((cartItem) => {
+      const variant = cartItem.variant;
+      const product = variant?.product;
+
+      // Price logic: variant price overrides product price
+      const unitPrice = variant?.price
+        ? Number(variant.price)
+        : Number(product?.price || 0);
+      const totalPrice = unitPrice * cartItem.quantity;
+      subtotal += totalPrice;
+
+      return {
+        id: cartItem.id,
+        productVariantId: cartItem.productVariantId,
+        productId: product?.id || '',
+        name: product?.name || 'Unknown Product',
+        price: unitPrice,
+        quantity: cartItem.quantity,
+        totalPrice,
+        inStock: (variant?.stock || 0) > 0,
+        imageUrl: product?.images?.[0]?.url || '', // 🚀 Extract the first image URL
+        color: variant?.color?.name || null,
+        size: variant?.size?.name || null,
+      };
+    });
+
+    return {
+      items,
+      subtotal,
+      itemCount: items.length,
+    };
+  }
+
+  async addToCart(userId: string, productVariantId: string, quantity: number) {
+    // Check if item already exists in cart
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(
+        and(
+          eq(cartItems.userId, userId),
+          eq(cartItems.productVariantId, productVariantId),
+        ),
+      )
+      .limit(1);
+
+    if (existingItem) {
+      // Update quantity
+      const [updated] = await this.drizzle.db
+        .update(cartItems)
+        .set({
+          quantity: existingItem.quantity + quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(cartItems.id, existingItem.id))
+        .returning();
+      return updated;
+    } else {
+      // Add new item
+      const [newItem] = await this.drizzle.db
+        .insert(cartItems)
+        .values({
+          id: uuidv4(),
+          userId,
+          productVariantId,
+          quantity,
+        })
+        .returning();
+      return newItem;
+    }
+  }
+
+  async removeCartItem(userId: string, itemId: string) {
+    const [deleted] = await this.drizzle.db
+      .delete(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .returning();
+
+    if (!deleted) throw new NotFoundException('Cart item not found');
+    return { message: 'Item removed from cart' };
+  }
+
+  async clearCart(userId: string) {
+    await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
+    return { message: 'Cart cleared successfully' };
+  }
+  async updateCartItem(userId: string, itemId: string, quantity: number) {
+    // First verify the cart item belongs to the user
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .limit(1);
+
+    if (!existingItem) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    // Check stock availability
+    const [variant] = await this.drizzle.db
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.id, existingItem.productVariantId))
+      .limit(1);
+
+    if (variant && variant.stock < quantity) {
+      throw new BadRequestException('Insufficient stock');
+    }
+
+    // Update quantity
+    const [updated] = await this.drizzle.db
+      .update(cartItems)
+      .set({
+        quantity,
+        updatedAt: new Date(),
+      })
+      .where(eq(cartItems.id, itemId))
+      .returning();
+
+    if (!updated) throw new NotFoundException('Cart item not found');
+
+    // Return the updated cart item with product details
+    const product = await this.drizzle.db
+      .select()
+      .from(products)
+      .where(eq(products.id, variant.productId))
+      .limit(1);
+
+    return {
+      id: updated.id,
+      productId: product[0].id,
+      productVariantId: updated.productVariantId,
+      name: product[0].name,
+      imageUrl: '', // Add image URL if needed
+      price: variant.price ? Number(variant.price) : Number(product[0].price),
+      quantity: updated.quantity,
+      totalPrice:
+        (variant.price ? Number(variant.price) : Number(product[0].price)) *
+        updated.quantity,
+      inStock: variant.stock > 0,
     };
   }
 }

@@ -68,6 +68,16 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       );
       setState(() => _isInWishlist = false);
     } else {
+      // Find the variant ID based on selected color/size
+      String variantId = '';
+      if (product.variants.isNotEmpty) {
+        final variant = product.variants.firstWhere(
+          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
+          orElse: () => product.variants.first,
+        );
+        variantId = variant.id;
+      }
+
       final wishlistItem = WishlistItem(
         id: product.id,
         name: product.name,
@@ -76,6 +86,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         brand: product.brand,
         rating: product.rating,
         categoryId: product.categoryId,
+        productVariantId: variantId, // Required field
       );
       context.read<WishlistBloc>().add(AddToWishlistEvent(wishlistItem));
       toastification.show(

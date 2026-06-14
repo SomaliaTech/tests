@@ -33,6 +33,7 @@ class WishlistRepositoryImpl implements WishlistRepository {
         brand: item.brand,
         rating: item.rating,
         categoryId: item.categoryId,
+        productVariantId: item.productVariantId, // Add this
       );
       await localDataSource.addItem(model);
       return const Right(null);

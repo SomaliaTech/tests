@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/orders_details/models/order_details_model.dart';
+import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/order/domain/entities/order_details.dart';
 
 class OrderItemCard extends StatelessWidget {
-  final OrderItem item;
+  final OrderDetailItem item;
 
   const OrderItemCard({super.key, required this.item});
 
@@ -18,20 +19,27 @@ class OrderItemCard extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              item.imageUrl,
-              width: 70,
-              height: 70,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: 70,
-                  height: 70,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.image, color: Colors.grey),
-                );
-              },
-            ),
+            child: item.imageUrl.isNotEmpty
+                ? Image.network(
+                    item.imageUrl,
+                    width: 70,
+                    height: 70,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 70,
+                        height: 70,
+                        color: Colors.grey[200],
+                        child: const Icon(Iconsax.image, color: Colors.grey),
+                      );
+                    },
+                  )
+                : Container(
+                    width: 70,
+                    height: 70,
+                    color: Colors.grey[200],
+                    child: const Icon(Iconsax.shopping_bag, color: Colors.grey),
+                  ),
           ),
           const SizedBox(width: 12),
           Expanded(

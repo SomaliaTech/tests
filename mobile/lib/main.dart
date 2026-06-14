@@ -5,12 +5,15 @@ import 'package:mobile/core/common/widgets/navigation.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_event.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
 import 'package:mobile/features/order/presentation/bloc/order_bloc.dart';
+import 'package:mobile/features/order/presentation/bloc/order_details_bloc.dart';
 import 'package:mobile/features/order/presentation/bloc/order_history_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
+import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
 import 'package:toastification/toastification.dart';
 import 'core/services/injection_container.dart';
@@ -35,6 +38,7 @@ class MyApp extends StatelessWidget {
             create: (context) =>
                 sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
           ),
+          BlocProvider(create: (context) => sl<CartBloc>()),
           BlocProvider(create: (context) => sl<OrderBloc>()),
           BlocProvider(create: (context) => sl<ProductBloc>()),
           BlocProvider(create: (context) => sl<WishlistBloc>()),
@@ -42,6 +46,8 @@ class MyApp extends StatelessWidget {
           BlocProvider(create: (context) => sl<CategoryBloc>()),
           BlocProvider(create: (context) => sl<OrderHistoryBloc>()),
           BlocProvider(create: (context) => sl<AddressBloc>()),
+          BlocProvider(create: (context) => sl<OrderDetailsBloc>()),
+          BlocProvider(create: (context) => sl<TrackingBloc>()),
         ],
         child: MaterialApp(
           title: 'HALDOOR',

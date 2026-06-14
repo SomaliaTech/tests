@@ -15,13 +15,16 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddressDto } from './dto/address.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
+import { AddToCartDto } from './dto/add-to-cart.dto'; // Ensure this DTO exists!
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
-  // Address endpoints
+  // ==========================================
+  // 1. ADDRESS ENDPOINTS (Static)
+  // ==========================================
   @Post('addresses')
   async addAddress(@Request() req, @Body() addressData: AddressDto) {
     return this.ordersService.addAddress(req.user.userId, addressData);
@@ -50,12 +53,75 @@ export class OrdersController {
     return this.ordersService.deleteAddress(req.user.userId, addressId);
   }
 
-  // Order endpoints
-  @Post()
-  async createOrder(
+  // ==========================================
+  // 2. CART ENDPOINTS (Static - MOVED UP!)
+  // ==========================================
+  @Get('cart')
+  async getCart(@Request() req) {
+    return this.ordersService.getCart(req.user.userId);
+  }
+
+  @Post('cart')
+  async addToCart(@Request() req, @Body() addToCartDto: AddToCartDto) {
+    return this.ordersService.addToCart(
+      req.user.userId,
+      addToCartDto.productVariantId,
+      addToCartDto.quantity,
+    );
+  }
+
+  @Put('cart/:itemId')
+  async updateCartItem(
     @Request() req,
-    @Body() createOrderDto: CreateOrderDto,
-  ): Promise<any> {
+    @Param('itemId') itemId: string,
+    @Body('quantity') quantity: number,
+  ) {
+    return this.ordersService.updateCartItem(req.user.userId, itemId, quantity);
+  }
+
+  @Delete('cart/:itemId')
+  async removeCartItem(@Request() req, @Param('itemId') itemId: string) {
+    return this.ordersService.removeCartItem(req.user.userId, itemId);
+  }
+
+  @Delete('cart')
+  async clearCart(@Request() req) {
+    return this.ordersService.clearCart(req.user.userId);
+  }
+
+  // ==========================================
+  // 3. NOTIFICATION ENDPOINTS (Static)
+  // ==========================================
+  @Get('notifications')
+  async getNotifications(@Request() req) {
+    return this.ordersService.getUserNotifications(req.user.userId);
+  }
+
+  @Get('notifications/unread/count')
+  async getUnreadCount(@Request() req) {
+    return this.ordersService.getUnreadCount(req.user.userId);
+  }
+
+  @Put('notifications/read-all')
+  async markAllAsRead(@Request() req) {
+    return this.ordersService.markAllNotificationsAsRead(req.user.userId);
+  }
+
+  @Put('notifications/:id/read')
+  async markNotificationAsRead(@Request() req, @Param('id') id: string) {
+    return this.ordersService.markNotificationAsRead(id, req.user.userId);
+  }
+
+  @Delete('notifications/:id')
+  async deleteNotification(@Request() req, @Param('id') id: string) {
+    return this.ordersService.deleteNotification(id, req.user.userId);
+  }
+
+  // ==========================================
+  // 4. ORDER ENDPOINTS
+  // ==========================================
+  @Post()
+  async createOrder(@Request() req, @Body() createOrderDto: CreateOrderDto) {
     return this.ordersService.createOrder(req.user.userId, createOrderDto);
   }
 
@@ -63,6 +129,7 @@ export class OrdersController {
   async getOrders(@Request() req, @Query('status') status?: string) {
     return this.ordersService.getOrders(req.user.userId, status);
   }
+
   @Post(':id/payment')
   async processPayment(
     @Request() req,
@@ -72,6 +139,9 @@ export class OrdersController {
     return this.ordersService.processPayment(id, req.user.userId, paymentData);
   }
 
+  // ==========================================
+  // 5. DYNAMIC ORDER ROUTES (MUST BE LAST!)
+  // ==========================================
   @Get(':id')
   async getOrderById(@Request() req, @Param('id') id: string) {
     return this.ordersService.getOrderById(id, req.user.userId);
@@ -83,31 +153,5 @@ export class OrdersController {
     @Body('status') status: string,
   ) {
     return this.ordersService.updateOrderStatus(id, status);
-  }
-
-  // Notification endpoints
-  @Get('notifications')
-  async getNotifications(@Request() req) {
-    return this.ordersService.getUserNotifications(req.user.userId);
-  }
-
-  @Get('notifications/unread/count')
-  async getUnreadCount(@Request() req) {
-    return this.ordersService.getUnreadCount(req.user.userId);
-  }
-
-  @Put('notifications/:id/read')
-  async markNotificationAsRead(@Request() req, @Param('id') id: string) {
-    return this.ordersService.markNotificationAsRead(id, req.user.userId);
-  }
-
-  @Put('notifications/read-all')
-  async markAllAsRead(@Request() req) {
-    return this.ordersService.markAllNotificationsAsRead(req.user.userId);
-  }
-
-  @Delete('notifications/:id')
-  async deleteNotification(@Request() req, @Param('id') id: string) {
-    return this.ordersService.deleteNotification(id, req.user.userId);
   }
 }

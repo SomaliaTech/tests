@@ -9,6 +9,7 @@ class WishlistItemModel extends WishlistItem {
     super.brand,
     super.rating,
     required super.categoryId,
+    required super.productVariantId, // Add this
   });
 
   factory WishlistItemModel.fromJson(Map<String, dynamic> json) {
@@ -20,6 +21,8 @@ class WishlistItemModel extends WishlistItem {
       brand: json['brand'] as String?,
       rating: (json['rating'] as num?)?.toDouble(),
       categoryId: json['categoryId'] as String,
+      productVariantId:
+          json['productVariantId'] as String? ?? json['id'] as String,
     );
   }
 
@@ -32,6 +35,7 @@ class WishlistItemModel extends WishlistItem {
       'brand': brand,
       'rating': rating,
       'categoryId': categoryId,
+      'productVariantId': productVariantId,
     };
   }
 }

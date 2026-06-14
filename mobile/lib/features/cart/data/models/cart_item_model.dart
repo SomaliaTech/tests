@@ -1,37 +1,38 @@
 import '../../domain/entities/cart_item.dart';
 
-class CartItemModel extends CartItem {
-  const CartItemModel({
-    required super.id,
-    required super.name,
-    required super.price,
-    required super.quantity,
-    required super.imageUrl,
-    required super.inStock,
-    required super.maxStock,
-  });
+class CartItemModel {
+  const CartItemModel._();
 
-  factory CartItemModel.fromEntity(CartItem entity) {
-    return CartItemModel(
-      id: entity.id,
-      name: entity.name,
-      price: entity.price,
-      quantity: entity.quantity,
-      imageUrl: entity.imageUrl,
-      inStock: entity.inStock,
-      maxStock: entity.maxStock,
+  static CartItem fromJson(Map<String, dynamic> json) {
+    return CartItem(
+      id: json['id'] as String,
+      productId: json['productId'] as String? ?? '',
+      productVariantId:
+          json['productVariantId'] as String? ?? json['id'] as String,
+      name: json['name'] as String,
+      imageUrl: json['imageUrl'] as String? ?? '',
+      price: (json['price'] as num).toDouble(),
+      quantity: json['quantity'] as int,
+      maxStock: json['maxStock'] as int? ?? 999,
+      inStock: json['inStock'] as bool? ?? true,
+      color: json['color'] as String?,
+      size: json['size'] as String?,
     );
   }
 
-  CartItem toEntity() {
-    return CartItem(
-      id: id,
-      name: name,
-      price: price,
-      quantity: quantity,
-      imageUrl: imageUrl,
-      inStock: inStock,
-      maxStock: maxStock,
-    );
+  static Map<String, dynamic> toJson(CartItem item) {
+    return {
+      'id': item.id,
+      'productId': item.productId,
+      'productVariantId': item.productVariantId,
+      'name': item.name,
+      'imageUrl': item.imageUrl,
+      'price': item.price,
+      'quantity': item.quantity,
+      'maxStock': item.maxStock,
+      'inStock': item.inStock,
+      'color': item.color,
+      'size': item.size,
+    };
   }
 }

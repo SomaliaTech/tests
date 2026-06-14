@@ -2,46 +2,40 @@ import 'package:equatable/equatable.dart';
 
 abstract class CartEvent extends Equatable {
   const CartEvent();
-
   @override
   List<Object?> get props => [];
 }
 
-class LoadCart extends CartEvent {}
+class LoadCartEvent extends CartEvent {}
 
-// Renamed to CartUpdateQuantity
-class CartUpdateQuantity extends CartEvent {
-  final String id;
+class UpdateQuantityEvent extends CartEvent {
+  final String itemId;
   final int quantity;
-
-  const CartUpdateQuantity({required this.id, required this.quantity});
-
+  const UpdateQuantityEvent(this.itemId, this.quantity);
   @override
-  List<Object?> get props => [id, quantity];
+  List<Object?> get props => [itemId, quantity];
 }
 
-// Renamed to CartRemoveItem
-class CartRemoveItem extends CartEvent {
-  final String id;
-
-  const CartRemoveItem(this.id);
-
+class RemoveItemEvent extends CartEvent {
+  final String itemId;
+  const RemoveItemEvent(this.itemId);
   @override
-  List<Object?> get props => [id];
+  List<Object?> get props => [itemId];
 }
 
-// Renamed to CartClearAll
-class CartClearAll extends CartEvent {}
-
-class ApplyCouponCode extends CartEvent {
-  final String code;
-
-  const ApplyCouponCode(this.code);
-
+class AddToCartEvent extends CartEvent {
+  final String productVariantId;
+  final int quantity;
+  const AddToCartEvent({
+    required this.productVariantId,
+    required this.quantity,
+  });
   @override
-  List<Object?> get props => [code];
+  List<Object?> get props => [productVariantId, quantity];
 }
 
-class RemoveCoupon extends CartEvent {}
+class ClearCartEvent extends CartEvent {}
 
-class ProceedToCheckout extends CartEvent {}
+class ProceedToCheckoutEvent extends CartEvent {}
+
+class CartOrderCompletedEvent extends CartEvent {} // Add this

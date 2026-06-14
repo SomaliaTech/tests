@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/orders_details/presentation/screens/order_details_screen.dart';
+import 'package:mobile/features/order/presentation/screens/order_details_screen.dart';
+import 'package:mobile/features/tracking/presentation/screens/tracking_screen.dart';
 import '../bloc/order_history_bloc.dart';
 import '../bloc/order_history_event.dart';
 import '../bloc/order_history_state.dart';
@@ -30,7 +31,7 @@ class OrderHistoryView extends StatelessWidget {
             color: Color(0xFF333333),
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
       ),
       // 🚨 FIXED: Removed the duplicate BlocProvider and LoadOrdersEvent()
       // It is already provided and loaded in OrderHistoryScreen!
@@ -66,13 +67,12 @@ class _OrderHistoryBody extends StatelessWidget {
                 return OrderCard(
                   order: order,
                   onTrackPressed: () {
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (context) =>
-                    //         const TrackingScreen(orderId: order.id),
-                    //   ),
-                    // );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TrackingScreen(orderId: order.id),
+                      ),
+                    );
                   },
                   onDetailsPressed: () {
                     Navigator.push(

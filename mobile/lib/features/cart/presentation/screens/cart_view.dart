@@ -1,16 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/orders_details/presentation/widgets/price_summary.dart';
+import 'package:mobile/features/cart/presentation/widgets/checkout_payment_modal.dart';
+import '../../../product/domain/entities/address.dart';
+import '../../../product/presentation/widgets/address/address_selection_modal.dart';
+
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
 import '../bloc/cart_state.dart';
 import '../widgets/bottom_checkout_bar.dart';
 import '../widgets/cart_item_card.dart';
 import '../widgets/empty_cart_view.dart';
+import '../widgets/price_summary.dart';
 
-class CartView extends StatelessWidget {
+class CartView extends StatefulWidget {
   const CartView({super.key});
+
+  @override
+  State<CartView> createState() => _CartViewState();
+}
+
+class _CartViewState extends State<CartView> {
+  Address? _selectedAddress;
+
+  void _proceedToCheckout() {
+    if (_selectedAddress == null) {
+      _showAddressSelection();
+    } else {
+      _showPaymentOptions();
+    }
+  }
+
+  void _showAddressSelection() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddressSelectionModal(
+        onAddressSelected: (address) {
+          setState(() {
+            _selectedAddress = address;
+          });
+          // After address is selected, show payment options
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _showPaymentOptions();
+          });
+        },
+      ),
+    );
+  }
+
+  void _showPaymentOptions() {
+    final state = context.read<CartBloc>().state;
+    if (state is CartLoaded && _selectedAddress != null) {
+      // Create a temporary product object for the order
+      // This will be used to create the order from cart items
+      final totalAmount = state.total;
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => CheckoutPaymentModal(
+          cartItems: state.items,
+          address: _selectedAddress!,
+          totalAmount: totalAmount,
+          onOrderComplete: () {
+            // Refresh cart after order is complete
+            context.read<CartBloc>().add(LoadCartEvent());
+            // Navigate back to home or order confirmation
+            Navigator.popUntil(context, (route) => route.isFirst);
+          },
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,13 +95,11 @@ class CartView extends StatelessWidget {
             color: Color(0xFF333333),
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Iconsax.trash, color: Color(0xFFFF4757)),
-            onPressed: () {
-              _showClearCartDialog(context);
-            },
+            onPressed: () => _showClearCartDialog(context),
           ),
         ],
       ),
@@ -81,26 +143,26 @@ class CartView extends StatelessWidget {
                       padding: const EdgeInsets.all(15),
                       child: Column(
                         children: [
-                          // Cart Items
                           ...state.items.map(
                             (item) => CartItemCard(
                               item: item,
                               onIncrement: () {
-                                if (item.quantity < item.maxStock) {
+                                if (item.canIncrease) {
                                   context.read<CartBloc>().add(
-                                    CartUpdateQuantity(
-                                      id: item.id,
-                                      quantity: item.quantity + 1,
+                                    UpdateQuantityEvent(
+                                      item.id,
+                                      item.quantity + 1,
                                     ),
                                   );
+                                  // No need for snackbar - UI updates instantly
                                 }
                               },
                               onDecrement: () {
-                                if (item.quantity > 1) {
+                                if (item.canDecrease) {
                                   context.read<CartBloc>().add(
-                                    CartUpdateQuantity(
-                                      id: item.id,
-                                      quantity: item.quantity - 1,
+                                    UpdateQuantityEvent(
+                                      item.id,
+                                      item.quantity - 1,
                                     ),
                                   );
                                 }
@@ -111,11 +173,6 @@ class CartView extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Coupon Section
-                          const SizedBox(height: 20),
-
-                          // Price Summary
                           PriceSummary(
                             subtotal: state.subtotal,
                             shippingFee: state.shippingFee,
@@ -127,15 +184,11 @@ class CartView extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  // Bottom Checkout Bar
                   BottomCheckoutBar(
                     itemCount: state.itemCount,
                     total: state.total,
                     isEnabled: state.isCheckoutEnabled,
-                    onCheckout: () {
-                      context.read<CartBloc>().add(ProceedToCheckout());
-                    },
+                    onCheckout: _proceedToCheckout,
                   ),
                 ],
               );
@@ -168,9 +221,8 @@ class CartView extends StatelessWidget {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                // Use the original context, not dialogContext
                 if (context.mounted) {
-                  context.read<CartBloc>().add(CartRemoveItem(id));
+                  context.read<CartBloc>().add(RemoveItemEvent(id));
                 }
               },
               style: TextButton.styleFrom(
@@ -202,9 +254,8 @@ class CartView extends StatelessWidget {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                // Use the original context, not dialogContext
                 if (context.mounted) {
-                  context.read<CartBloc>().add(CartClearAll());
+                  context.read<CartBloc>().add(ClearCartEvent());
                 }
               },
               style: TextButton.styleFrom(

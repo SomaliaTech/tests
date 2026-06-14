@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/features/tracking/data/models/tracking_model.dart';
+import 'package:mobile/features/tracking/domain/entities/tracking.dart';
 
 class StatusBadge extends StatelessWidget {
   final TrackingStatus status;

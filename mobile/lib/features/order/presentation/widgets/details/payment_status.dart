@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/orders_details/models/order_details_model.dart';
+import 'package:mobile/features/order/domain/entities/order_details.dart';
 
 class PaymentStatusWidget extends StatelessWidget {
-  final PaymentStatus status;
+  final PaymentDetailStatus status;
   final String method;
 
   const PaymentStatusWidget({
@@ -21,7 +21,7 @@ class PaymentStatusWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

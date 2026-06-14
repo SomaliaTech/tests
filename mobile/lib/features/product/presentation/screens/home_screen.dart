@@ -11,7 +11,6 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Only load featured products here (categories are handled by CategoriesSection)
     final bloc = context.read<ProductBloc>();
     bloc.add(GetFeaturedProductsEvent());
 
@@ -19,24 +18,17 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          Header(
-            onSearch: (query) {
-              if (query != null && query.isNotEmpty) {
-                bloc.add(SearchProductsEvent(query));
-              }
-            },
-          ),
-          const Expanded(
-            child: SingleChildScrollView(
-              physics: BouncingScrollPhysics(),
-              child: Column(
-                children: [
-                  CategoriesSection(),
-                  SizedBox(height: 16),
-                  HotDealsSection(),
-                  SizedBox(height: 100),
-                ],
-              ),
+          const Header(), // Remove onSearch if not needed or add it
+          Expanded(
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: EdgeInsets.zero,
+              children: const [
+                CategoriesSection(),
+                SizedBox(height: 16),
+                HotDealsSection(),
+                SizedBox(height: 100),
+              ],
             ),
           ),
         ],

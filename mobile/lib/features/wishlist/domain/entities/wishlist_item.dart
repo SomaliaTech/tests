@@ -8,6 +8,7 @@ class WishlistItem extends Equatable {
   final String? brand;
   final double? rating;
   final String categoryId;
+  final String productVariantId; // Add this
 
   const WishlistItem({
     required this.id,
@@ -17,6 +18,7 @@ class WishlistItem extends Equatable {
     this.brand,
     this.rating,
     required this.categoryId,
+    required this.productVariantId, // Add this
   });
 
   String get formattedPrice => '\$${price.toStringAsFixed(2)}';
@@ -31,5 +33,6 @@ class WishlistItem extends Equatable {
     brand,
     rating,
     categoryId,
+    productVariantId,
   ];
 }

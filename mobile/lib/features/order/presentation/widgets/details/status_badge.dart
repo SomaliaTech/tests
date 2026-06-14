@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/features/orders_details/models/order_details_model.dart';
+import 'package:mobile/features/order/domain/entities/order_details.dart';
 
 class StatusBadge extends StatelessWidget {
-  final OrderStatus status;
+  final OrderDetailStatus status;
 
   const StatusBadge({super.key, required this.status});
 

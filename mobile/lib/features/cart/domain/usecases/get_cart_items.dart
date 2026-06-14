@@ -1,14 +1,9 @@
-import 'package:fpdart/fpdart.dart';
-
+import '../../../../core/utils/typedefs.dart';
 import '../entities/cart_item.dart';
 import '../repositories/cart_repository.dart';
 
 class GetCartItems {
   final CartRepository repository;
-
-  GetCartItems(this.repository);
-
-  Future<Either<Failure, List<CartItem>>> call() async {
-    return await repository.getCartItems();
-  }
+  const GetCartItems(this.repository);
+  ResultFuture<List<CartItem>> call() => repository.getCartItems();
 }

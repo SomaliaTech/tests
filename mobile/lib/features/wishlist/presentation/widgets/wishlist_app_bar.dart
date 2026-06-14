@@ -17,6 +17,7 @@ class WishlistAppBar extends StatelessWidget implements PreferredSizeWidget {
         'My Wishlist',
         style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
       ),
+      centerTitle: false,
       actions: [
         BlocBuilder<WishlistBloc, WishlistState>(
           builder: (context, state) {

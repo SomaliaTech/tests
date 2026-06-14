@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/orders_details/models/order_details_model.dart';
+import 'package:mobile/features/order/domain/entities/order_details.dart';
+import 'package:mobile/features/order/presentation/widgets/details/invoice_options_modal.dart';
 
 class BottomActions extends StatelessWidget {
   final OrderDetails order;
-  final VoidCallback onReorder;
+
   final VoidCallback onTrack;
   final VoidCallback onInvoice;
 
   const BottomActions({
     super.key,
     required this.order,
-    required this.onReorder,
     required this.onTrack,
     required this.onInvoice,
   });
@@ -62,43 +62,17 @@ class BottomActions extends StatelessWidget {
                   ),
                 ),
               ),
-            if (order.canReorder)
-              Expanded(
-                child: GestureDetector(
-                  onTap: onReorder,
-                  child: Container(
-                    height: 50,
-                    margin: const EdgeInsets.only(right: 10),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF2ED573)),
-                      color: const Color(0xFFF0FFF4),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(
-                          Iconsax.shopping_cart,
-                          size: 20,
-                          color: Color(0xFF2ED573),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Reorder',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2ED573),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+
             Expanded(
               child: GestureDetector(
-                onTap: onInvoice,
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => InvoiceOptionsModal(order: order),
+                  );
+                },
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(

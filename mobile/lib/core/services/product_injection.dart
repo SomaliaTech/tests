@@ -1,10 +1,5 @@
 import 'package:get_it/get_it.dart';
-import 'package:mobile/features/order/data/datasources/order_history_remote_datasource.dart';
-import 'package:mobile/features/order/data/repositories/order_history_repository_impl.dart';
-import 'package:mobile/features/order/domain/repositories/order_history_repository.dart';
-import 'package:mobile/features/order/domain/usecases/get_order_by_id.dart';
-import 'package:mobile/features/order/domain/usecases/get_orders.dart';
-import 'package:mobile/features/order/presentation/bloc/order_history_bloc.dart';
+
 import '../../features/product/data/datasources/product_remote_datasource.dart';
 import '../../features/product/data/repositories/product_repository_impl.dart';
 import '../../features/product/domain/repositories/product_repository.dart';
@@ -30,21 +25,6 @@ void registerProductDependencies(GetIt sl) {
   sl.registerLazySingleton(() => GetProductsByCategory(sl()));
   sl.registerLazySingleton(() => SearchProducts(sl()));
   sl.registerLazySingleton(() => GetProductById(sl()));
-
-  sl.registerLazySingleton<OrderHistoryRemoteDataSource>(
-    () => OrderHistoryRemoteDataSourceImpl(client: sl()),
-  );
-  sl.registerLazySingleton<OrderHistoryRepository>(
-    () => OrderHistoryRepositoryImpl(
-      remoteDataSource: sl(),
-      storageService: sl(),
-    ),
-  );
-  sl.registerLazySingleton(() => GetOrders(sl()));
-  sl.registerLazySingleton(() => GetOrderById(sl()));
-  sl.registerFactory(
-    () => OrderHistoryBloc(getOrders: sl(), getOrderById: sl()),
-  );
 
   // BLoC
   sl.registerFactory(

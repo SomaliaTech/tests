@@ -1,4 +1,3 @@
-// lib/features/auth/presentation/screens/phone_input_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:toastification/toastification.dart';
@@ -32,14 +31,20 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
+      // 🚨 CRITICAL FIX: Prevent infinite navigation loop.
+      // Only trigger navigation if the state *transitions* to OtpSent.
+      // If the user goes back from the OTP screen, the state is still OtpSent,
+      // but because 'previous' is also OtpSent, this listener will be safely ignored.
+      listenWhen: (previous, current) =>
+          current is OtpSent && previous is! OtpSent,
       listener: (context, state) {
         if (state is OtpSent) {
           toastification.show(
             context: context,
-            title: const Text('✓ OTP Sent Successfully'),
-            description: Text('Your verification code: ${state.debugOtp}'),
+            title: const Text('OTP Sent'),
+            description: Text('Verification code: ${state.debugOtp}'),
             type: ToastificationType.success,
-            autoCloseDuration: const Duration(seconds: 15),
+            autoCloseDuration: const Duration(seconds: 8),
             style: ToastificationStyle.fillColored,
             alignment: Alignment.topCenter,
           );
@@ -57,156 +62,130 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                   OtpVerificationScreen(phoneNumber: normalizedPhone),
             ),
           );
-        } else if (state is AuthError) {
-          toastification.show(
-            context: context,
-            title: const Text('Error'),
-            description: Text(state.message),
-            type: ToastificationType.error,
-            autoCloseDuration: const Duration(seconds: 4),
-          );
         }
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        body: Padding(
-          padding: const EdgeInsetsGeometry.only(top: 30),
+        body: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 60),
+                const SizedBox(height: 40),
 
-                // App Logo
+                // App Logo - More compact and elegant
                 Center(
                   child: Container(
-                    width: 100,
-                    height: 100,
+                    width: 80,
+                    height: 80,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF2ED573).withOpacity(0.8),
-                          const Color(0xFF2ED573),
-                        ],
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2ED573), Color(0xFF26C468)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
                           color: const Color(0xFF2ED573).withOpacity(0.3),
                           blurRadius: 20,
-                          offset: const Offset(0, 10),
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
                     child: const Icon(
                       Icons.phone_android_rounded,
-                      size: 50,
+                      size: 40,
                       color: Colors.white,
                     ),
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
 
-                // Title
+                // Title - Cleaner typography
                 const Text(
-                  'Welcome Back!',
+                  'Welcome!',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 32,
+                    fontSize: 26,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: Color(0xFF111111),
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Text(
+                const SizedBox(height: 8),
+                Text(
                   'Enter your phone number to continue',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 40),
 
-                // --- CUSTOM PHONE INPUT ROW (+252 + Input) ---
-                Row(
-                  children: [
-                    Container(
-                      height: 56,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        border: Border.all(
-                          color: Colors.grey.shade300,
-                          width: 1.5,
+                // --- UNIFIED PHONE INPUT ---
+                // Combined into a single beautiful container instead of two separate boxes
+                Container(
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    border: Border.all(color: Colors.grey.shade300, width: 1.5),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      // Country Code
+                      Container(
+                        width: 80,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            right: BorderSide(
+                              color: Colors.grey.shade300,
+                              width: 1.5,
+                            ),
+                          ),
                         ),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(16),
-                          bottomLeft: Radius.circular(16),
+                        child: const Text(
+                          '+252',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2ED573),
+                          ),
                         ),
                       ),
-                      alignment: Alignment.center,
-                      child: const Text(
-                        '+252',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2ED573),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: SizedBox(
-                        height: 56,
+                      // Input Field
+                      Expanded(
                         child: TextField(
                           controller: phoneController,
                           keyboardType: TextInputType.phone,
                           maxLength: 9,
-                          style: const TextStyle(fontSize: 18),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF111111),
+                          ),
                           decoration: InputDecoration(
-                            hintText: '61 XXXXXXXXX',
-                            hintStyle: TextStyle(color: Colors.grey.shade400),
+                            hintText: '61 XXXXXXX',
+                            hintStyle: TextStyle(
+                              color: Colors.grey.shade400,
+                              fontWeight: FontWeight.normal,
+                            ),
                             counterText: '',
-                            border: OutlineInputBorder(
-                              borderRadius: const BorderRadius.only(
-                                topRight: Radius.circular(16),
-                                bottomRight: Radius.circular(16),
-                              ),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                                width: 1.5,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: const BorderRadius.only(
-                                topRight: Radius.circular(16),
-                                bottomRight: Radius.circular(16),
-                              ),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
-                                width: 1.5,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: const BorderRadius.only(
-                                topRight: Radius.circular(16),
-                                bottomRight: Radius.circular(16),
-                              ),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF2ED573),
-                                width: 2.0,
-                              ),
-                            ),
+                            border: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
+                              horizontal: 16,
                               vertical: 16,
                             ),
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 32),
@@ -242,16 +221,16 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2ED573),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         elevation: 0,
                       ),
                       child: isLoading
                           ? const SizedBox(
-                              height: 24,
-                              width: 24,
+                              height: 22,
+                              width: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                                 valueColor: AlwaysStoppedAnimation<Color>(
@@ -262,19 +241,24 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                           : const Text(
                               'Send OTP',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                     );
                   },
                 ),
-                const SizedBox(height: 40),
+
+                const SizedBox(height: 32),
 
                 Text(
                   'By continuing, you agree to our Terms of Service and Privacy Policy',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade500,
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
