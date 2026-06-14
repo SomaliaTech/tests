@@ -20,7 +20,7 @@ import {
   colors,
   sizes,
 } from '../drizzle/schema';
-import { eq, and, desc, sql, SQL, or } from 'drizzle-orm';
+import { eq, and, desc, sql, SQL } from 'drizzle-orm';
 
 @Injectable()
 export class ProductsService {
@@ -33,7 +33,7 @@ export class ProductsService {
     const { categoryId, imageUrls, ...productData } = createProductDto;
 
     const category = await this.drizzle.db
-      .select()
+      .select({ id: categories.id })
       .from(categories)
       .where(eq(categories.id, categoryId))
       .limit(1);
@@ -42,6 +42,7 @@ export class ProductsService {
       throw new NotFoundException(`Category with ID ${categoryId} not found`);
     }
 
+    // 🚀 OPTIMIZATION 1: Generate Slug in 1 Query instead of N Queries
     let slug = productData.slug;
     if (!slug) {
       slug = productData.name
@@ -49,23 +50,21 @@ export class ProductsService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      let isUnique = false;
-      let counter = 1;
+      // Fetch all existing slugs that start with the base slug in ONE query
+      const existingSlugs = await this.drizzle.db
+        .select({ slug: products.slug })
+        .from(products)
+        .where(sql`${products.slug} LIKE ${slug + '%'}`);
+
+      const slugSet = new Set(existingSlugs.map((s) => s.slug));
+
       let finalSlug = slug;
-
-      while (!isUnique) {
-        const existingProduct = await this.drizzle.db
-          .select()
-          .from(products)
-          .where(eq(products.slug, finalSlug))
-          .limit(1);
-
-        if (existingProduct.length === 0) {
-          isUnique = true;
-        } else {
-          finalSlug = `${slug}-${counter}`;
+      if (slugSet.has(slug)) {
+        let counter = 1;
+        while (slugSet.has(`${slug}-${counter}`)) {
           counter++;
         }
+        finalSlug = `${slug}-${counter}`;
       }
       slug = finalSlug;
     }
@@ -90,7 +89,7 @@ export class ProductsService {
 
   async uploadImagesFromUrls(productId: string, imageUrls: string[]) {
     const product = await this.drizzle.db
-      .select()
+      .select({ id: products.id })
       .from(products)
       .where(eq(products.id, productId))
       .limit(1);
@@ -105,25 +104,24 @@ export class ProductsService {
       ),
     );
 
-    const images = await Promise.all(
-      uploadResults.map((result) =>
-        this.drizzle.db
-          .insert(mediaAssets)
-          .values({
-            url: result.secure_url,
-            publicId: result.public_id,
-            productId,
-          })
-          .returning(),
-      ),
-    );
+    // 🚀 OPTIMIZATION 2: Batch insert all images in ONE query instead of N queries
+    const imagesToInsert = uploadResults.map((result) => ({
+      url: result.secure_url,
+      publicId: result.public_id,
+      productId,
+    }));
 
-    return images.flat();
+    const insertedImages = await this.drizzle.db
+      .insert(mediaAssets)
+      .values(imagesToInsert)
+      .returning();
+
+    return insertedImages;
   }
 
   async uploadBase64Image(productId: string, base64Dto: UploadBase64ImageDto) {
     const product = await this.drizzle.db
-      .select()
+      .select({ id: products.id })
       .from(products)
       .where(eq(products.id, productId))
       .limit(1);
@@ -153,42 +151,36 @@ export class ProductsService {
     productId: string,
     createVariantDto: CreateProductVariantDto,
   ) {
-    const product = await this.drizzle.db
-      .select()
+    const [product] = await this.drizzle.db
+      .select({ id: products.id })
       .from(products)
       .where(eq(products.id, productId))
       .limit(1);
-
-    if (!product.length) {
+    if (!product)
       throw new NotFoundException(`Product with ID ${productId} not found`);
-    }
 
-    const color = await this.drizzle.db
-      .select()
+    const [color] = await this.drizzle.db
+      .select({ id: colors.id })
       .from(colors)
       .where(eq(colors.id, createVariantDto.colorId))
       .limit(1);
-
-    if (!color.length) {
+    if (!color)
       throw new NotFoundException(
         `Color with ID ${createVariantDto.colorId} not found`,
       );
-    }
 
-    const size = await this.drizzle.db
-      .select()
+    const [size] = await this.drizzle.db
+      .select({ id: sizes.id })
       .from(sizes)
       .where(eq(sizes.id, createVariantDto.sizeId))
       .limit(1);
-
-    if (!size.length) {
+    if (!size)
       throw new NotFoundException(
         `Size with ID ${createVariantDto.sizeId} not found`,
       );
-    }
 
     const existingVariant = await this.drizzle.db
-      .select()
+      .select({ id: productVariants.id })
       .from(productVariants)
       .where(
         and(
@@ -221,22 +213,15 @@ export class ProductsService {
   }
 
   async findAll() {
-    const results = await this.drizzle.db.query.products.findMany({
+    return this.drizzle.db.query.products.findMany({
       where: eq(products.isActive, true),
       with: {
         category: true,
         images: true,
-        variants: {
-          with: {
-            color: true,
-            size: true,
-          },
-        },
+        variants: { with: { color: true, size: true } },
       },
       orderBy: [desc(products.createdAt)],
     });
-
-    return results;
   }
 
   async findOne(id: string) {
@@ -245,19 +230,12 @@ export class ProductsService {
       with: {
         category: true,
         images: true,
-        variants: {
-          with: {
-            color: true,
-            size: true,
-          },
-        },
+        variants: { with: { color: true, size: true } },
       },
     });
 
-    if (!product) {
+    if (!product)
       throw new NotFoundException(`Product with ID ${id} not found`);
-    }
-
     return product;
   }
 
@@ -267,41 +245,36 @@ export class ProductsService {
       with: {
         category: true,
         images: true,
-        variants: {
-          with: {
-            color: true,
-            size: true,
-          },
-        },
+        variants: { with: { color: true, size: true } },
       },
     });
 
-    if (!product) {
+    if (!product)
       throw new NotFoundException(`Product with slug ${slug} not found`);
-    }
-
     return product;
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
     await this.findOne(id);
 
-    const { categoryId, ...updateData } = updateProductDto;
-    const updateValues: any = { updatedAt: new Date() };
+    // Cast to strict interface to prevent 'any' inference
+    const dto = updateProductDto as unknown as ProductUpdateShape;
+    const categoryId = dto.categoryId;
 
-    if (updateData.name !== undefined) updateValues.name = updateData.name;
-    if (updateData.slug !== undefined) updateValues.slug = updateData.slug;
-    if (updateData.description !== undefined)
-      updateValues.description = updateData.description;
-    if (updateData.price !== undefined)
-      updateValues.price = updateData.price.toString();
-    if (updateData.stock !== undefined) updateValues.stock = updateData.stock;
-    if (updateData.isActive !== undefined)
-      updateValues.isActive = updateData.isActive;
+    const updateValues: Record<string, any> = { updatedAt: new Date() };
+
+    // ✅ FIXED: All member accesses are now strictly typed
+    if (dto.name !== undefined) updateValues.name = dto.name;
+    if (dto.slug !== undefined) updateValues.slug = dto.slug;
+    if (dto.description !== undefined)
+      updateValues.description = dto.description;
+    if (dto.price !== undefined) updateValues.price = dto.price.toString();
+    if (dto.stock !== undefined) updateValues.stock = dto.stock;
+    if (dto.isActive !== undefined) updateValues.isActive = dto.isActive;
 
     if (categoryId) {
       const category = await this.drizzle.db
-        .select()
+        .select({ id: categories.id })
         .from(categories)
         .where(eq(categories.id, categoryId))
         .limit(1);
@@ -322,7 +295,7 @@ export class ProductsService {
   }
 
   async deleteImage(productId: string, imageId: string) {
-    const image = await this.drizzle.db
+    const [image] = await this.drizzle.db
       .select()
       .from(mediaAssets)
       .where(
@@ -330,12 +303,9 @@ export class ProductsService {
       )
       .limit(1);
 
-    if (!image.length) {
-      throw new NotFoundException('Image not found');
-    }
+    if (!image) throw new NotFoundException('Image not found');
 
-    await this.cloudinaryService.deleteImage(image[0].publicId);
-
+    await this.cloudinaryService.deleteImage(image.publicId);
     await this.drizzle.db
       .delete(mediaAssets)
       .where(eq(mediaAssets.id, imageId));
@@ -346,10 +316,13 @@ export class ProductsService {
   async remove(id: string) {
     const product = await this.findOne(id);
 
+    // 🚀 OPTIMIZATION 3: Delete from Cloudinary in parallel instead of sequentially
     if (product.images && product.images.length > 0) {
-      for (const image of product.images) {
-        await this.cloudinaryService.deleteImage(image.publicId);
-      }
+      await Promise.all(
+        product.images.map((image) =>
+          this.cloudinaryService.deleteImage(image.publicId),
+        ),
+      );
     }
 
     const [deletedProduct] = await this.drizzle.db
@@ -360,30 +333,34 @@ export class ProductsService {
     return deletedProduct;
   }
 
+  // 🚀 OPTIMIZATION 4: Atomic stock update to prevent race conditions
   async updateVariantStock(variantId: string, quantity: number) {
-    const variant = await this.drizzle.db
-      .select()
-      .from(productVariants)
-      .where(eq(productVariants.id, variantId))
-      .limit(1);
-
-    if (!variant.length) {
-      throw new NotFoundException(`Variant with ID ${variantId} not found`);
-    }
-
-    const newStock = variant[0].stock - quantity;
-    if (newStock < 0) {
-      throw new BadRequestException('Insufficient stock');
-    }
-
     const [updatedVariant] = await this.drizzle.db
       .update(productVariants)
       .set({
-        stock: newStock,
+        stock: sql`${productVariants.stock} - ${quantity}`,
         updatedAt: new Date(),
       })
-      .where(eq(productVariants.id, variantId))
+      .where(
+        and(
+          eq(productVariants.id, variantId),
+          sql`${productVariants.stock} >= ${quantity}`, // Ensure sufficient stock atomically
+        ),
+      )
       .returning();
+
+    if (!updatedVariant) {
+      const exists = await this.drizzle.db
+        .select({ id: productVariants.id })
+        .from(productVariants)
+        .where(eq(productVariants.id, variantId))
+        .limit(1);
+
+      if (!exists.length) {
+        throw new NotFoundException(`Variant with ID ${variantId} not found`);
+      }
+      throw new BadRequestException('Insufficient stock');
+    }
 
     return updatedVariant;
   }
@@ -391,42 +368,27 @@ export class ProductsService {
   private async findVariantWithRelations(variantId: string) {
     const variant = await this.drizzle.db.query.productVariants.findFirst({
       where: eq(productVariants.id, variantId),
-      with: {
-        product: true,
-        color: true,
-        size: true,
-      },
+      with: { product: true, color: true, size: true },
     });
 
-    if (!variant) {
+    if (!variant)
       throw new NotFoundException(`Variant with ID ${variantId} not found`);
-    }
-
     return variant;
   }
 
-  // =========================================================================
   async getFeaturedProducts(limit: number = 10) {
     return this.drizzle.db.query.products.findMany({
       where: eq(products.isActive, true),
       orderBy: [desc(products.createdAt)],
-      limit: limit,
+      limit,
       with: {
         category: true,
         images: true,
-        variants: {
-          with: {
-            color: true,
-            size: true,
-          },
-        },
+        variants: { with: { color: true, size: true } },
       },
     });
   }
 
-  // =========================================================================
-  // 🚀 FIXED SEARCH: Eliminates the N+1 loop query performance bottleneck
-  // =========================================================================
   async searchProducts(
     searchTerm: string,
     filters?: {
@@ -447,29 +409,23 @@ export class ProductsService {
 
     if (searchTerm && searchTerm.trim()) {
       const searchPattern = `%${searchTerm.toLowerCase()}%`;
+      // 🚀 OPTIMIZATION 5: Use native ILIKE instead of LOWER() + LIKE
       conditions.push(
-        sql`(LOWER(${products.name}) LIKE ${searchPattern} OR 
-             LOWER(${products.description}) LIKE ${searchPattern})`,
+        sql`(${products.name} ILIKE ${searchPattern} OR ${products.description} ILIKE ${searchPattern})`,
       );
     }
 
-    if (filters?.categoryId) {
+    if (filters?.categoryId)
       conditions.push(eq(products.categoryId, filters.categoryId));
-    }
-
-    if (filters?.minPrice !== undefined) {
+    if (filters?.minPrice !== undefined)
       conditions.push(
         sql`CAST(${products.price} AS DECIMAL) >= ${filters.minPrice}`,
       );
-    }
-
-    if (filters?.maxPrice !== undefined) {
+    if (filters?.maxPrice !== undefined)
       conditions.push(
         sql`CAST(${products.price} AS DECIMAL) <= ${filters.maxPrice}`,
       );
-    }
 
-    // Get your sorting condition configured properly
     let orderExpression: SQL = desc(products.createdAt);
     if (filters?.sortBy) {
       switch (filters.sortBy) {
@@ -488,7 +444,6 @@ export class ProductsService {
       }
     }
 
-    // 1. Fetch count directly
     const countResult = await this.drizzle.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
@@ -496,22 +451,16 @@ export class ProductsService {
 
     const total = Number(countResult[0]?.count) || 0;
 
-    // 2. Efficient query execution utilizing relational loading joins natively
     const productsWithRelations = await this.drizzle.db.query.products.findMany(
       {
         where: and(...conditions),
         orderBy: [orderExpression],
-        limit: limit,
-        offset: offset,
+        limit,
+        offset,
         with: {
           category: true,
           images: true,
-          variants: {
-            with: {
-              color: true,
-              size: true,
-            },
-          },
+          variants: { with: { color: true, size: true } },
         },
       },
     );
@@ -525,39 +474,27 @@ export class ProductsService {
     };
   }
 
-  // =========================================================================
-  // 🎯 FIXED: Recursively get ALL descendant category IDs
-  // =========================================================================
+  // 🚀 OPTIMIZATION 6: Use Postgres Recursive CTE instead of JS While Loop
+  // 🚀 OPTIMIZATION 6: Use Postgres Recursive CTE instead of JS While Loop
   private async getAllDescendantCategoryIds(
     parentId: string,
   ): Promise<string[]> {
-    const allCategoryIds: string[] = [];
+    const result = await this.drizzle.db.execute(sql`
+      WITH RECURSIVE category_tree AS (
+        SELECT id FROM categories WHERE id = ${parentId}
+        UNION ALL
+        SELECT c.id FROM categories c
+        INNER JOIN category_tree ct ON c.parent_id = ct.id
+      )
+      SELECT id FROM category_tree WHERE id != ${parentId};
+    `);
 
-    // Use a queue for breadth-first traversal
-    const queue: string[] = [parentId];
+    // ✅ FIXED: Drizzle returns a pg QueryResult object. We must access the 'rows' array inside it.
+    const rows = (result as unknown as { rows: Array<Record<string, unknown>> })
+      .rows;
 
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-
-      // Get direct children of current category
-      const children = await this.drizzle.db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.parentId, currentId));
-
-      // Add children to results and queue
-      for (const child of children) {
-        allCategoryIds.push(child.id);
-        queue.push(child.id);
-      }
-    }
-
-    return allCategoryIds;
+    return rows.map((row) => row.id as string);
   }
-
-  // =========================================================================
-  // 🎯 FIXED: Get products by category including ALL nested subcategories
-  // =========================================================================
   async getProductsByCategory(
     categoryId: string,
     filters?: {
@@ -572,9 +509,8 @@ export class ProductsService {
     const limit = filters?.limit || 20;
     const offset = (page - 1) * limit;
 
-    // 1. Fetch the category itself to ensure it exists
     const category = await this.drizzle.db
-      .select()
+      .select({ id: categories.id })
       .from(categories)
       .where(eq(categories.id, categoryId))
       .limit(1);
@@ -583,69 +519,48 @@ export class ProductsService {
       throw new NotFoundException(`Category with ID ${categoryId} not found`);
     }
 
-    // 2. Get ALL descendant category IDs (recursive)
     const descendantCategoryIds =
       await this.getAllDescendantCategoryIds(categoryId);
-
-    // 3. Build the target IDs array - include parent + ALL descendants
     const categoryIds = [categoryId, ...descendantCategoryIds];
 
-    console.log('📦 Fetching products for category IDs:', categoryIds);
-    console.log('📊 Total categories to search:', categoryIds.length);
-
-    // 4. Set up explicit SQL filtering array
     const conditions: SQL[] = [
       eq(products.isActive, true),
       inArray(products.categoryId, categoryIds),
     ];
 
-    if (filters?.minPrice !== undefined) {
+    if (filters?.minPrice !== undefined)
       conditions.push(
         sql`CAST(${products.price} AS DECIMAL) >= ${filters.minPrice}`,
       );
-    }
-
-    if (filters?.maxPrice !== undefined) {
+    if (filters?.maxPrice !== undefined)
       conditions.push(
         sql`CAST(${products.price} AS DECIMAL) <= ${filters.maxPrice}`,
       );
-    }
 
-    // 5. Configure sorting expressions
     let orderExpression: SQL = desc(products.createdAt);
-    if (filters?.sortBy === 'price_asc') {
+    if (filters?.sortBy === 'price_asc')
       orderExpression = sql`CAST(${products.price} AS DECIMAL) ASC`;
-    } else if (filters?.sortBy === 'price_desc') {
+    else if (filters?.sortBy === 'price_desc')
       orderExpression = sql`CAST(${products.price} AS DECIMAL) DESC`;
-    }
 
-    // 6. Execute query
     const results = await this.drizzle.db.query.products.findMany({
       where: and(...conditions),
       orderBy: [orderExpression],
-      limit: limit,
-      offset: offset,
+      limit,
+      offset,
       with: {
         category: true,
         images: true,
-        variants: {
-          with: {
-            color: true,
-            size: true,
-          },
-        },
+        variants: { with: { color: true, size: true } },
       },
     });
 
-    // 7. Get total count
     const countResult = await this.drizzle.db
       .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(and(...conditions));
 
     const total = Number(countResult[0]?.count) || 0;
-
-    console.log(`✅ Found ${total} products for categories:`, categoryIds);
 
     return {
       products: results,
@@ -656,27 +571,20 @@ export class ProductsService {
     };
   }
 
-  // =========================================================================
-  // 🔍 Debug endpoint to help troubleshoot category issues
-  // =========================================================================
   async debugCategory(categoryId: string) {
-    // Get the category
     const category = await this.drizzle.db
       .select()
       .from(categories)
       .where(eq(categories.id, categoryId))
       .limit(1);
 
-    // Get ALL descendant categories recursively
     const allDescendantIds = await this.getAllDescendantCategoryIds(categoryId);
 
-    // Get direct subcategories (one level only)
     const directSubcategories = await this.drizzle.db
       .select()
       .from(categories)
       .where(eq(categories.parentId, categoryId));
 
-    // Get products in parent category
     const parentProducts = await this.drizzle.db
       .select()
       .from(products)
@@ -684,7 +592,6 @@ export class ProductsService {
         and(eq(products.categoryId, categoryId), eq(products.isActive, true)),
       );
 
-    // Get products in ALL descendant categories
     const allDescendantProducts =
       allDescendantIds.length > 0
         ? await this.drizzle.db
@@ -710,7 +617,6 @@ export class ProductsService {
   }
 
   async getProductFilters() {
-    // Get unique prices or categories
     const priceRange = await this.drizzle.db
       .select({
         min: sql<number>`MIN(CAST(${products.price} AS DECIMAL))`,

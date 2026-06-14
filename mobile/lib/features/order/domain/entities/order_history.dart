@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/painting.dart';
 
 enum OrderHistoryStatus { pending, processing, shipped, delivered, cancelled }
 
@@ -21,15 +22,15 @@ extension OrderHistoryStatusExtension on OrderHistoryStatus {
   Color get color {
     switch (this) {
       case OrderHistoryStatus.pending:
-        return Color(0xFFFFA726);
+        return const Color(0xFFFFA726);
       case OrderHistoryStatus.processing:
-        return Color(0xFF42A5F5);
+        return const Color(0xFF42A5F5);
       case OrderHistoryStatus.shipped:
-        return Color(0xFF2ED573);
+        return const Color(0xFF2ED573);
       case OrderHistoryStatus.delivered:
-        return Color(0xFF66BB6A);
+        return const Color(0xFF66BB6A);
       case OrderHistoryStatus.cancelled:
-        return Color(0xFFEF5350);
+        return const Color(0xFFEF5350);
     }
   }
 }
@@ -40,7 +41,7 @@ class OrderHistoryItem extends Equatable {
   final int quantity;
   final double price;
   final double totalPrice;
-  final String imageUrl;
+  final String imageUrl; // Added imageUrl
 
   const OrderHistoryItem({
     required this.id,

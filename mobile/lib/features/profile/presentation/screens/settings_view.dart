@@ -6,7 +6,7 @@ import 'package:toastification/toastification.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
-import '../../../order_history/presentation/screens/order_history_screen.dart';
+import '../../../order/presentation/screens/order_history_screen.dart';
 import '../../../profile/presentation/widgets/profile_section.dart';
 import '../../../profile/presentation/widgets/logout_button.dart';
 import '../../../profile/presentation/widgets/menu_item.dart';

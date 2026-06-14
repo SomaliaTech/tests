@@ -155,7 +155,7 @@ export const users = pgTable(
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 255 }),
     profileImage: varchar('profile_image', { length: 500 }),
-    marketId: uuid('market_id'), // add this line
+    marketId: uuid('market_id'),
     isVerified: boolean('is_verified').default(false),
     otpCode: varchar('otp_code', { length: 6 }),
     otpExpiresAt: timestamp('otp_expires_at'),
@@ -167,6 +167,7 @@ export const users = pgTable(
     marketIdIdx: index('users_market_id_idx').on(table.marketId),
   }),
 );
+
 // ==========================================
 // ADDRESSES TABLE
 // ==========================================
@@ -177,7 +178,7 @@ export const addresses = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    label: varchar('label', { length: 50 }).notNull(), // 'Home', 'Office', 'Other'
+    label: varchar('label', { length: 50 }).notNull(),
     fullAddress: text('full_address').notNull(),
     phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
     isDefault: boolean('is_default').default(false),
@@ -296,9 +297,9 @@ export const paymentTransactions = pgTable(
       .references(() => orders.id, { onDelete: 'cascade' }),
     transactionId: varchar('transaction_id', { length: 255 }).unique(),
     amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
-    paymentMethod: varchar('payment_method', { length: 50 }).notNull(), // 'evc_plus', 'cash_on_delivery', 'zaad'
-    status: varchar('status', { length: 50 }).notNull().default('PENDING'), // PENDING, COMPLETED, FAILED, REFUNDED
-    paymentDetails: text('payment_details'), // JSON string of payment response
+    paymentMethod: varchar('payment_method', { length: 50 }).notNull(),
+    status: varchar('status', { length: 50 }).notNull().default('PENDING'),
+    paymentDetails: text('payment_details'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -321,7 +322,7 @@ export const notifications = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    type: varchar('type', { length: 50 }).notNull(), // 'order', 'promotion', 'system', 'payment'
+    type: varchar('type', { length: 50 }).notNull(),
     title: varchar('title', { length: 255 }).notNull(),
     message: text('message').notNull(),
     isRead: boolean('is_read').default(false),
@@ -337,10 +338,9 @@ export const notifications = pgTable(
 );
 
 // ==========================================
-// RELATIONS
+// 🚀 FIXED & OPTIMIZED RELATIONS
 // ==========================================
 
-// Category Relations
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
     fields: [categories.parentId],
@@ -354,7 +354,6 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   }),
 }));
 
-// Product Relations
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
@@ -364,7 +363,6 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   variants: many(productVariants),
 }));
 
-// Media Assets Relations
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   product: one(products, {
     fields: [mediaAssets.productId],
@@ -372,7 +370,7 @@ export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   }),
 }));
 
-// Product Variants Relations
+// 🚨 FIXED: Added 'image' relation for variant-specific images
 export const productVariantsRelations = relations(
   productVariants,
   ({ one, many }) => ({
@@ -388,20 +386,27 @@ export const productVariantsRelations = relations(
       fields: [productVariants.sizeId],
       references: [sizes.id],
     }),
+    image: one(mediaAssets, {
+      fields: [productVariants.imageId],
+      references: [mediaAssets.id],
+    }),
     orderItems: many(orderItems),
     cartItems: many(cartItems),
   }),
 );
 
-// User Relations
-export const usersRelations = relations(users, ({ many }) => ({
+// 🚨 FIXED: Added 'market' relation for users
+export const usersRelations = relations(users, ({ one, many }) => ({
+  market: one(markets, {
+    fields: [users.marketId],
+    references: [markets.id],
+  }),
   addresses: many(addresses),
   orders: many(orders),
   cartItems: many(cartItems),
   notifications: many(notifications),
 }));
 
-// Address Relations
 export const addressesRelations = relations(addresses, ({ one }) => ({
   user: one(users, {
     fields: [addresses.userId],
@@ -409,7 +414,6 @@ export const addressesRelations = relations(addresses, ({ one }) => ({
   }),
 }));
 
-// Cart Items Relations
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   user: one(users, {
     fields: [cartItems.userId],
@@ -421,7 +425,6 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   }),
 }));
 
-// Order Relations
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   user: one(users, {
     fields: [orders.userId],
@@ -434,7 +437,6 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
 }));
 
-// Order Items Relations
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   order: one(orders, {
     fields: [orderItems.orderId],
@@ -446,7 +448,6 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   }),
 }));
 
-// Payment Transactions Relations
 export const paymentTransactionsRelations = relations(
   paymentTransactions,
   ({ one }) => ({
@@ -457,7 +458,6 @@ export const paymentTransactionsRelations = relations(
   }),
 );
 
-// Notifications Relations
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],

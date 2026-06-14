@@ -6,6 +6,7 @@ import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_event.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
 import 'package:mobile/features/order/presentation/bloc/order_bloc.dart';
+import 'package:mobile/features/order/presentation/bloc/order_history_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
@@ -39,6 +40,7 @@ class MyApp extends StatelessWidget {
           BlocProvider(create: (context) => sl<WishlistBloc>()),
           BlocProvider(create: (context) => sl<ProfileBloc>()),
           BlocProvider(create: (context) => sl<CategoryBloc>()),
+          BlocProvider(create: (context) => sl<OrderHistoryBloc>()),
           BlocProvider(create: (context) => sl<AddressBloc>()),
         ],
         child: MaterialApp(

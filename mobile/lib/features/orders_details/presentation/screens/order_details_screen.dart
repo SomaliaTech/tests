@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/features/orders_details/presentation/screens/order_details_view.dart';
 import 'package:mobile/features/orders_details/presentation/providers/order_details_provider.dart';
-import 'package:provider/provider.dart';
 
 class OrderDetailsScreen extends StatelessWidget {
   final String orderId;
@@ -10,9 +9,6 @@ class OrderDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => OrderDetailsProvider()..loadOrder(orderId),
-      child: OrderDetailsView(orderId: orderId),
-    );
+    return OrderDetailsView(orderId: orderId);
   }
 }
