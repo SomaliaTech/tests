@@ -35,10 +35,18 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Future<void> _loadMarkets() async {
+    print('🔄 Loading markets...');
     final result = await sl<GetMarkets>()();
     result.fold(
-      (failure) => setState(() => _markets = []),
-      (markets) => setState(() => _markets = markets),
+      (failure) {
+        print('❌ Failed to load markets: ${failure.message}');
+        setState(() => _markets = []);
+      },
+      (markets) {
+        print('✅ Markets loaded: ${markets.length}');
+        print('📊 Markets: ${markets.map((m) => m.name).join(', ')}');
+        setState(() => _markets = markets);
+      },
     );
   }
 
@@ -99,12 +107,18 @@ class _ProfileViewState extends State<ProfileView> {
           }
         },
         builder: (context, state) {
-          if (state is ProfileLoading && state is! ProfileLoaded) {
+          // Don't show loading for ProfileUpdated state
+          if (state is ProfileLoading ||
+              (state is ProfileUpdated && state is! ProfileLoaded)) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (state is ProfileLoaded) {
-            final profile = state.profile;
+          if (state is ProfileLoaded || state is ProfileUpdated) {
+            // Get profile from either state
+            final profile = state is ProfileLoaded
+                ? state.profile
+                : (state as ProfileUpdated).profile;
+
             if (_name.isEmpty) _name = profile.name;
 
             return Stack(

@@ -11,6 +11,20 @@ import { users } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
+interface User {
+  id: string;
+  phoneNumber: string;
+  email: string | null;
+  name: string | null;
+  profileImage: string | null;
+  marketId: string | null;
+  isVerified: boolean | null;
+  otpCode: string | null;
+  otpExpiresAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -20,70 +34,20 @@ export class AuthService {
     private cloudinaryService: CloudinaryService,
   ) {}
 
-  //   async sendOtp(phoneNumber: string) {
-  //     // Clean phone number (remove spaces, etc.)
-  //     const cleanedPhone = phoneNumber.trim();
-
-  //     // Generate 6-digit OTP
-  //     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-  //     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
-
-  //     // Find or create user
-  //     const existingUser = await this.drizzle.db
-  //       .select()
-  //       .from(users)
-  //       .where(eq(users.phoneNumber, cleanedPhone))
-  //       .limit(1);
-
-  //     if (existingUser.length > 0) {
-  //       await this.drizzle.db
-  //         .update(users)
-  //         .set({
-  //           otpCode,
-  //           otpExpiresAt,
-  //           updatedAt: new Date(),
-  //         })
-  //         .where(eq(users.phoneNumber, cleanedPhone));
-  //     } else {
-  //       await this.drizzle.db.insert(users).values({
-  //         id: uuidv4(),
-  //         phoneNumber: cleanedPhone,
-  //         otpCode,
-  //         otpExpiresAt,
-  //         isVerified: false,
-  //       });
-  //     }
-
-  //     console.log(`OTP for ${cleanedPhone}: ${otpCode}`);
-
-  //     return {
-  //       message: 'OTP sent successfully',
-  //       debugOtp: otpCode,
-  //     };
-  //   }
-
   async sendOtp(phoneNumber: string) {
-    // 1. Normalize phone number to standard +25261XXXXXXXXX format
-    let cleanedPhone = phoneNumber.trim().replace(/\s+/g, ''); // Remove all spaces
+    let cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
 
-    // If user sent "61..." or "061...", prepend +252
     if (cleanedPhone.startsWith('61') || cleanedPhone.startsWith('061')) {
       cleanedPhone = '+252' + cleanedPhone.replace(/^0?/, '');
-    }
-    // If user sent "+25261..." or "25261...", ensure it starts with +
-    else if (cleanedPhone.startsWith('25261')) {
+    } else if (cleanedPhone.startsWith('25261')) {
       cleanedPhone = '+' + cleanedPhone;
-    }
-    // If already starts with +25261, keep as is
-    else if (!cleanedPhone.startsWith('+25261')) {
+    } else if (!cleanedPhone.startsWith('+25261')) {
       throw new BadRequestException('Invalid Somali phone number format');
     }
 
-    // Generate 6-digit OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Find or create user using the NORMALIZED phone number
     const existingUser = await this.drizzle.db
       .select()
       .from(users)
@@ -102,7 +66,7 @@ export class AuthService {
     } else {
       await this.drizzle.db.insert(users).values({
         id: uuidv4(),
-        phoneNumber: cleanedPhone, // Always store normalized format
+        phoneNumber: cleanedPhone,
         otpCode,
         otpExpiresAt,
         isVerified: false,
@@ -116,6 +80,7 @@ export class AuthService {
       debugOtp: otpCode,
     };
   }
+
   async verifyOtp(phoneNumber: string, otpCode: string) {
     console.log(phoneNumber);
     console.log(otpCode);
@@ -140,7 +105,6 @@ export class AuthService {
       throw new UnauthorizedException('OTP has expired');
     }
 
-    // Mark user as verified and clear OTP
     await this.drizzle.db
       .update(users)
       .set({
@@ -151,10 +115,7 @@ export class AuthService {
       })
       .where(eq(users.phoneNumber, phoneNumber));
 
-    // Generate JWT token
     const token = this.generateToken(currentUser.id, phoneNumber);
-
-    // IMPORTANT: Check if user has profile (name exists and is not empty)
     const hasProfile = !!(
       currentUser.name && currentUser.name.trim().length > 0
     );
@@ -166,7 +127,7 @@ export class AuthService {
         id: currentUser.id,
         phoneNumber: currentUser.phoneNumber,
         isVerified: true,
-        hasProfile: hasProfile, // This is the key flag
+        hasProfile: hasProfile,
         name: currentUser.name,
         email: currentUser.email,
         profileImage: currentUser.profileImage,
@@ -176,13 +137,11 @@ export class AuthService {
 
   async uploadProfileImage(userId: string, base64Image: string) {
     try {
-      // Upload to Cloudinary
       const result = await this.cloudinaryService.uploadBase64(
         base64Image,
         'users/profiles',
       );
 
-      // Update user with profile image URL
       const [updatedUser] = await this.drizzle.db
         .update(users)
         .set({
@@ -204,8 +163,10 @@ export class AuthService {
           profileImage: updatedUser.profileImage,
         },
       };
-    } catch (error) {
-      throw new Error(`Failed to upload profile image: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to upload profile image: ${errorMessage}`);
     }
   }
 
@@ -215,7 +176,7 @@ export class AuthService {
     email?: string,
     profileImageUrl?: string,
   ) {
-    const updateData: any = {
+    const updateData: Partial<User> = {
       name,
       updatedAt: new Date(),
     };
@@ -229,7 +190,6 @@ export class AuthService {
       .where(eq(users.id, userId))
       .returning();
 
-    // Generate new token with updated info
     const token = this.generateToken(updatedUser.id, updatedUser.phoneNumber);
 
     return {
@@ -242,31 +202,48 @@ export class AuthService {
         email: updatedUser.email,
         profileImage: updatedUser.profileImage,
         isVerified: updatedUser.isVerified,
-        hasProfile: true, // Always true after completing profile
+        hasProfile: true,
       },
     };
   }
+
   async getMe(userId: string) {
-    const [user] = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId));
+    try {
+      console.log(`📖 Fetching user: ${userId}`);
 
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+      const result = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      const user = result[0];
+
+      if (!user) {
+        console.log(`❌ User not found: ${userId}`);
+        throw new UnauthorizedException('User not found');
+      }
+
+      const hasProfile = !!(user.name && user.name.trim().length > 0);
+
+      console.log(`✅ User found: ${user.id}, hasProfile: ${hasProfile}`);
+
+      return {
+        id: user.id,
+        phoneNumber: user.phoneNumber,
+        name: user.name,
+        email: user.email,
+        profileImage: user.profileImage,
+        marketId: user.marketId,
+        isVerified: user.isVerified,
+        hasProfile: hasProfile,
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Error in getMe: ${errorMessage}`);
+      throw error;
     }
-
-    const hasProfile = !!(user.name && user.name.trim().length > 0);
-
-    return {
-      id: user.id,
-      phoneNumber: user.phoneNumber,
-      name: user.name,
-      email: user.email,
-      profileImage: user.profileImage,
-      isVerified: user.isVerified,
-      hasProfile: hasProfile,
-    };
   }
 
   async updateProfile(
@@ -275,36 +252,47 @@ export class AuthService {
     email?: string,
     marketId?: string,
   ) {
-    const updateData: any = { updatedAt: new Date() };
+    try {
+      console.log(
+        `📝 Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
+      );
 
-    console.log(`userId ${userId} name ${name} makertId ${marketId}`);
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (marketId) updateData.marketId = marketId;
+      const updateData: Partial<User> = { updatedAt: new Date() };
+      if (name) updateData.name = name;
+      if (email) updateData.email = email;
+      if (marketId) updateData.marketId = marketId;
 
-    const [updatedUser] = await this.drizzle.db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, userId))
-      .returning();
+      const result = await this.drizzle.db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
 
-    return {
-      message: 'Profile updated successfully',
-      user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phoneNumber: updatedUser.phoneNumber,
-        profileImage: updatedUser.profileImage,
-        marketId: updatedUser.marketId,
-      },
-    };
+      const updatedUser = result[0];
+
+      console.log(`✅ Profile updated for user: ${userId}`);
+
+      return {
+        message: 'Profile updated successfully',
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phoneNumber: updatedUser.phoneNumber,
+          profileImage: updatedUser.profileImage,
+          marketId: updatedUser.marketId,
+        },
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error(`❌ Error updating profile: ${errorMessage}`);
+      throw error;
+    }
   }
 
   private generateToken(userId: string, phoneNumber: string): string {
-    // 364 days expiry (in seconds: 364 * 24 * 60 * 60)
     const expiresIn = 364 * 24 * 60 * 60;
-
     return this.jwtService.sign(
       {
         sub: userId,

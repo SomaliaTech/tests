@@ -95,6 +95,7 @@ class ProfileForm extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // In the market selector section, update the displayed text
                   Text(
                     selectedMarket?.displayName ??
                         profile.marketName ??

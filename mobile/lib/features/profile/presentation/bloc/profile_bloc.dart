@@ -46,10 +46,15 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       name: event.name,
       marketId: event.marketId,
     );
-    result.fold(
-      (failure) => emit(ProfileError(failure.message)),
-      (profile) => emit(ProfileUpdated(profile)),
-    );
+
+    result.fold((failure) => emit(ProfileError(failure.message)), (
+      updatedProfile,
+    ) {
+      // Emit the updated profile directly
+      emit(ProfileLoaded(updatedProfile));
+      // Also emit success state if needed
+      emit(ProfileUpdated(updatedProfile));
+    });
   }
 
   Future<void> _onUploadProfileImage(
@@ -58,10 +63,11 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   ) async {
     emit(ProfileLoading());
     final result = await uploadProfileImage(event.base64Image);
-    result.fold(
-      (failure) => emit(ProfileError(failure.message)),
-      (imageUrl) => emit(ProfileImageUploaded(imageUrl)),
-    );
+    result.fold((failure) => emit(ProfileError(failure.message)), (imageUrl) {
+      emit(ProfileImageUploaded(imageUrl));
+      // Reload profile to get updated image URL
+      add(LoadProfileEvent());
+    });
   }
 
   Future<void> _onDeleteAccount(

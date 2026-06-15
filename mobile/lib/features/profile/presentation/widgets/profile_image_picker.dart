@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:convert'; // CRITICAL: Gives access to native base64.encode
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:iconsax/iconsax.dart';
@@ -15,20 +15,21 @@ class ProfileImagePicker extends StatelessWidget {
 
   Future<void> _pickImage(BuildContext context) async {
     final picker = ImagePicker();
+    // imageQuality: 70 compresses the image slightly to save bandwidth
     final result = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80,
+      imageQuality: 70,
     );
 
     if (result != null) {
       final bytes = await result.readAsBytes();
-      final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-      onImagePicked(base64Image);
-    }
-  }
 
-  String base64Encode(List<int> bytes) {
-    return String.fromCharCodes(bytes);
+      // FIX: Use the native base64 utilities instead of custom loop string conversions
+      final base64String = base64.encode(bytes);
+      final dataUri = 'data:image/jpeg;base64,$base64String';
+
+      onImagePicked(dataUri);
+    }
   }
 
   @override
@@ -48,9 +49,8 @@ class ProfileImagePicker extends StatelessWidget {
                       width: 100,
                       height: 100,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildPlaceholder();
-                      },
+                      errorBuilder: (context, error, stackTrace) =>
+                          _buildPlaceholder(),
                     ),
                   )
                 else

@@ -11,6 +11,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
@@ -53,6 +54,7 @@ export class AuthController {
     );
   }
 
+  // Used for standard multipart binary stream uploads
   @Post('upload-profile-image')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image'))
@@ -61,20 +63,29 @@ export class AuthController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: 'image/(jpeg|png|jpg|webp)' }),
         ],
-        fileIsRequired: true,
+        fileIsRequired: false, // Change to false
       }),
     )
-    file: Express.Multer.File,
+    file?: Express.Multer.File,
   ) {
+    if (!file) {
+      // If no file, try to get from body
+      const { imageUrl } = req.body;
+      if (imageUrl) {
+        return this.authService.uploadProfileImage(req.user.userId, imageUrl);
+      }
+      throw new BadRequestException('No image provided');
+    }
+
     const base64Image = file.buffer.toString('base64');
     const dataUri = `data:${file.mimetype};base64,${base64Image}`;
 
     return this.authService.uploadProfileImage(req.user.userId, dataUri);
   }
-
+  // FIX TARGET: Flutter app now uses this endpoint for direct Base64 string uploading
   @Post('upload-profile-image-url')
   @UseGuards(JwtAuthGuard)
   async uploadProfileImageFromUrl(

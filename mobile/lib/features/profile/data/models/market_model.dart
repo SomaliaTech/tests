@@ -5,9 +5,9 @@ class MarketModel {
 
   static Market fromJson(Map<String, dynamic> json) {
     return Market(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      slug: json['slug'] as String? ?? '',
+      id: json['id'] as String,
+      name: json['name'] as String,
+      slug: json['slug'] as String,
       city: json['city'] as String?,
       isActive: json['isActive'] as bool? ?? true,
     );

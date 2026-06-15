@@ -52,14 +52,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     }
   }
 
-  void _goBack() {
-    // Clear OTP inputs when going back so they don't persist if the user returns
-    for (var controller in otpControllers) {
-      controller.clear();
-    }
-    Navigator.pop(context);
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
@@ -88,18 +80,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              size: 20,
-              color: Colors.black87,
-            ),
-            onPressed: _goBack,
-          ),
-        ),
+
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -251,31 +232,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 ),
 
                 const SizedBox(height: 24),
-
-                // Resend OTP
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      // TODO: Implement resend OTP logic in your AuthBloc
-                      toastification.show(
-                        title: const Text('Code Resent'),
-                        description: Text(
-                          'A new code was sent to ${widget.phoneNumber}',
-                        ),
-                        type: ToastificationType.success,
-                        autoCloseDuration: const Duration(seconds: 2),
-                      );
-                    },
-                    child: const Text(
-                      'Resend Code',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2ED573),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),

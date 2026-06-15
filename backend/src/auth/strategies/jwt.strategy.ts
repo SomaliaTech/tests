@@ -19,20 +19,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
-    const [user] = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.id, payload.sub));
+  async validate(payload: { sub: string; phoneNumber: string }) {
+    try {
+      console.log(`🔍 Validating user: ${payload.sub}`);
 
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+      const result = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.id, payload.sub))
+        .limit(1);
+
+      const user = result[0];
+
+      if (!user) {
+        console.log(`❌ User not found: ${payload.sub}`);
+        throw new UnauthorizedException('User not found');
+      }
+
+      console.log(`✅ User validated: ${user.id}`);
+
+      return {
+        userId: user.id,
+        phoneNumber: user.phoneNumber,
+        isVerified: user.isVerified,
+      };
+    } catch (error: any) {
+      console.error(`❌ JWT validation error: ${error.message}`);
+      throw new UnauthorizedException('Invalid token or user not found');
     }
-
-    return {
-      userId: user.id,
-      phoneNumber: user.phoneNumber,
-      isVerified: user.isVerified,
-    };
   }
 }

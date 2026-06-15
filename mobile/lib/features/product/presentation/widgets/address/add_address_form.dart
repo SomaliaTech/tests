@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
-
 import 'package:mobile/features/product/domain/entities/address.dart';
 
 class AddAddressForm extends StatefulWidget {
@@ -22,19 +21,27 @@ class _AddAddressFormState extends State<AddAddressForm> {
   final _fullAddressController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _isDefault = false;
+  bool _isPhoneAutoFilled = false;
 
   final List<String> _labels = ['Home', 'Work', 'Office', 'Other'];
 
   @override
   void initState() {
     super.initState();
-    // 1. Auto-fill phone number from AuthBloc when widget loads
+    // Auto-fill phone number from AuthBloc when widget loads
+    _autoFillPhoneNumber();
+  }
+
+  void _autoFillPhoneNumber() {
+    // Use addPostFrameCallback to ensure widget is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authState = context.read<AuthBloc>().state;
-      if (authState is Authenticated) {
-        // Set the text only if the controller is empty to avoid overwriting user edits
-        if (_phoneController.text.isEmpty) {
-          _phoneController.text = authState.user.phoneNumber;
+      if (authState is Authenticated && authState.user.phoneNumber.isNotEmpty) {
+        if (_phoneController.text.isEmpty && !_isPhoneAutoFilled) {
+          setState(() {
+            _phoneController.text = authState.user.phoneNumber;
+            _isPhoneAutoFilled = true;
+          });
         }
       }
     });
@@ -58,9 +65,8 @@ class _AddAddressFormState extends State<AddAddressForm> {
       );
       widget.onAddressAdded(newAddress);
 
-      // Clear form
+      // Clear form but keep phone number
       _fullAddressController.clear();
-      _phoneController.clear();
       setState(() {
         _selectedLabel = null;
         _isDefault = false;
@@ -78,7 +84,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
 
   @override
   Widget build(BuildContext context) {
-    // Get screen height for the 60% modal effect
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Container(
@@ -181,30 +186,49 @@ class _AddAddressFormState extends State<AddAddressForm> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Phone Number (Auto-filled)
+                    // Phone Number (Auto-filled - Read Only)
+
+                    // Phone Number section - simplified
                     const Text(
                       'Phone Number *',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        hintText: 'Enter your phone number',
-                        hintStyle: TextStyle(color: Colors.grey[400]),
-                        prefixIcon: const Icon(Iconsax.call, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                      validator: (value) => value?.isEmpty ?? true
-                          ? 'Please enter your phone number'
-                          : null,
+                    BlocBuilder<AuthBloc, AuthState>(
+                      builder: (context, authState) {
+                        String phoneNumber = '';
+                        if (authState is Authenticated) {
+                          phoneNumber = authState.user.phoneNumber;
+                        }
+
+                        return TextFormField(
+                          initialValue: phoneNumber,
+                          readOnly: true,
+                          style: TextStyle(color: Colors.grey[600]),
+                          decoration: InputDecoration(
+                            hintText: 'Phone number',
+                            hintStyle: TextStyle(color: Colors.grey[400]),
+                            prefixIcon: const Icon(Iconsax.call, size: 20),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
+                            suffixIcon: phoneNumber.isNotEmpty
+                                ? Icon(
+                                    Iconsax.verify,
+                                    size: 18,
+                                    color: const Color(0xFF2ED573),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          validator: (value) => phoneNumber.isEmpty
+                              ? 'Phone number is required'
+                              : null,
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -233,7 +257,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
                         ),
                       ],
                     ),
-
                     Padding(
                       padding: const EdgeInsets.only(left: 40, top: 4),
                       child: Text(

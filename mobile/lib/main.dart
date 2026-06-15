@@ -54,8 +54,6 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           home: BlocBuilder<AuthBloc, AuthState>(
-            // Use buildWhen so that transient states like loading or OTP sent
-            // do not cause the entire base application routing layout to rebuild.
             buildWhen: (previous, current) =>
                 current is AuthChecking ||
                 current is Authenticated ||

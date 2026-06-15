@@ -49,27 +49,34 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     String? marketId,
   ) async {
     try {
+      final requestBody = {'name': name};
+      if (email != null) requestBody['email'] = email;
+      if (marketId != null) requestBody['marketId'] = marketId;
+
+      print('📤 PATCH request to: ${ApiConstants.baseUrl}/auth/profile');
+      print('📤 Body: $requestBody');
+
       final response = await client.patch(
         Uri.parse('${ApiConstants.baseUrl}/auth/profile'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode({
-          'name': name,
-          if (email != null) 'email': email,
-          if (marketId != null) 'marketId': marketId,
-        }),
+        body: json.encode(requestBody),
       );
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
       } else {
         throw ServerException(
-          'Failed to update profile: ${response.statusCode}',
+          'Failed to update profile: ${response.statusCode} - ${response.body}',
         );
       }
     } catch (e) {
+      print('❌ Network error: $e');
       throw ServerException('Network error: $e');
     }
   }
@@ -80,8 +87,11 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     String base64Image,
   ) async {
     try {
+      // FIX: Use the correct endpoint for JSON upload
       final response = await client.post(
-        Uri.parse('${ApiConstants.baseUrl}/auth/upload-profile-image'),
+        Uri.parse(
+          '${ApiConstants.baseUrl}/auth/upload-profile-image-url',
+        ), // Changed from upload-profile-image
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

@@ -129,7 +129,8 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      body: SafeArea(
+      body: Padding(
+        padding: const EdgeInsets.only(top: 60),
         child: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
             if (state is Unauthenticated) {

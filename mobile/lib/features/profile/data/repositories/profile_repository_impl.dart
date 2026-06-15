@@ -17,24 +17,26 @@ class ProfileRepositoryImpl implements ProfileRepository {
     required this.storageService,
   });
 
+  Future<String?> _getToken() async => await storageService.getAuthToken();
+
   @override
   ResultFuture<Profile> getProfile() async {
     try {
-      final token = await storageService.getAuthToken();
-      if (token == null) {
+      final token = await _getToken();
+      if (token == null)
         return Left(ServerFailure('No authentication token found'));
-      }
 
       final data = await remoteDataSource.getProfile(token);
       final profile = ProfileModel.fromJson(data);
 
-      // Update local storage
+      // Save to local storage
       await storageService.saveUserName(profile.name);
-      await storageService.saveUserEmail(profile.email ?? '');
-      await storageService.saveUserProfileImage(profile.profileImage ?? '');
-      if (profile.marketId != null) {
+      if (profile.email != null)
+        await storageService.saveUserEmail(profile.email!);
+      if (profile.profileImage != null)
+        await storageService.saveUserProfileImage(profile.profileImage!);
+      if (profile.marketId != null)
         await storageService.saveUserMarketId(profile.marketId!);
-      }
 
       return Right(profile);
     } on ServerException catch (e) {
@@ -51,10 +53,11 @@ class ProfileRepositoryImpl implements ProfileRepository {
     String? marketId,
   }) async {
     try {
-      final token = await storageService.getAuthToken();
-      if (token == null) {
+      final token = await _getToken();
+      if (token == null)
         return Left(ServerFailure('No authentication token found'));
-      }
+
+      print('📤 Updating profile with: name=$name, marketId=$marketId');
 
       final data = await remoteDataSource.updateProfile(
         token,
@@ -62,7 +65,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
         email,
         marketId,
       );
-      final profile = ProfileModel.fromJson(data);
+      print('📥 Response data: $data');
+
+      final profile = ProfileModel.fromJson(data['user']);
 
       // Update local storage
       await storageService.saveUserName(profile.name);
@@ -80,10 +85,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   ResultFuture<String> uploadProfileImage(String base64Image) async {
     try {
-      final token = await storageService.getAuthToken();
-      if (token == null) {
+      final token = await _getToken();
+      if (token == null)
         return Left(ServerFailure('No authentication token found'));
-      }
 
       final result = await remoteDataSource.uploadProfileImage(
         token,
@@ -104,10 +108,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   @override
   ResultFuture<void> deleteAccount() async {
     try {
-      final token = await storageService.getAuthToken();
-      if (token == null) {
+      final token = await _getToken();
+      if (token == null)
         return Left(ServerFailure('No authentication token found'));
-      }
 
       await remoteDataSource.deleteAccount(token);
       await storageService.clearAuthData();

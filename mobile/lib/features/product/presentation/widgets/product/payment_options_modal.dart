@@ -38,12 +38,7 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
       icon: Iconsax.mobile,
       color: Color(0xFF2ED573),
     ),
-    PaymentMethod(
-      id: 'zaad',
-      name: 'Zaad',
-      icon: Iconsax.money,
-      color: Color(0xFF2ED573),
-    ),
+
     PaymentMethod(
       id: 'cash_on_delivery',
       name: 'Cash on Delivery',
