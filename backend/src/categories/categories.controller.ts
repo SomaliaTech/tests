@@ -11,7 +11,7 @@ import { DrizzleService } from '../drizzle/drizzle.service';
 import { categories } from '../drizzle/schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { eq, isNull } from 'drizzle-orm';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto'; // Native Node.js module (No install needed)
 
 @Controller('categories')
 export class CategoriesController {
@@ -19,10 +19,11 @@ export class CategoriesController {
 
   @Post()
   async create(@Body() createCategoryDto: CreateCategoryDto) {
+    const id = randomUUID();
     const [category] = await this.drizzle.db
       .insert(categories)
       .values({
-        id: uuidv4(),
+        id: id,
         name: createCategoryDto.name,
         slug: createCategoryDto.slug,
         description: createCategoryDto.description,
