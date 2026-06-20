@@ -67,7 +67,7 @@ A production-ready Ecommerce Backend built with:
 # Installation
 
 ```bash
-git clone https://github.com/your-company/ecommerce-api.git
+git clone https://github.com/bashbashofficial9-oss/bashbash.app.git
 
 cd ecommerce-api
 
