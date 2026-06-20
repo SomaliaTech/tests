@@ -8,54 +8,92 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
-// 1. Define the structure for Order Items
 export class OrderItemDto {
+  @ApiProperty({
+    description: 'Product variant UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
   @IsString()
   @IsNotEmpty()
   productVariantId: string;
 
+  @ApiProperty({
+    description: 'Quantity of the product',
+    example: 2,
+    minimum: 1,
+  })
   @IsNumber()
   quantity: number;
 }
 
-// 2. Define the structure for the Address
-// (If you already have an AddressDto in another file, you can import it instead)
 export class AddressDto {
+  @ApiProperty({
+    description: 'Address label',
+    example: 'Home',
+  })
   @IsString()
   @IsNotEmpty()
   label: string;
 
+  @ApiProperty({
+    description: 'Full street address',
+    example: '123 Main Street, Mogadishu, Somalia',
+  })
   @IsString()
   @IsNotEmpty()
   fullAddress: string;
 
+  @ApiProperty({
+    description: 'Phone number in international format',
+    example: '+252612345678',
+  })
   @IsString()
   @IsNotEmpty()
   phoneNumber: string;
 
-  // 🚨 ADDED THIS:
+  @ApiProperty({
+    description: 'Set as default address',
+    example: true,
+    required: false,
+  })
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;
 }
 
-// 3. The Main CreateOrderDto
 export class CreateOrderDto {
+  @ApiProperty({
+    description: 'Array of order items',
+    type: [OrderItemDto],
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 
-  // 🚨 THIS WAS MISSING! Add this to accept the shipping address object
+  @ApiProperty({
+    description: 'Shipping address for the order',
+    type: AddressDto,
+  })
   @ValidateNested()
   @Type(() => AddressDto)
   shippingAddress: AddressDto;
 
+  @ApiProperty({
+    description: 'Payment method (e.g., cash, card, mobile money)',
+    example: 'cash',
+  })
   @IsString()
   @IsNotEmpty()
   paymentMethod: string;
 
+  @ApiProperty({
+    description: 'Order notes or special instructions',
+    example: 'Please deliver after 5 PM',
+    required: false,
+  })
   @IsString()
   @IsOptional()
   notes?: string;
