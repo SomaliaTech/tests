@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { MarketsModule } from './markets/markets.module';
 import { OrdersModule } from './orders/orders.module';
 import { DrizzleModule } from './drizzle/drizzle.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -23,5 +24,6 @@ import { DrizzleModule } from './drizzle/drizzle.module';
     MarketsModule,
     OrdersModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

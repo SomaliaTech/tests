@@ -4,7 +4,7 @@ import { IsString, IsOptional, IsUUID } from 'class-validator';
 export class UpdateProfileDto {
   @ApiProperty({
     description: 'User full name',
-    example: 'John Doe Updated',
+    example: 'farah Jamac Updated',
     required: false,
   })
   @IsString()
@@ -13,7 +13,7 @@ export class UpdateProfileDto {
 
   @ApiProperty({
     description: 'User email address',
-    example: 'john.updated@example.com',
+    example: 'farah.updated@example.com',
     required: false,
   })
   @IsString()

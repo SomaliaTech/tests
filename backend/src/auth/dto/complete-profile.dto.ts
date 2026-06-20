@@ -4,7 +4,7 @@ import { IsString, IsOptional, IsEmail, Length, IsUrl } from 'class-validator';
 export class CompleteProfileDto {
   @ApiProperty({
     description: 'User full name',
-    example: 'John Doe',
+    example: 'farah jamac',
     minLength: 2,
     maxLength: 255,
   })
@@ -14,7 +14,7 @@ export class CompleteProfileDto {
 
   @ApiProperty({
     description: 'User email address',
-    example: 'john@example.com',
+    example: 'farah@example.com',
     required: false,
   })
   @IsEmail()

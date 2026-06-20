@@ -231,8 +231,8 @@ Authorization: Bearer TOKEN
 
 ```json
 {
-  "name": "John Doe",
-  "email": "john@example.com",
+  "name": "farah Jamac",
+  "email": "farah@example.com",
   "profileImage": "https://..."
 }
 ```
@@ -306,7 +306,7 @@ GET /auth/me
 {
   "id": "uuid",
   "phoneNumber": "+252...",
-  "name": "John"
+  "name": "farah"
 }
 ```
 
@@ -324,8 +324,8 @@ PATCH /auth/profile
 
 ```json
 {
-  "name": "John Doe",
-  "email": "john@example.com",
+  "name": "farah Jamac",
+  "email": "farah@example.com",
   "marketId": "uuid"
 }
 ```

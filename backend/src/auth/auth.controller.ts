@@ -113,8 +113,8 @@ export class AuthController {
         user: {
           id: '550e8400-e29b-41d4-a716-446655440000',
           phoneNumber: '+252612345678',
-          name: 'John Doe',
-          email: 'john@example.com',
+          name: 'farah jamac',
+          email: 'farah@example.com',
           profileImage: 'https://example.com/profile.jpg',
           hasProfile: true,
         },
@@ -253,8 +253,8 @@ export class AuthController {
       example: {
         id: '550e8400-e29b-41d4-a716-446655440000',
         phoneNumber: '+252612345678',
-        name: 'John Doe',
-        email: 'john@example.com',
+        name: 'farah Jamac',
+        email: 'farah@example.com',
         profileImage: 'https://example.com/profile.jpg',
         isVerified: true,
         hasProfile: true,
@@ -286,8 +286,8 @@ export class AuthController {
       example: {
         id: '550e8400-e29b-41d4-a716-446655440000',
         phoneNumber: '+252612345678',
-        name: 'John Doe Updated',
-        email: 'john.updated@example.com',
+        name: 'Farah jamac Updated',
+        email: 'farah.updated@example.com',
         profileImage: 'https://example.com/profile.jpg',
         marketId: '550e8400-e29b-41d4-a716-446655440001',
       },
