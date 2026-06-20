@@ -37,6 +37,7 @@ class AddressRemoteDataSourceImpl implements AddressRemoteDataSource {
 
   @override
   Future<Address> addAddress(String token, Address address) async {
+    print("object ${address}");
     try {
       final response = await client.post(
         Uri.parse('${ApiConstants.baseUrl}/orders/addresses'),

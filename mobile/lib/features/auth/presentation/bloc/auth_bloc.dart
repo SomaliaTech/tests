@@ -8,6 +8,7 @@ import '../../domain/usecases/upload_profile_image.dart';
 import '../../domain/usecases/verify_otp.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
+import 'dart:developer' as developer;
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SendOtp sendOtp;
@@ -35,14 +36,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutEvent>(_onLogout);
   }
 
-  Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
-    emit(AuthLoading());
-    final result = await sendOtp(event.phoneNumber);
-    result.fold(
-      (failure) => emit(AuthError(failure.message)),
-      (debugOtp) => emit(OtpSent(debugOtp)),
-    );
-  }
+  // Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
+  //   emit(AuthLoading());
+  //   final result = await sendOtp(event.phoneNumber);
+  //   result.fold(
+  //     (failure) => emit(AuthError(failure.message)),
+  //     (debugOtp) => emit(OtpSent(debugOtp)),
+  //   );
+  // }
 
   Future<void> _onVerifyOtp(
     VerifyOtpEvent event,
@@ -55,6 +56,30 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       (failure) => emit(AuthError(failure.message)),
       (data) => emit(OtpVerified(data.token, data.user)),
     );
+  }
+
+  Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
+    developer.log('📞 Sending OTP for: ${event.phoneNumber}');
+    emit(AuthLoading());
+
+    try {
+      final result = await sendOtp(event.phoneNumber);
+      developer.log('📦 OTP Result: $result');
+
+      result.fold(
+        (failure) {
+          developer.log('❌ OTP Failure: ${failure.message}');
+          emit(AuthError(failure.message));
+        },
+        (debugOtp) {
+          developer.log('✅ OTP Sent Successfully: $debugOtp');
+          emit(OtpSent(debugOtp));
+        },
+      );
+    } catch (e) {
+      developer.log('❌ OTP Exception: $e');
+      emit(AuthError('An unexpected error occurred: $e'));
+    }
   }
 
   Future<void> _onCompleteProfile(

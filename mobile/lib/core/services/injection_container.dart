@@ -44,5 +44,5 @@ Future<void> initDependencies() async {
   registerMarketDependencies(sl);
   orderRegisterDependencies(sl);
   cartRegisterDependencies(sl);
-  TrakingregisterProductDependencies(sl);
+  trakingRegisterProductDependencies(sl);
 }

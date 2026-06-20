@@ -1,6 +1,7 @@
 class ApiConstants {
-  static const String baseUrl = 'http://192.168.1.102:8080';
-  // static const String baseUrl = 'http://192.39.205.9:8080';
+  // static const String baseUrl = 'http://192.168.1.102:8080';
+  static const String baseUrl =
+      'https://haldoor-git-master-somaliatechs-projects.vercel.app';
   static const String products = '/products';
   static const String categories = '/categories';
   static const String search = '/products/search';
@@ -9,5 +10,6 @@ class ApiConstants {
   // Headers
   static const Map<String, String> headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   };
 }

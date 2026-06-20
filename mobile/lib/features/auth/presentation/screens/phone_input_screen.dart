@@ -31,10 +31,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
-      // 🚨 CRITICAL FIX: Prevent infinite navigation loop.
-      // Only trigger navigation if the state *transitions* to OtpSent.
-      // If the user goes back from the OTP screen, the state is still OtpSent,
-      // but because 'previous' is also OtpSent, this listener will be safely ignored.
       listenWhen: (previous, current) =>
           current is OtpSent && previous is! OtpSent,
       listener: (context, state) {
@@ -65,8 +61,10 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         }
       },
       child: Scaffold(
+        appBar: AppBar(backgroundColor: Colors.white),
         backgroundColor: Colors.white,
-        body: SafeArea(
+        body: Padding(
+          padding: const EdgeInsets.only(top: 10),
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.symmetric(
@@ -198,6 +196,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       onPressed: isLoading
                           ? null
                           : () {
+                              print("cliked");
                               final rawPhone = phoneController.text.trim();
 
                               if (!rawPhone.startsWith('61') ||

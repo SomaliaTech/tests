@@ -7,6 +7,7 @@ import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
 import '../models/user_model.dart';
+import 'dart:developer' as developer;
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
@@ -47,19 +48,22 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
+  // In your sendOtp method
   @override
-  ResultFuture<String> sendOtp(String phoneNumber) async {
+  Future<Either<Failure, String>> sendOtp(String phoneNumber) async {
     try {
+      developer.log('📞 Sending OTP to: $phoneNumber');
       final result = await remoteDataSource.sendOtp(phoneNumber);
-      final debugOtp =
-          result['debugOtp'] as String? ??
-          result['message'] as String? ??
-          'OTP sent';
+      developer.log('✅ OTP Response: $result');
+
+      // Extract debug OTP from response
+      final debugOtp = result['debugOtp'] ?? result['otp'] ?? '123456';
+      developer.log('🔑 Debug OTP: $debugOtp');
+
       return Right(debugOtp);
     } on ServerException catch (e) {
+      developer.log('❌ OTP Error: $e');
       return Left(ServerFailure(e.message));
-    } catch (e) {
-      return Left(ServerFailure('Unexpected error: $e'));
     }
   }
 
