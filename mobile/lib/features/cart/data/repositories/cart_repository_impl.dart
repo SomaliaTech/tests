@@ -3,7 +3,7 @@ import 'package:mobile/features/cart/data/datasources/cart_local_datasource.dart
 import 'package:mobile/features/cart/data/datasources/cart_remote_datasource.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
-import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/storage/storage_service.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../../domain/entities/cart_item.dart';
 import '../../domain/repositories/cart_repository.dart';

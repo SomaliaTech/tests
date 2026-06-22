@@ -6,7 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { DrizzleService } from '../drizzle/drizzle.service';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CloudflareService } from 'src/cloudfare/cloudflare.service';
 import { users } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +19,7 @@ interface User {
   profileImage: string | null;
   marketId: string | null;
   isVerified: boolean | null;
+  isAdmin: boolean | null;
   otpCode: string | null;
   otpExpiresAt: Date | null;
   createdAt: Date;
@@ -31,7 +32,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private drizzle: DrizzleService,
-    private cloudinaryService: CloudinaryService,
+    private cloudflareService: CloudflareService, // ✅ Fixed
   ) {}
 
   async sendOtp(phoneNumber: string) {
@@ -131,13 +132,14 @@ export class AuthService {
         name: currentUser.name,
         email: currentUser.email,
         profileImage: currentUser.profileImage,
+        isAdmin: currentUser.isAdmin ?? false,
       },
     };
   }
 
   async uploadProfileImage(userId: string, base64Image: string) {
     try {
-      const result = await this.cloudinaryService.uploadBase64(
+      const result = await this.cloudflareService.uploadBase64(
         base64Image,
         'users/profiles',
       );
@@ -161,6 +163,7 @@ export class AuthService {
           email: updatedUser.email,
           phoneNumber: updatedUser.phoneNumber,
           profileImage: updatedUser.profileImage,
+          isAdmin: updatedUser.isAdmin ?? false,
         },
       };
     } catch (error: unknown) {
@@ -203,6 +206,7 @@ export class AuthService {
         profileImage: updatedUser.profileImage,
         isVerified: updatedUser.isVerified,
         hasProfile: true,
+        isAdmin: updatedUser.isAdmin ?? false,
       },
     };
   }
@@ -237,6 +241,7 @@ export class AuthService {
         marketId: user.marketId,
         isVerified: user.isVerified,
         hasProfile: hasProfile,
+        isAdmin: user.isAdmin ?? false,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -254,7 +259,7 @@ export class AuthService {
   ) {
     try {
       console.log(
-        `📝 Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
+        ` Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
       );
 
       const updateData: Partial<User> = { updatedAt: new Date() };
@@ -281,6 +286,7 @@ export class AuthService {
           phoneNumber: updatedUser.phoneNumber,
           profileImage: updatedUser.profileImage,
           marketId: updatedUser.marketId,
+          isAdmin: updatedUser.isAdmin ?? false,
         },
       };
     } catch (error: unknown) {

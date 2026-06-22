@@ -2,6 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_dashboard_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
 import 'package:toastification/toastification.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
@@ -12,7 +14,7 @@ import '../../../profile/presentation/widgets/logout_button.dart';
 import '../../../profile/presentation/widgets/menu_item.dart';
 import '../../../support/presentation/screens/support_screen.dart';
 import '../../../../core/services/injection_container.dart';
-import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/storage/storage_service.dart';
 
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
@@ -26,6 +28,7 @@ class _SettingsViewState extends State<SettingsView> {
   String? _userName;
   String? _userPhone;
   String? _userProfileImage;
+  bool _isAdmin = false; // 👈 1. Added to track admin status
 
   @override
   void initState() {
@@ -37,11 +40,14 @@ class _SettingsViewState extends State<SettingsView> {
     final name = await _storageService.getUserName();
     final phone = await _storageService.getUserPhone();
     final profileImage = await _storageService.getUserProfileImage();
+    final isAdmin = await _storageService
+        .getIsAdmin(); // 👈 2. Fetch admin status
 
     setState(() {
       _userName = name;
       _userPhone = phone;
       _userProfileImage = profileImage;
+      _isAdmin = isAdmin; // 👈 3. Set admin status
     });
   }
 
@@ -49,7 +55,6 @@ class _SettingsViewState extends State<SettingsView> {
     final authBloc = context.read<AuthBloc>();
 
     if (Theme.of(context).platform == TargetPlatform.iOS) {
-      // iOS Style Dialog
       showCupertinoDialog(
         context: context,
         builder: (BuildContext context) {
@@ -83,7 +88,6 @@ class _SettingsViewState extends State<SettingsView> {
         },
       );
     } else {
-      // Material Design Dialog
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -134,7 +138,6 @@ class _SettingsViewState extends State<SettingsView> {
         child: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) {
             if (state is Unauthenticated) {
-              // Navigate to login screen
               Navigator.pushReplacementNamed(context, '/');
             }
           },
@@ -151,22 +154,40 @@ class _SettingsViewState extends State<SettingsView> {
                 child: Column(
                   children: [
                     MenuItem(
-                      onTap: () {
-                        Navigator.push(context, OrderHistoryScreen.route());
-                      },
+                      onTap: () =>
+                          Navigator.push(context, OrderHistoryScreen.route()),
                       id: 'order-history',
                       title: 'Order history',
                       icon: Iconsax.receipt,
                     ),
                     const Divider(height: 1, color: Color(0xFFE0E0E0)),
                     MenuItem(
-                      onTap: () {
-                        Navigator.push(context, SupportScreen.route());
-                      },
+                      onTap: () =>
+                          Navigator.push(context, SupportScreen.route()),
                       id: 'help-center',
                       title: 'Help center',
                       icon: Iconsax.info_circle,
                     ),
+                    const Divider(height: 1, color: Color(0xFFE0E0E0)),
+
+                    // 👇 4. ONLY SHOW IF USER IS ADMIN 👇
+                    if (_isAdmin) ...[
+                      MenuItem(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const AdminMainNavigationScreen(),
+                            ),
+                          );
+                        },
+                        id: 'admin-dashboard',
+                        title: 'Admin Dashboard',
+                        icon: Iconsax.chart_square,
+                      ),
+                      const Divider(height: 1, color: Color(0xFFE0E0E0)),
+                    ],
                   ],
                 ),
               ),

@@ -1,7 +1,7 @@
 import 'package:fpdart/fpdart.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
-import '../../../../core/services/storage_service.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -48,7 +48,6 @@ class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  // In your sendOtp method
   @override
   Future<Either<Failure, String>> sendOtp(String phoneNumber) async {
     try {
@@ -56,9 +55,8 @@ class AuthRepositoryImpl implements AuthRepository {
       final result = await remoteDataSource.sendOtp(phoneNumber);
       developer.log('✅ OTP Response: $result');
 
-      // Extract debug OTP from response
       final debugOtp = result['debugOtp'] ?? result['otp'] ?? '123456';
-      developer.log('🔑 Debug OTP: $debugOtp');
+      developer.log(' Debug OTP: $debugOtp');
 
       return Right(debugOtp);
     } on ServerException catch (e) {
@@ -80,6 +78,7 @@ class AuthRepositoryImpl implements AuthRepository {
       await storageService.saveAuthToken(token);
       await storageService.saveUserId(user.id);
       await storageService.saveLoginStatus(true);
+      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
       await storageService.saveUserPhone(user.phoneNumber);
       if (user.name != null) await storageService.saveUserName(user.name!);
       if (user.email != null) await storageService.saveUserEmail(user.email!);
@@ -116,6 +115,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final newToken = data['token'] as String;
 
       await storageService.saveAuthToken(newToken);
+      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
       await storageService.saveUserName(user.name ?? name);
       if (email != null) await storageService.saveUserEmail(email);
       if (profileImageUrl != null)
@@ -140,6 +140,7 @@ class AuthRepositoryImpl implements AuthRepository {
       final data = await remoteDataSource.getCurrentUser(token);
       final user = UserModel.fromJson(data);
 
+      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
       await storageService.saveUserName(user.name ?? '');
       if (user.email != null) await storageService.saveUserEmail(user.email!);
       if (user.profileImage != null)

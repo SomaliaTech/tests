@@ -6,7 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { DrizzleModule } from '../drizzle/drizzle.module';
-import { CloudinaryModule } from '../cloudinary/cloudinary.module';
+import { CloudflareModule } from 'src/cloudfare/cloudflare.module';
 
 @Module({
   imports: [
@@ -20,7 +20,7 @@ import { CloudinaryModule } from '../cloudinary/cloudinary.module';
       }),
     }),
     DrizzleModule,
-    CloudinaryModule,
+    CloudflareModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

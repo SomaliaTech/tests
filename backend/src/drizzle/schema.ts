@@ -161,6 +161,7 @@ export const users = pgTable(
     otpExpiresAt: timestamp('otp_expires_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    isAdmin: boolean('is_admin').default(false),
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),

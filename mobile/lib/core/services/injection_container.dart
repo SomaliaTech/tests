@@ -2,7 +2,9 @@ import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:mobile/core/services/address_injection.dart';
+import 'package:mobile/core/services/admin_injection.dart';
 import 'package:mobile/core/services/cart_injection.dart';
+import 'package:mobile/core/services/dashboard_injection.dart';
 import 'package:mobile/core/services/order_injection.dart';
 import 'package:mobile/core/services/profile_ijection.dart';
 import 'package:mobile/core/services/tracking_injection.dart';
@@ -14,7 +16,7 @@ import 'category_injection.dart';
 import 'wishlist_injection.dart';
 import 'auth_ijdection.dart';
 import 'market_injection.dart';
-import 'storage_service.dart';
+import 'storage/storage_service.dart';
 
 final sl = GetIt.instance;
 
@@ -44,5 +46,7 @@ Future<void> initDependencies() async {
   registerMarketDependencies(sl);
   orderRegisterDependencies(sl);
   cartRegisterDependencies(sl);
-  trakingRegisterProductDependencies(sl);
+  registerAdminDependencies(sl);
+  registerDashboardDependencies(sl);
+  trackingRegisterDependencies(sl); // Fixed: Only called once with correct name
 }

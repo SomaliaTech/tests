@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
-import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { CloudflareService } from 'src/cloudfare/cloudflare.service';
 import { inArray } from 'drizzle-orm';
 import {
   CreateProductDto,
@@ -22,11 +22,21 @@ import {
 } from '../drizzle/schema';
 import { eq, and, desc, sql, SQL } from 'drizzle-orm';
 
+interface ProductUpdateShape {
+  name?: string;
+  slug?: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  isActive?: boolean;
+  categoryId?: string;
+}
+
 @Injectable()
 export class ProductsService {
   constructor(
     private drizzle: DrizzleService,
-    private cloudinaryService: CloudinaryService,
+    private cloudflareService: CloudflareService,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
@@ -98,9 +108,10 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
+    // ✅ Using Cloudflare
     const uploadResults = await Promise.all(
       imageUrls.map((url) =>
-        this.cloudinaryService.uploadFromUrl(url, 'products'),
+        this.cloudflareService.uploadFromUrl(url, 'products'),
       ),
     );
 
@@ -130,7 +141,8 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    const result = await this.cloudinaryService.uploadBase64(
+    // ✅ Using Cloudflare
+    const result = await this.cloudflareService.uploadBase64(
       base64Dto.base64Image,
       'products',
     );
@@ -305,7 +317,8 @@ export class ProductsService {
 
     if (!image) throw new NotFoundException('Image not found');
 
-    await this.cloudinaryService.deleteImage(image.publicId);
+    // ✅ Using Cloudflare
+    await this.cloudflareService.deleteImage(image.publicId);
     await this.drizzle.db
       .delete(mediaAssets)
       .where(eq(mediaAssets.id, imageId));
@@ -316,11 +329,11 @@ export class ProductsService {
   async remove(id: string) {
     const product = await this.findOne(id);
 
-    // 🚀 OPTIMIZATION 3: Delete from Cloudinary in parallel instead of sequentially
+    // 🚀 OPTIMIZATION 3: Delete from Cloudflare in parallel instead of sequentially
     if (product.images && product.images.length > 0) {
       await Promise.all(
         product.images.map((image) =>
-          this.cloudinaryService.deleteImage(image.publicId),
+          this.cloudflareService.deleteImage(image.publicId),
         ),
       );
     }
@@ -475,7 +488,6 @@ export class ProductsService {
   }
 
   // 🚀 OPTIMIZATION 6: Use Postgres Recursive CTE instead of JS While Loop
-  // 🚀 OPTIMIZATION 6: Use Postgres Recursive CTE instead of JS While Loop
   private async getAllDescendantCategoryIds(
     parentId: string,
   ): Promise<string[]> {
@@ -495,6 +507,7 @@ export class ProductsService {
 
     return rows.map((row) => row.id as string);
   }
+
   async getProductsByCategory(
     categoryId: string,
     filters?: {

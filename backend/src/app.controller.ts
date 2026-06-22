@@ -1,45 +1,89 @@
-import { Controller, Get, InternalServerErrorException } from '@nestjs/common';
-import { DrizzleService } from './drizzle/drizzle.service';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { sql } from 'drizzle-orm';
+import {
+  Controller,
+  Get,
+  InternalServerErrorException,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiExcludeEndpoint,
+} from '@nestjs/swagger';
+import { AppService } from './app.service';
 
-@ApiTags('health') // Organizes it cleanly in your Swagger UI docs
+@ApiTags('Health')
 @Controller()
 export class AppController {
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(private readonly appService: AppService) {}
 
   @Get('health')
-  @ApiOperation({ summary: 'Check API and Database status' })
-  @ApiResponse({ status: 200, description: 'System operational' })
-  @ApiResponse({ status: 500, description: 'Database or system failure' })
-  async healthCheck() {
-    try {
-      // Test the database availability
-      await this.drizzle.db.execute(sql`SELECT 1`);
-
-      return {
+  @ApiOperation({ summary: 'Check API and Database health status' })
+  @ApiResponse({
+    status: 200,
+    description: 'System operational',
+    schema: {
+      example: {
         status: 'ok',
         database: 'connected',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      // Throw a clean HTTP 500 error instead of a 200 containing error details
+        timestamp: '2026-01-22T10:30:00.000Z',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Database or system failure',
+    schema: {
+      example: {
+        status: 'error',
+        message: 'Database connection failed',
+        details: 'Connection timeout',
+        timestamp: '2026-01-22T10:30:00.000Z',
+      },
+    },
+  })
+  async healthCheck() {
+    try {
+      const result = await this.appService.checkDatabaseHealth();
+      return result;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown database error';
+
       throw new InternalServerErrorException({
         status: 'error',
         message: 'Database connection failed',
-        details: error.message,
+        details: errorMessage,
         timestamp: new Date().toISOString(),
       });
     }
   }
 
-  // Fallback root endpoint
-  @Get('/')
+  @Get()
+  @ApiOperation({ summary: 'Get API information' })
+  @ApiResponse({
+    status: 200,
+    description: 'API information retrieved',
+    schema: {
+      example: {
+        message: 'Welcome to Ecommerce API Backend',
+        version: '1.0.0',
+        endpoints: {
+          docs: '/api/docs',
+          health: '/health',
+        },
+      },
+    },
+  })
   rootCheck() {
-    return {
-      message: 'Welcome to Haldoor Ecommerce API Backend',
-      docs: '/docs',
-      health: '/health',
-    };
+    return this.appService.getApiInfo();
+  }
+
+  @Get('favicon.ico')
+  @ApiExcludeEndpoint()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  getFavicon() {
+    return;
   }
 }

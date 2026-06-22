@@ -1,12 +1,18 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
+
+// 👇 MAGIC FIX: This forces TypeScript to correctly infer the schema with all relations 👇
+const _initDb = () => drizzle({} as any, { schema });
+export type Database = ReturnType<typeof _initDb>;
 
 @Injectable()
 export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private pool!: Pool;
-  public db!: NodePgDatabase<typeof schema>;
+
+  // 👇 USE THE INFERRED DATABASE TYPE 👇
+  public db!: Database;
 
   async onModuleInit() {
     await this.connectWithRetry();
@@ -25,14 +31,25 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
           ssl: { rejectUnauthorized: false },
           max: 20,
           idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 10000, // Kept at 10s to give Supabase room to wake up if cold
-          keepAlive: true, // CRITICAL: Prevents premature connection termination
+          connectionTimeoutMillis: 10000,
+          keepAlive: true,
+        });
+
+        // 👇 CRITICAL FIX: Prevents Node.js from crashing when Supabase drops idle connections 👇
+        this.pool.on('error', (err) => {
+          console.error(
+            '⚠️ Unexpected error on idle PostgreSQL client:',
+            err.message,
+          );
+          // We just log it. Do not throw, or the app will crash.
         });
 
         // Test connection immediately
         await this.pool.query('SELECT 1');
 
-        this.db = drizzle(this.pool, { schema });
+        // Initialize Drizzle with the schema and cast to our inferred type
+        this.db = drizzle(this.pool, { schema }) as Database;
+
         console.log('✅ PostgreSQL connected successfully');
         return;
       } catch (error) {

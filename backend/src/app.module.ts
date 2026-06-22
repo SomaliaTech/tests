@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
-import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
 import { AuthModule } from './auth/auth.module';
@@ -9,6 +8,10 @@ import { MarketsModule } from './markets/markets.module';
 import { OrdersModule } from './orders/orders.module';
 import { DrizzleModule } from './drizzle/drizzle.module';
 import { AppController } from './app.controller';
+import { AdminModule } from './admin/admin.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { AppService } from './app.service';
+import { CloudflareModule } from './cloudfare/cloudflare.module';
 
 @Module({
   imports: [
@@ -17,13 +20,16 @@ import { AppController } from './app.controller';
     }),
 
     DrizzleModule,
-    CloudinaryModule,
+    CloudflareModule,
     CategoriesModule,
     ProductsModule,
     AuthModule,
+    AdminModule,
     MarketsModule,
     OrdersModule,
+    DashboardModule,
   ],
   controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule {}

@@ -527,11 +527,13 @@ async function seed() {
       { name: 'Gray', code: '#808080' },
     ];
 
+    const colorMap = new Map();
     for (const color of colors) {
       const colorId = uuidv4();
       await db.execute(sql`
         INSERT INTO colors (id, name, code) VALUES (${colorId}, ${color.name}, ${color.code})
       `);
+      colorMap.set(color.name, colorId);
     }
     console.log(`\n✓ Created ${colors.length} colors`);
 
@@ -545,17 +547,47 @@ async function seed() {
       { name: 'XXL', value: 'XXL' },
     ];
 
+    const sizeMap = new Map();
     for (const size of sizes) {
       const sizeId = uuidv4();
       await db.execute(sql`
         INSERT INTO sizes (id, name, value) VALUES (${sizeId}, ${size.name}, ${size.value})
       `);
+      sizeMap.set(size.name, sizeId);
     }
     console.log(`✓ Created ${sizes.length} sizes`);
 
-    // Products data
-    const categorySlugToId = (slug: string) => categoriesMap.get(slug);
+    // ==========================================
+    // PRODUCT IMAGES
+    // ==========================================
+    // Real product images from Unsplash/placeholder services
+    const productImages = [
+      // Laptops
+      'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=800&h=800&fit=crop',
+      // Phones
+      'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1523206489230-0125f6b6c7f3?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&h=800&fit=crop',
+      // Headphones
+      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&h=800&fit=crop',
+      // Gaming
+      'https://images.unsplash.com/photo-1592155931584-901ac15763e3?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1486401899868-0e435ed85128?w=800&h=800&fit=crop',
+      // Fashion
+      'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800&h=800&fit=crop',
+      // Furniture
+      'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=800&h=800&fit=crop',
+      // Fitness
+      'https://images.unsplash.com/photo-1518310383802-640c2de311b2?w=800&h=800&fit=crop',
+      'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=800&fit=crop',
+    ];
 
+    // Products data with images
     const productsData = [
       // Laptops
       {
@@ -565,8 +597,17 @@ async function seed() {
         price: 1999.99,
         stock: 25,
         brand: 'Apple',
-        description: 'M3 chip, 16GB RAM, 512GB SSD',
+        description:
+          'M3 chip, 16GB RAM, 512GB SSD. The most powerful MacBook Pro ever.',
         tags: 'apple,macbook,laptop',
+        images: [
+          'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Space Gray', size: 'Medium' },
+          { color: 'Silver', size: 'Large' },
+        ],
       },
       {
         name: 'Dell XPS 15',
@@ -575,8 +616,16 @@ async function seed() {
         price: 1799.99,
         stock: 20,
         brand: 'Dell',
-        description: 'Intel i7, 32GB RAM, 1TB SSD',
+        description: 'Intel i7, 32GB RAM, 1TB SSD. Premium Windows laptop.',
         tags: 'dell,xps,laptop',
+        images: [
+          'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Large' },
+          { color: 'White', size: 'Medium' },
+        ],
       },
       {
         name: 'LG Gram 17',
@@ -585,55 +634,16 @@ async function seed() {
         price: 1499.99,
         stock: 15,
         brand: 'LG',
-        description: 'Ultra-lightweight, 17" display',
+        description: 'Ultra-lightweight, 17" display. Perfect for travel.',
         tags: 'lg,gram,laptop',
+        images: [
+          'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=800&h=800&fit=crop',
+        ],
+        variants: [],
       },
 
-      // Desktop PCs
-      {
-        name: 'Gaming Desktop RTX 4080',
-        slug: 'gaming-desktop-4080',
-        categorySlug: 'desktop-pcs',
-        price: 2499.99,
-        stock: 10,
-        brand: 'Alienware',
-        description: 'RTX 4080, i9, 32GB RAM',
-        tags: 'gaming,desktop',
-      },
-      {
-        name: 'HP All-in-One',
-        slug: 'hp-all-in-one',
-        categorySlug: 'desktop-pcs',
-        price: 899.99,
-        stock: 15,
-        brand: 'HP',
-        description: '23.8" display, AMD Ryzen 5',
-        tags: 'hp,aio,desktop',
-      },
-
-      // Monitors
-      {
-        name: 'Samsung 32" 4K Monitor',
-        slug: 'samsung-32-4k',
-        categorySlug: 'monitors',
-        price: 499.99,
-        stock: 20,
-        brand: 'Samsung',
-        description: '4K UHD, 60Hz, HDR10',
-        tags: 'samsung,monitor,4k',
-      },
-      {
-        name: 'LG UltraWide 34"',
-        slug: 'lg-ultrawide-34',
-        categorySlug: 'monitors',
-        price: 699.99,
-        stock: 12,
-        brand: 'LG',
-        description: 'Curved gaming monitor',
-        tags: 'lg,ultrawide,monitor',
-      },
-
-      // Android Phones
+      // Smartphones
       {
         name: 'Samsung Galaxy S24 Ultra',
         slug: 'galaxy-s24-ultra',
@@ -641,8 +651,34 @@ async function seed() {
         price: 1199.99,
         stock: 40,
         brand: 'Samsung',
-        description: '256GB, 200MP camera',
+        description: '256GB, 200MP camera. The ultimate Android phone.',
         tags: 'samsung,android',
+        images: [
+          'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1523206489230-0125f6b6c7f3?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Small' },
+          { color: 'Gray', size: 'Medium' },
+        ],
+      },
+      {
+        name: 'iPhone 15 Pro Max',
+        slug: 'iphone-15-pro-max',
+        categorySlug: 'iphones',
+        price: 1199.99,
+        stock: 50,
+        brand: 'Apple',
+        description: 'A17 Pro chip, 256GB. The best iPhone ever.',
+        tags: 'apple,iphone',
+        images: [
+          'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Medium' },
+          { color: 'White', size: 'Large' },
+        ],
       },
       {
         name: 'Google Pixel 8 Pro',
@@ -651,40 +687,16 @@ async function seed() {
         price: 999.99,
         stock: 28,
         brand: 'Google',
-        description: 'AI-powered camera',
+        description: 'AI-powered camera. The smartest phone.',
         tags: 'google,pixel',
-      },
-      {
-        name: 'OnePlus 12',
-        slug: 'oneplus-12',
-        categorySlug: 'android-phones',
-        price: 799.99,
-        stock: 35,
-        brand: 'OnePlus',
-        description: 'Snapdragon 8 Gen 3',
-        tags: 'oneplus,android',
-      },
-
-      // iPhones
-      {
-        name: 'iPhone 15 Pro Max',
-        slug: 'iphone-15-pro-max',
-        categorySlug: 'iphones',
-        price: 1199.99,
-        stock: 50,
-        brand: 'Apple',
-        description: 'A17 Pro chip, 256GB',
-        tags: 'apple,iphone',
-      },
-      {
-        name: 'iPhone 15 Pro',
-        slug: 'iphone-15-pro',
-        categorySlug: 'iphones',
-        price: 999.99,
-        stock: 45,
-        brand: 'Apple',
-        description: 'A17 Pro chip, 128GB',
-        tags: 'apple,iphone',
+        images: [
+          'https://images.unsplash.com/photo-1523206489230-0125f6b6c7f3?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'White', size: 'Small' },
+          { color: 'Gray', size: 'Medium' },
+        ],
       },
 
       // Headphones
@@ -695,8 +707,17 @@ async function seed() {
         price: 399.99,
         stock: 45,
         brand: 'Sony',
-        description: 'Noise-cancelling headphones',
+        description:
+          'Noise-cancelling headphones. Industry-leading noise cancellation.',
         tags: 'sony,headphones',
+        images: [
+          'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Small' },
+          { color: 'Gray', size: 'Medium' },
+        ],
       },
       {
         name: 'Apple AirPods Max',
@@ -705,18 +726,16 @@ async function seed() {
         price: 549.99,
         stock: 25,
         brand: 'Apple',
-        description: 'Premium over-ear headphones',
+        description: 'Premium over-ear headphones. Exceptional audio quality.',
         tags: 'apple,airpods',
-      },
-      {
-        name: 'Bose QC45',
-        slug: 'bose-qc45',
-        categorySlug: 'headphones',
-        price: 329.99,
-        stock: 30,
-        brand: 'Bose',
-        description: 'QuietComfort 45',
-        tags: 'bose,headphones',
+        images: [
+          'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'White', size: 'Small' },
+          { color: 'Black', size: 'Large' },
+        ],
       },
 
       // Gaming Consoles
@@ -727,8 +746,14 @@ async function seed() {
         price: 499.99,
         stock: 50,
         brand: 'Sony',
-        description: 'Next-gen gaming console',
+        description:
+          'Next-gen gaming console. Experience the future of gaming.',
         tags: 'sony,playstation',
+        images: [
+          'https://images.unsplash.com/photo-1592155931584-901ac15763e3?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1486401899868-0e435ed85128?w=800&h=800&fit=crop',
+        ],
+        variants: [],
       },
       {
         name: 'Xbox Series X',
@@ -737,53 +762,34 @@ async function seed() {
         price: 499.99,
         stock: 45,
         brand: 'Microsoft',
-        description: '4K gaming console',
+        description: '4K gaming console. The fastest Xbox ever.',
         tags: 'microsoft,xbox',
-      },
-      {
-        name: 'Nintendo Switch OLED',
-        slug: 'nintendo-switch-oled',
-        categorySlug: 'consoles',
-        price: 349.99,
-        stock: 60,
-        brand: 'Nintendo',
-        description: 'Handheld gaming console',
-        tags: 'nintendo,switch',
+        images: [
+          'https://images.unsplash.com/photo-1486401899868-0e435ed85128?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1592155931584-901ac15763e3?w=800&h=800&fit=crop',
+        ],
+        variants: [],
       },
 
-      // Men's Clothing
+      // Fashion
       {
-        name: 'Classic Denim Jeans',
-        slug: 'classic-denim-jeans',
-        categorySlug: 'mens-pants',
-        price: 59.99,
-        stock: 120,
-        brand: "Levi's",
-        description: 'Regular fit jeans',
-        tags: 'jeans,denim',
-      },
-      {
-        name: 'Cotton Oxford Shirt',
-        slug: 'cotton-oxford-shirt',
-        categorySlug: 'mens-shirts',
-        price: 49.99,
-        stock: 100,
-        brand: 'Ralph Lauren',
-        description: 'Classic fit oxford',
-        tags: 'shirt,oxford',
-      },
-      {
-        name: 'Leather Jacket',
+        name: 'Designer Leather Jacket',
         slug: 'leather-jacket',
         categorySlug: 'mens-shoes',
         price: 199.99,
         stock: 40,
         brand: 'Schott',
-        description: 'Genuine leather',
+        description: 'Genuine leather jacket. Classic design.',
         tags: 'jacket,leather',
+        images: [
+          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Medium' },
+          { color: 'Brown', size: 'Large' },
+        ],
       },
-
-      // Women's Clothing
       {
         name: 'Floral Summer Dress',
         slug: 'floral-summer-dress',
@@ -791,28 +797,16 @@ async function seed() {
         price: 49.99,
         stock: 80,
         brand: 'Zara',
-        description: 'Floral print dress',
+        description: 'Floral print dress. Perfect for summer.',
         tags: 'dress,summer',
-      },
-      {
-        name: 'Designer Handbag',
-        slug: 'designer-handbag',
-        categorySlug: 'womens-bags',
-        price: 299.99,
-        stock: 25,
-        brand: 'Coach',
-        description: 'Leather handbag',
-        tags: 'bag,designer',
-      },
-      {
-        name: 'Running Shoes',
-        slug: 'womens-running-shoes',
-        categorySlug: 'womens-shoes',
-        price: 89.99,
-        stock: 60,
-        brand: 'Nike',
-        description: 'Lightweight running shoes',
-        tags: 'shoes,nike',
+        images: [
+          'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Red', size: 'Small' },
+          { color: 'Blue', size: 'Medium' },
+        ],
       },
 
       // Furniture
@@ -823,31 +817,34 @@ async function seed() {
         price: 899.99,
         stock: 10,
         brand: 'IKEA',
-        description: 'L-shaped sectional',
+        description: 'L-shaped sectional. Comfortable and stylish.',
         tags: 'sofa,furniture',
+        images: [
+          'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Gray', size: 'Large' },
+          { color: 'Brown', size: 'Extra Large' },
+        ],
       },
       {
-        name: 'Queen Memory Foam Bed',
-        slug: 'queen-memory-foam-bed',
+        name: 'Memory Foam Mattress',
+        slug: 'memory-foam-mattress',
         categorySlug: 'beds',
         price: 599.99,
         stock: 15,
         brand: 'Zinus',
-        description: 'Memory foam mattress',
+        description: 'Queen memory foam bed. Pressure-relieving support.',
         tags: 'bed,mattress',
+        images: [
+          'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&h=800&fit=crop',
+        ],
+        variants: [],
       },
 
-      // Fitness
-      {
-        name: 'Yoga Mat',
-        slug: 'yoga-mat',
-        categorySlug: 'fitness',
-        price: 29.99,
-        stock: 200,
-        brand: 'Lululemon',
-        description: 'Non-slip yoga mat',
-        tags: 'yoga,fitness',
-      },
+      // Fitness Equipment
       {
         name: 'Adjustable Dumbbells',
         slug: 'adjustable-dumbbells',
@@ -855,37 +852,58 @@ async function seed() {
         price: 299.99,
         stock: 30,
         brand: 'Bowflex',
-        description: '552 lbs set',
+        description: '552 lbs set. Space-saving design.',
         tags: 'weights,dumbbells',
+        images: [
+          'https://images.unsplash.com/photo-1518310383802-640c2de311b2?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Black', size: 'Medium' },
+          { color: 'Gray', size: 'Large' },
+        ],
+      },
+      {
+        name: 'Yoga Mat',
+        slug: 'yoga-mat',
+        categorySlug: 'fitness',
+        price: 29.99,
+        stock: 200,
+        brand: 'Lululemon',
+        description: 'Non-slip yoga mat. Durable and comfortable.',
+        tags: 'yoga,fitness',
+        images: [
+          'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1518310383802-640c2de311b2?w=800&h=800&fit=crop',
+        ],
+        variants: [
+          { color: 'Purple', size: 'Small' },
+          { color: 'Blue', size: 'Medium' },
+        ],
       },
 
       // Supplements
       {
-        name: 'Whey Protein',
+        name: 'Whey Protein Powder',
         slug: 'whey-protein',
         categorySlug: 'vitamins-supplements',
         price: 59.99,
         stock: 120,
         brand: 'Optimum Nutrition',
-        description: 'Chocolate flavor, 2lb',
+        description: 'Chocolate flavor, 2lb. Pure protein isolate.',
         tags: 'protein,health',
-      },
-      {
-        name: 'Multivitamin',
-        slug: 'multivitamin',
-        categorySlug: 'vitamins-supplements',
-        price: 24.99,
-        stock: 200,
-        brand: 'Centrum',
-        description: 'Complete daily nutrition',
-        tags: 'vitamins,health',
+        images: [
+          'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&h=800&fit=crop',
+          'https://images.unsplash.com/photo-1518310383802-640c2de311b2?w=800&h=800&fit=crop',
+        ],
+        variants: [],
       },
     ];
 
     // Insert products
     let productCount = 0;
     for (const product of productsData) {
-      const categoryId = categorySlugToId(product.categorySlug);
+      const categoryId = categoriesMap.get(product.categorySlug);
       if (categoryId) {
         const productId = uuidv4();
         await db.execute(sql`
@@ -894,12 +912,29 @@ async function seed() {
         `);
 
         // Add product images
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < product.images.length && i < 3; i++) {
           const imageId = uuidv4();
+          const isMain = i === 0;
           await db.execute(sql`
-            INSERT INTO media_assets (id, url, public_id, product_id)
-            VALUES (${imageId}, ${`https://picsum.photos/id/${100 + productCount + i}/800/800`}, ${`product_${productId}_${i}`}, ${productId})
+            INSERT INTO media_assets (id, url, public_id, product_id, is_main, "order")
+            VALUES (${imageId}, ${product.images[i]}, ${`product_${productId}_${i}`}, ${productId}, ${isMain}, ${i})
           `);
+        }
+
+        // Add variants if any
+        for (const variant of product.variants) {
+          const colorId = colorMap.get(variant.color);
+          const sizeId = sizeMap.get(variant.size);
+          if (colorId && sizeId) {
+            const variantId = uuidv4();
+            const sku = `${product.slug}-${variant.color}-${variant.size}`
+              .toUpperCase()
+              .replace(/\s/g, '');
+            await db.execute(sql`
+              INSERT INTO product_variants (id, product_id, color_id, size_id, sku, stock, price)
+              VALUES (${variantId}, ${productId}, ${colorId}, ${sizeId}, ${sku}, ${Math.floor(Math.random() * 20) + 5}, ${product.price.toString()})
+            `);
+          }
         }
 
         productCount++;

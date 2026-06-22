@@ -43,6 +43,13 @@
       "when": 1781180421294,
       "tag": "0005_naive_wither",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782050914015,
+      "tag": "0006_spooky_supernaut",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
-import '../../../../core/services/storage_service.dart';
+import '../../../../core/services/storage/storage_service.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../../domain/entities/order_history.dart';
 import '../../domain/repositories/order_history_repository.dart';

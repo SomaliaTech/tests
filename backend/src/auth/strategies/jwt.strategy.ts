@@ -42,6 +42,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         userId: user.id,
         phoneNumber: user.phoneNumber,
         isVerified: user.isVerified,
+        isAdmin: user.isAdmin || false,
       };
     } catch (error: any) {
       console.error(`❌ JWT validation error: ${error.message}`);

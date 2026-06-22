@@ -1,48 +1,42 @@
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { DrizzleService } from './drizzle/drizzle.service';
 import { sql } from 'drizzle-orm';
 
-@Controller()
-export class AppController {
-  constructor(private drizzle: DrizzleService) {}
+@Injectable()
+export class AppService {
+  constructor(private readonly drizzle: DrizzleService) {}
 
-  @Get('health')
-  async healthCheck() {
-    try {
-      await this.drizzle.db.execute(sql`SELECT 1`);
-      return {
-        status: 'ok',
-        database: 'connected',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        message: error.message,
-        timestamp: new Date().toISOString(),
-      };
-    }
+  /**
+   * Check database connectivity
+   * @returns Object with status and timestamp
+   */
+  async checkDatabaseHealth(): Promise<{
+    status: string;
+    database: string;
+    timestamp: string;
+  }> {
+    await this.drizzle.db.execute(sql`SELECT 1`);
+
+    return {
+      status: 'ok',
+      database: 'connected',
+      timestamp: new Date().toISOString(),
+    };
   }
-  @Get('/')
-  async health() {
-    try {
-      await this.drizzle.db.execute(sql`SELECT 1`);
-      return {
-        status: 'ok',
-        database: 'connected',
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      return {
-        status: 'error',
-        message: error.message,
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-  @Get('favicon.ico')
-  @HttpCode(HttpStatus.NO_CONTENT) // Returns HTTP 204 instead of a 404 error
-  getFavicon() {
-    return;
+
+  /**
+   * Get API information
+   * @returns API metadata and available endpoints
+   */
+  getApiInfo() {
+    return {
+      message: 'Welcome to Ecommerce API Backend',
+      version: '1.0.0',
+      endpoints: {
+        docs: '/api/docs',
+        health: '/health',
+      },
+      timestamp: new Date().toISOString(),
+    };
   }
 }

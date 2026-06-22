@@ -9,6 +9,7 @@ class User extends Equatable {
   final String? marketId;
   final bool isVerified;
   final bool hasProfile;
+  final bool isAdmin;
 
   const User({
     required this.id,
@@ -19,6 +20,7 @@ class User extends Equatable {
     this.marketId,
     required this.isVerified,
     required this.hasProfile,
+    this.isAdmin = false,
   });
 
   @override
@@ -31,5 +33,6 @@ class User extends Equatable {
     marketId,
     isVerified,
     hasProfile,
+    isAdmin,
   ];
 }

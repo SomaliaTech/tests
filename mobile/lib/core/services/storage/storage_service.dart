@@ -9,13 +9,16 @@ class StorageService {
   static const String _userPhoneKey = 'user_phone';
   static const String _userProfileImageKey = 'user_profile_image';
   static const String _userMarketIdKey = 'user_market_id';
+  static const String _isAdminKey = 'is_admin'; // 👈 ADDED
 
   final FlutterSecureStorage _secureStorage;
 
   StorageService({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
+  // ==========================================
   // Auth related
+  // ==========================================
   Future<void> saveAuthToken(String token) async {
     await _secureStorage.write(key: _tokenKey, value: token);
   }
@@ -45,7 +48,16 @@ class StorageService {
     return token != null && token.isNotEmpty && isLoggedIn == 'true';
   }
 
+  // ==========================================
+  // Admin related (👈 ADDED)
+  // ==========================================
+  Future<void> saveIsAdmin(bool isAdmin) async {
+    await _secureStorage.write(key: _isAdminKey, value: isAdmin.toString());
+  }
+
+  // ==========================================
   // Profile related
+  // ==========================================
   Future<void> saveUserName(String name) async {
     await _secureStorage.write(key: _userNameKey, value: name);
   }
@@ -86,6 +98,14 @@ class StorageService {
     return await _secureStorage.read(key: _userMarketIdKey);
   }
 
+  Future<bool> getIsAdmin() async {
+    final value = await _secureStorage.read(key: _isAdminKey);
+    return value == 'true';
+  }
+
+  // ==========================================
+  // Clear Data (Logout)
+  // ==========================================
   Future<void> clearAuthData() async {
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
@@ -95,5 +115,6 @@ class StorageService {
     await _secureStorage.delete(key: _userPhoneKey);
     await _secureStorage.delete(key: _userProfileImageKey);
     await _secureStorage.delete(key: _userMarketIdKey);
+    await _secureStorage.delete(key: _isAdminKey); // 👈 ADD THIS
   }
 }

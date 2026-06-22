@@ -1,3 +1,4 @@
+import { CanActivate, ForbiddenException } from '@nestjs/common';
 import {
   Injectable,
   ExecutionContext,
@@ -16,5 +17,16 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw err || new UnauthorizedException('Invalid token');
     }
     return user;
+  }
+}
+
+@Injectable()
+export class AdminGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    if (!request.user || !request.user.isAdmin) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return true;
   }
 }
