@@ -15,27 +15,16 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     LoadDashboardDataEvent event,
     Emitter<DashboardState> emit,
   ) async {
+    print('🎯 [BLoC] LoadDashboardDataEvent for period: ${event.period}');
     emit(DashboardLoading());
     try {
-      final stats = await repository.getDashboardStats(event.period);
-      final usersChartData = await repository.getUsersChartData(event.period);
-      final revenueChartData = await repository.getRevenueChart(event.period);
-      final deviceTraffic = await repository.getDeviceTraffic();
-      final locationTraffic = await repository.getLocationTraffic();
-      final productTraffic = await repository.getProductTraffic(event.period);
-
-      emit(
-        DashboardLoaded(
-          stats: stats,
-          usersChartData: usersChartData,
-          revenueChartData: revenueChartData,
-          deviceTraffic: deviceTraffic,
-          locationTraffic: locationTraffic,
-          productTraffic: productTraffic,
-          period: event.period,
-        ),
-      );
-    } catch (e) {
+      final stopwatch = Stopwatch()..start();
+      final data = await repository.getAllDashboardData(event.period);
+      print('✅ [BLoC] Data loaded in ${stopwatch.elapsedMilliseconds}ms');
+      emit(data);
+    } catch (e, stackTrace) {
+      print('❌ [BLoC] Error: $e');
+      print('📚 [BLoC] Stack trace: $stackTrace');
       emit(DashboardError(e.toString()));
     }
   }
@@ -44,38 +33,17 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     ChangePeriodEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    // ✅ Don't emit loading state - directly fetch and update
+    print('🎯 [BLoC] ChangePeriodEvent for period: ${event.period}');
+    emit(DashboardLoading());
     try {
-      // Get current state to keep data if needed
-      final currentState = state;
-
-      final stats = await repository.getDashboardStats(event.period);
-      final usersChartData = await repository.getUsersChartData(event.period);
-      final revenueChartData = await repository.getRevenueChart(event.period);
-      final deviceTraffic = await repository.getDeviceTraffic();
-      final locationTraffic = await repository.getLocationTraffic();
-      final productTraffic = await repository.getProductTraffic(event.period);
-
-      // ✅ Directly emit loaded state without loading state
-      emit(
-        DashboardLoaded(
-          stats: stats,
-          usersChartData: usersChartData,
-          revenueChartData: revenueChartData,
-          deviceTraffic: deviceTraffic,
-          locationTraffic: locationTraffic,
-          productTraffic: productTraffic,
-          period: event.period,
-        ),
-      );
-    } catch (e) {
-      // If error, keep current state or show error
-      if (state is DashboardLoaded) {
-        // Keep showing current data
-        emit(state);
-      } else {
-        emit(DashboardError(e.toString()));
-      }
+      final stopwatch = Stopwatch()..start();
+      final data = await repository.getAllDashboardData(event.period);
+      print('✅ [BLoC] Data loaded in ${stopwatch.elapsedMilliseconds}ms');
+      emit(data);
+    } catch (e, stackTrace) {
+      print('❌ [BLoC] Error: $e');
+      print('📚 [BLoC] Stack trace: $stackTrace');
+      emit(DashboardError(e.toString()));
     }
   }
 }

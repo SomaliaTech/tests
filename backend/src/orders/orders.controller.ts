@@ -24,7 +24,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AddressDto } from './dto/address.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
-import { AddToCartDto } from './dto/add-to-cart.dto';
+import { AddToCartDto } from '../products/dto/cart.dto';
 
 @ApiTags('orders')
 @Controller('orders')
@@ -45,17 +45,6 @@ export class OrdersController {
   @ApiResponse({
     status: 201,
     description: 'Address added successfully',
-    schema: {
-      example: {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        userId: '550e8400-e29b-41d4-a716-446655440001',
-        label: 'Home',
-        fullAddress: '123 Main Street, Mogadishu, Somalia',
-        phoneNumber: '+252612345678',
-        isDefault: true,
-        createdAt: '2024-01-01T00:00:00.000Z',
-      },
-    },
   })
   @ApiResponse({
     status: 400,
@@ -63,7 +52,7 @@ export class OrdersController {
   })
   @ApiResponse({
     status: 401,
-    description: 'Unauthorized - Invalid or missing JWT token',
+    description: 'Unauthorized',
   })
   async addAddress(@Request() req, @Body() addressData: AddressDto) {
     return this.ordersService.addAddress(req.user.userId, addressData);
@@ -176,26 +165,6 @@ export class OrdersController {
   @ApiResponse({
     status: 200,
     description: 'Cart retrieved successfully',
-    schema: {
-      example: {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        userId: '550e8400-e29b-41d4-a716-446655440001',
-        items: [
-          {
-            id: '550e8400-e29b-41d4-a716-446655440002',
-            productVariantId: '550e8400-e29b-41d4-a716-446655440003',
-            quantity: 2,
-            productVariant: {
-              product: {
-                name: 'iPhone 15',
-                price: 1200,
-              },
-            },
-          },
-        ],
-        total: 2400,
-      },
-    },
   })
   @ApiResponse({
     status: 401,
@@ -224,11 +193,7 @@ export class OrdersController {
     description: 'Unauthorized',
   })
   async addToCart(@Request() req, @Body() addToCartDto: AddToCartDto) {
-    return this.ordersService.addToCart(
-      req.user.userId,
-      addToCartDto.productVariantId,
-      addToCartDto.quantity,
-    );
+    return this.ordersService.addToCart(req.user.userId, addToCartDto);
   }
 
   @Put('cart/:itemId')
@@ -347,11 +312,6 @@ export class OrdersController {
   @ApiResponse({
     status: 200,
     description: 'Unread count retrieved',
-    schema: {
-      example: {
-        unreadCount: 5,
-      },
-    },
   })
   @ApiResponse({
     status: 401,
@@ -442,15 +402,6 @@ export class OrdersController {
   @ApiResponse({
     status: 201,
     description: 'Order created successfully',
-    schema: {
-      example: {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        userId: '550e8400-e29b-41d4-a716-446655440001',
-        status: 'PENDING',
-        total: 2400,
-        createdAt: '2024-01-01T00:00:00.000Z',
-      },
-    },
   })
   @ApiResponse({
     status: 400,

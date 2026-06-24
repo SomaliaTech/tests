@@ -60,3 +60,10 @@ class CartError extends CartState {
   @override
   List<Object?> get props => [message];
 }
+
+class CartOrderSuccess extends CartState {
+  final String message;
+  const CartOrderSuccess(this.message);
+  @override
+  List<Object?> get props => [message];
+}

@@ -1,6 +1,5 @@
-// lib/core/services/cart_injection.dart
 import 'package:get_it/get_it.dart';
-import 'package:mobile/features/cart/data/datasources/cart_remote_datasource.dart';
+// 🚨 REMOVED: cart_remote_datasource.dart import
 import 'package:mobile/features/cart/data/datasources/cart_local_datasource.dart';
 import 'package:mobile/features/cart/data/repositories/cart_repository_impl.dart';
 import 'package:mobile/features/cart/domain/repositories/cart_repository.dart';
@@ -12,62 +11,32 @@ import 'package:mobile/features/cart/domain/usecases/update_quantity.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
 
 void cartRegisterDependencies(GetIt sl) {
-  // Removed async
-  print('📦 Registering Cart Dependencies...');
+  // 1. Data Sources (ONLY LOCAL NOW)
+  sl.registerLazySingleton<CartLocalDataSource>(
+    () => CartLocalDataSourceImpl(sharedPreferences: sl()),
+  );
 
-  // Data Sources
-  if (!sl.isRegistered<CartRemoteDataSource>()) {
-    sl.registerLazySingleton<CartRemoteDataSource>(
-      () => CartRemoteDataSourceImpl(client: sl()),
-    );
-  }
+  // 2. Repositories
+  // 🚨 FIXED: Removed remoteDataSource and storageService
+  sl.registerLazySingleton<CartRepository>(
+    () => CartRepositoryImpl(localDataSource: sl()),
+  );
 
-  if (!sl.isRegistered<CartLocalDataSource>()) {
-    sl.registerLazySingleton<CartLocalDataSource>(
-      () => CartLocalDataSourceImpl(sharedPreferences: sl()),
-    );
-  }
+  // 3. Use Cases
+  sl.registerLazySingleton(() => GetCartItems(sl()));
+  sl.registerLazySingleton(() => AddToCart(sl()));
+  sl.registerLazySingleton(() => UpdateQuantity(sl()));
+  sl.registerLazySingleton(() => RemoveItem(sl()));
+  sl.registerLazySingleton(() => ClearCart(sl()));
 
-  // Repositories
-  if (!sl.isRegistered<CartRepository>()) {
-    sl.registerLazySingleton<CartRepository>(
-      () => CartRepositoryImpl(
-        remoteDataSource: sl(),
-        localDataSource: sl(),
-        storageService: sl(),
-      ),
-    );
-  }
-
-  // Use Cases
-  if (!sl.isRegistered<GetCartItems>()) {
-    sl.registerLazySingleton(() => GetCartItems(sl()));
-  }
-  if (!sl.isRegistered<AddToCart>()) {
-    sl.registerLazySingleton(() => AddToCart(sl()));
-  }
-  if (!sl.isRegistered<UpdateQuantity>()) {
-    sl.registerLazySingleton(() => UpdateQuantity(sl()));
-  }
-  if (!sl.isRegistered<RemoveItem>()) {
-    sl.registerLazySingleton(() => RemoveItem(sl()));
-  }
-  if (!sl.isRegistered<ClearCart>()) {
-    sl.registerLazySingleton(() => ClearCart(sl()));
-  }
-
-  // BLoC
-  if (!sl.isRegistered<CartBloc>()) {
-    sl.registerFactory(
-      () => CartBloc(
-        getCartItems: sl(),
-        addToCart: sl(),
-        updateQuantity: sl(),
-        removeItem: sl(),
-        clearCart: sl(),
-      ),
-    );
-  }
-
-  print('✅ Cart Dependencies Registered');
+  // 4. BLoC
+  sl.registerFactory(
+    () => CartBloc(
+      getCartItems: sl(),
+      addToCart: sl(),
+      updateQuantity: sl(),
+      removeItem: sl(),
+      clearCart: sl(),
+    ),
+  );
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
@@ -12,7 +13,6 @@ import 'package:mobile/features/product/presentation/widgets/loading/loading_pro
 import 'package:mobile/features/product/presentation/widgets/product/bottom_action_bar.dart';
 import 'package:mobile/features/product/presentation/widgets/product/description_tab.dart';
 import 'package:mobile/features/product/presentation/widgets/product/image_carousel.dart';
-
 import 'package:mobile/features/product/presentation/widgets/product/payment_options_modal.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_header.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_info.dart';
@@ -23,6 +23,11 @@ import '../../../wishlist/presentation/bloc/wishlist_bloc.dart';
 import '../../../wishlist/presentation/bloc/wishlist_event.dart';
 import '../../../wishlist/presentation/bloc/wishlist_state.dart';
 import '../../../wishlist/domain/entities/wishlist_item.dart';
+
+// 🚨 ADDED: Cart imports
+import '../../../cart/presentation/bloc/cart_bloc.dart';
+import '../../../cart/presentation/bloc/cart_event.dart';
+import '../../../cart/domain/entities/cart_item.dart';
 
 class ProductDetailView extends StatefulWidget {
   final String productId;
@@ -68,7 +73,6 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       );
       setState(() => _isInWishlist = false);
     } else {
-      // Find the variant ID based on selected color/size
       String variantId = '';
       if (product.variants.isNotEmpty) {
         final variant = product.variants.firstWhere(
@@ -86,7 +90,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         brand: product.brand,
         rating: product.rating,
         categoryId: product.categoryId,
-        productVariantId: variantId, // Required field
+        productVariantId: variantId,
       );
       context.read<WishlistBloc>().add(AddToWishlistEvent(wishlistItem));
       toastification.show(
@@ -98,6 +102,45 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       );
       setState(() => _isInWishlist = true);
     }
+  }
+
+  // 🚨 FIXED: Add to Cart Logic now supports products WITHOUT variants
+  void _addToCart(Product product) {
+    ProductVariant? variant;
+
+    // Only try to find a variant if the product actually has them
+    if (product.variants.isNotEmpty) {
+      variant = product.variants.firstWhere(
+        (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
+        orElse: () => product.variants.first,
+      );
+    }
+    // Add this method in _ProductDetailViewState
+
+    // Construct the CartItem, falling back to the base product if no variant exists
+    final cartItem = CartItem(
+      id: variant?.id ?? product.id,
+      productId: product.id,
+      productVariantId: variant?.id ?? '', // Send empty string if no variant
+      name: product.name,
+      imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
+      price: variant?.price ?? product.price, // Fallback to product price
+      quantity: quantity,
+      maxStock: variant?.stock ?? product.stock, // Fallback to product stock
+      inStock: (variant?.stock ?? product.stock) > 0,
+      color: variant?.colorName,
+      size: variant?.sizeName,
+    );
+
+    context.read<CartBloc>().add(AddToCartEvent(cartItem));
+
+    toastification.show(
+      title: const Text('Added to Cart'),
+      description: Text('${product.name} added to your cart'),
+      type: ToastificationType.success,
+      style: ToastificationStyle.fillColored,
+      autoCloseDuration: const Duration(seconds: 2),
+    );
   }
 
   void _showAddressSelection() {
@@ -136,6 +179,20 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         selectedColor: selectedColor,
         selectedSize: selectedSize,
         quantity: quantity,
+      ),
+    );
+  }
+
+  void _startChatWithAdmin() {
+    // You can show a loading indicator or directly navigate
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatRoomScreen(
+          partnerId: 'admin-id-here', // Replace with actual admin ID
+          partnerName: 'Support Team',
+          partnerImage: 'https://example.com/admin-avatar.png',
+        ),
       ),
     );
   }
@@ -199,7 +256,6 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                               ),
                               ProductInfo(product: product),
                               const SizedBox(height: 8),
-                              // Selection Options - Colors
                               if (product.colors != null &&
                                   product.colors!.isNotEmpty)
                                 SelectionOptions(
@@ -213,7 +269,6 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                   },
                                   optionType: OptionType.color,
                                 ),
-                              // Selection Options - Sizes
                               if (product.sizes != null &&
                                   product.sizes!.isNotEmpty)
                                 SelectionOptions(
@@ -227,7 +282,6 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                   },
                                   optionType: OptionType.size,
                                 ),
-                              // Selected Address Display
                               if (_selectedAddress != null)
                                 _buildAddressDisplay(),
                               DescriptionTab(
@@ -249,6 +303,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                       productName: product.name,
                       isInWishlist: _isInWishlist,
                       onFavoriteTap: () => _toggleWishlist(product),
+                      onAddToCartTap: () => _addToCart(product), // 🚨 ADDED
                       onBuyNowTap: () {
                         if (_selectedAddress == null) {
                           _showAddressSelection();
@@ -256,6 +311,26 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                           _proceedToPayment(_selectedAddress!);
                         }
                       },
+                    ),
+                  ),
+
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: BottomActionBar(
+                      productName: product.name,
+                      isInWishlist: _isInWishlist,
+                      onFavoriteTap: () => _toggleWishlist(product),
+                      onAddToCartTap: () => _addToCart(product),
+                      onBuyNowTap: () {
+                        if (_selectedAddress == null) {
+                          _showAddressSelection();
+                        } else {
+                          _proceedToPayment(_selectedAddress!);
+                        }
+                      },
+                      // No onChatTap needed anymore - it's handled internally
                     ),
                   ),
                 ],

@@ -19,8 +19,12 @@ import {
   productVariants,
   colors,
   sizes,
+  cartItems,
 } from '../drizzle/schema';
 import { eq, and, desc, sql, SQL } from 'drizzle-orm';
+import { SupabaseService } from 'src/supabase/supabase.service';
+import { v4 as uuidv4 } from 'uuid';
+import { AddToCartDto } from './dto/cart.dto';
 
 interface ProductUpdateShape {
   name?: string;
@@ -37,6 +41,7 @@ export class ProductsService {
   constructor(
     private drizzle: DrizzleService,
     private cloudflareService: CloudflareService,
+    private supabaseService: SupabaseService,
   ) {}
 
   async create(createProductDto: CreateProductDto) {
@@ -52,7 +57,6 @@ export class ProductsService {
       throw new NotFoundException(`Category with ID ${categoryId} not found`);
     }
 
-    // 🚀 OPTIMIZATION 1: Generate Slug in 1 Query instead of N Queries
     let slug = productData.slug;
     if (!slug) {
       slug = productData.name
@@ -60,7 +64,6 @@ export class ProductsService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-      // Fetch all existing slugs that start with the base slug in ONE query
       const existingSlugs = await this.drizzle.db
         .select({ slug: products.slug })
         .from(products)
@@ -108,14 +111,12 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    // ✅ Using Cloudflare
     const uploadResults = await Promise.all(
       imageUrls.map((url) =>
-        this.cloudflareService.uploadFromUrl(url, 'products'),
+        this.supabaseService.uploadFromUrl(url, 'products'),
       ),
     );
 
-    // 🚀 OPTIMIZATION 2: Batch insert all images in ONE query instead of N queries
     const imagesToInsert = uploadResults.map((result) => ({
       url: result.secure_url,
       publicId: result.public_id,
@@ -141,8 +142,7 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    // ✅ Using Cloudflare
-    const result = await this.cloudflareService.uploadBase64(
+    const result = await this.supabaseService.uploadBase64(
       base64Dto.base64Image,
       'products',
     );
@@ -224,6 +224,284 @@ export class ProductsService {
     return this.findVariantWithRelations(variant.id);
   }
 
+  // ==========================================
+  // CART METHODS
+  // ==========================================
+
+  async addToCart(userId: string, dto: AddToCartDto) {
+    const { productId, productVariantId, quantity } = dto;
+
+    let price: number;
+    let stock: number;
+    let productName: string;
+    let actualVariantId: string | null = null;
+
+    if (productVariantId) {
+      const variant = await this.drizzle.db.query.productVariants.findFirst({
+        where: eq(productVariants.id, productVariantId),
+        with: { product: true },
+      });
+
+      if (!variant) throw new NotFoundException('Product variant not found');
+      if (variant.stock < quantity)
+        throw new BadRequestException('Insufficient stock');
+
+      price = variant.price
+        ? Number(variant.price)
+        : Number(variant.product?.price || 0);
+      stock = variant.stock;
+      productName = variant.product?.name || 'Product';
+      actualVariantId = variant.id;
+    } else {
+      const product = await this.drizzle.db.query.products.findFirst({
+        where: eq(products.id, productId),
+      });
+
+      if (!product) throw new NotFoundException('Product not found');
+      if (product.stock < quantity)
+        throw new BadRequestException('Insufficient stock');
+
+      price = Number(product.price);
+      stock = product.stock;
+      productName = product.name;
+    }
+
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(
+        and(
+          eq(cartItems.userId, userId),
+          eq(cartItems.productId, productId),
+          productVariantId
+            ? eq(cartItems.productVariantId, productVariantId)
+            : sql`${cartItems.productVariantId} IS NULL`,
+        ),
+      )
+      .limit(1);
+
+    let cartItemId: string;
+
+    if (existingItem) {
+      const newQuantity = existingItem.quantity + quantity;
+      if (stock < newQuantity)
+        throw new BadRequestException(
+          'Insufficient stock for updated quantity',
+        );
+
+      const [updated] = await this.drizzle.db
+        .update(cartItems)
+        .set({ quantity: newQuantity, updatedAt: new Date() })
+        .where(eq(cartItems.id, existingItem.id))
+        .returning();
+      cartItemId = updated.id;
+    } else {
+      const [newItem] = await this.drizzle.db
+        .insert(cartItems)
+        .values({
+          id: uuidv4(),
+          userId,
+          productId,
+          productVariantId: actualVariantId,
+          quantity,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      cartItemId = newItem.id;
+    }
+
+    const [cartItem] = await this.drizzle.db.query.cartItems.findMany({
+      where: eq(cartItems.id, cartItemId),
+      with: {
+        variant: {
+          with: {
+            product: { with: { images: true } },
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    const productVariant = cartItem?.variant;
+    const product = productVariant?.product;
+    const unitPrice = productVariant?.price
+      ? Number(productVariant.price)
+      : price;
+
+    return {
+      id: cartItem.id,
+      productVariantId: cartItem.productVariantId,
+      productId: cartItem.productId || product?.id || '',
+      name: product?.name || productName,
+      price: unitPrice,
+      quantity: cartItem.quantity,
+      totalPrice: unitPrice * cartItem.quantity,
+      inStock: (productVariant?.stock || stock) > 0,
+      imageUrl: product?.images?.[0]?.url || '',
+      color: productVariant?.color?.name || null,
+      size: productVariant?.size?.name || null,
+    };
+  }
+  async updateCartItem(userId: string, itemId: string, quantity: number) {
+    if (quantity <= 0) {
+      return this.removeCartItem(userId, itemId);
+    }
+
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .limit(1);
+
+    if (!existingItem) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    // Check stock for both variant and non-variant cases
+    if (existingItem.productVariantId) {
+      const variant = await this.drizzle.db.query.productVariants.findFirst({
+        where: eq(productVariants.id, existingItem.productVariantId),
+      });
+
+      if (variant && variant.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    } else {
+      const product = await this.drizzle.db.query.products.findFirst({
+        where: eq(products.id, existingItem.productId as string),
+      });
+
+      if (product && product.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    }
+
+    const [updated] = await this.drizzle.db
+      .update(cartItems)
+      .set({ quantity, updatedAt: new Date() })
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    // ✅ FIXED: Load product with images
+    const product = await this.drizzle.db.query.products.findFirst({
+      where: eq(products.id, existingItem.productId as string),
+      with: {
+        images: true, // ✅ Added this to load images
+      },
+    });
+
+    // Get variant details if it exists
+    let variant: any = null;
+    if (updated.productVariantId) {
+      variant = await this.drizzle.db.query.productVariants.findFirst({
+        where: eq(productVariants.id, updated.productVariantId),
+        with: {
+          color: true,
+          size: true,
+        },
+      });
+    }
+
+    // If variant exists, use its price; otherwise use product price
+    let unitPrice: number;
+    if (variant && variant.price) {
+      unitPrice = Number(variant.price);
+    } else if (product) {
+      unitPrice = Number(product.price);
+    } else {
+      unitPrice = 0;
+    }
+
+    // Get stock from variant or product
+    let stock: number;
+    if (variant) {
+      stock = variant.stock;
+    } else if (product) {
+      stock = product.stock;
+    } else {
+      stock = 0;
+    }
+
+    return {
+      id: updated.id,
+      productVariantId: updated.productVariantId,
+      productId: existingItem.productId as string,
+      name: product?.name || 'Unknown Product',
+      price: unitPrice,
+      quantity: updated.quantity,
+      totalPrice: unitPrice * updated.quantity,
+      inStock: stock > 0,
+      imageUrl: product?.images?.[0]?.url || '', // ✅ Now works
+      color: variant?.color?.name || null,
+      size: variant?.size?.name || null,
+    };
+  }
+
+  async removeCartItem(userId: string, itemId: string) {
+    const [deleted] = await this.drizzle.db
+      .delete(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .returning();
+
+    if (!deleted) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    return { message: 'Cart item removed successfully' };
+  }
+
+  async getCartItems(userId: string) {
+    const userCartItems = await this.drizzle.db.query.cartItems.findMany({
+      where: eq(cartItems.userId, userId),
+      with: {
+        variant: {
+          with: {
+            product: { with: { images: true } },
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    return userCartItems.map((cartItem) => {
+      const variant = cartItem.variant;
+      const product = variant?.product;
+      const unitPrice = variant?.price
+        ? Number(variant.price)
+        : Number(product?.price || 0);
+
+      return {
+        id: cartItem.id,
+        productVariantId: cartItem.productVariantId,
+        productId: product?.id || '',
+        name: product?.name || 'Unknown Product',
+        price: unitPrice,
+        quantity: cartItem.quantity,
+        totalPrice: unitPrice * cartItem.quantity,
+        inStock: (variant?.stock || 0) > 0,
+        imageUrl: product?.images?.[0]?.url || '',
+        color: variant?.color?.name || null,
+        size: variant?.size?.name || null,
+      };
+    });
+  }
+
+  async clearCart(userId: string) {
+    await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
+    return { message: 'Cart cleared successfully' };
+  }
+
+  // ==========================================
+  // PRODUCT METHODS
+  // ==========================================
+
   async findAll() {
     return this.drizzle.db.query.products.findMany({
       where: eq(products.isActive, true),
@@ -269,13 +547,11 @@ export class ProductsService {
   async update(id: string, updateProductDto: UpdateProductDto) {
     await this.findOne(id);
 
-    // Cast to strict interface to prevent 'any' inference
     const dto = updateProductDto as unknown as ProductUpdateShape;
     const categoryId = dto.categoryId;
 
     const updateValues: Record<string, any> = { updatedAt: new Date() };
 
-    // ✅ FIXED: All member accesses are now strictly typed
     if (dto.name !== undefined) updateValues.name = dto.name;
     if (dto.slug !== undefined) updateValues.slug = dto.slug;
     if (dto.description !== undefined)
@@ -317,8 +593,7 @@ export class ProductsService {
 
     if (!image) throw new NotFoundException('Image not found');
 
-    // ✅ Using Cloudflare
-    await this.cloudflareService.deleteImage(image.publicId);
+    await this.supabaseService.deleteImage(image.publicId);
     await this.drizzle.db
       .delete(mediaAssets)
       .where(eq(mediaAssets.id, imageId));
@@ -329,11 +604,10 @@ export class ProductsService {
   async remove(id: string) {
     const product = await this.findOne(id);
 
-    // 🚀 OPTIMIZATION 3: Delete from Cloudflare in parallel instead of sequentially
     if (product.images && product.images.length > 0) {
       await Promise.all(
         product.images.map((image) =>
-          this.cloudflareService.deleteImage(image.publicId),
+          this.supabaseService.deleteImage(image.publicId),
         ),
       );
     }
@@ -346,7 +620,6 @@ export class ProductsService {
     return deletedProduct;
   }
 
-  // 🚀 OPTIMIZATION 4: Atomic stock update to prevent race conditions
   async updateVariantStock(variantId: string, quantity: number) {
     const [updatedVariant] = await this.drizzle.db
       .update(productVariants)
@@ -357,7 +630,7 @@ export class ProductsService {
       .where(
         and(
           eq(productVariants.id, variantId),
-          sql`${productVariants.stock} >= ${quantity}`, // Ensure sufficient stock atomically
+          sql`${productVariants.stock} >= ${quantity}`,
         ),
       )
       .returning();
@@ -422,7 +695,6 @@ export class ProductsService {
 
     if (searchTerm && searchTerm.trim()) {
       const searchPattern = `%${searchTerm.toLowerCase()}%`;
-      // 🚀 OPTIMIZATION 5: Use native ILIKE instead of LOWER() + LIKE
       conditions.push(
         sql`(${products.name} ILIKE ${searchPattern} OR ${products.description} ILIKE ${searchPattern})`,
       );
@@ -487,7 +759,6 @@ export class ProductsService {
     };
   }
 
-  // 🚀 OPTIMIZATION 6: Use Postgres Recursive CTE instead of JS While Loop
   private async getAllDescendantCategoryIds(
     parentId: string,
   ): Promise<string[]> {
@@ -501,7 +772,6 @@ export class ProductsService {
       SELECT id FROM category_tree WHERE id != ${parentId};
     `);
 
-    // ✅ FIXED: Drizzle returns a pg QueryResult object. We must access the 'rows' array inside it.
     const rows = (result as unknown as { rows: Array<Record<string, unknown>> })
       .rows;
 

@@ -9,9 +9,12 @@ class StorageService {
   static const String _userPhoneKey = 'user_phone';
   static const String _userProfileImageKey = 'user_profile_image';
   static const String _userMarketIdKey = 'user_market_id';
-  static const String _isAdminKey = 'is_admin'; // 👈 ADDED
+  static const String _isAdminKey = 'is_admin';
 
   final FlutterSecureStorage _secureStorage;
+
+  // 🚨 ADDED: In-memory cache to prevent FlutterSecureStorage read delays
+  String? _cachedToken;
 
   StorageService({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? const FlutterSecureStorage();
@@ -20,11 +23,21 @@ class StorageService {
   // Auth related
   // ==========================================
   Future<void> saveAuthToken(String token) async {
+    _cachedToken = token; // 🚨 Cache in memory first
     await _secureStorage.write(key: _tokenKey, value: token);
   }
 
   Future<String?> getAuthToken() async {
-    return await _secureStorage.read(key: _tokenKey);
+    // 🚨 Return cached token instantly if available
+    if (_cachedToken != null && _cachedToken!.isNotEmpty) {
+      return _cachedToken;
+    }
+
+    final token = await _secureStorage.read(key: _tokenKey);
+    if (token != null && token.isNotEmpty) {
+      _cachedToken = token; // Update cache if read from storage
+    }
+    return token;
   }
 
   Future<void> saveUserId(String userId) async {
@@ -49,10 +62,15 @@ class StorageService {
   }
 
   // ==========================================
-  // Admin related (👈 ADDED)
+  // Admin related
   // ==========================================
   Future<void> saveIsAdmin(bool isAdmin) async {
     await _secureStorage.write(key: _isAdminKey, value: isAdmin.toString());
+  }
+
+  Future<bool> getIsAdmin() async {
+    final value = await _secureStorage.read(key: _isAdminKey);
+    return value == 'true';
   }
 
   // ==========================================
@@ -98,15 +116,11 @@ class StorageService {
     return await _secureStorage.read(key: _userMarketIdKey);
   }
 
-  Future<bool> getIsAdmin() async {
-    final value = await _secureStorage.read(key: _isAdminKey);
-    return value == 'true';
-  }
-
   // ==========================================
   // Clear Data (Logout)
   // ==========================================
   Future<void> clearAuthData() async {
+    _cachedToken = null; // 🚨 Clear the in-memory cache
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);
@@ -115,6 +129,6 @@ class StorageService {
     await _secureStorage.delete(key: _userPhoneKey);
     await _secureStorage.delete(key: _userProfileImageKey);
     await _secureStorage.delete(key: _userMarketIdKey);
-    await _secureStorage.delete(key: _isAdminKey); // 👈 ADD THIS
+    await _secureStorage.delete(key: _isAdminKey);
   }
 }

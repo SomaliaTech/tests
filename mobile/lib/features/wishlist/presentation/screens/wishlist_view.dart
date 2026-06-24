@@ -4,9 +4,14 @@ import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_state.dart';
 import 'package:mobile/features/wishlist/presentation/widgets/wishlist_item_card.dart';
 import 'package:toastification/toastification.dart';
+
+// Cart imports
 import '../../../cart/presentation/bloc/cart_bloc.dart';
 import '../../../cart/presentation/bloc/cart_event.dart';
 import '../../../cart/presentation/bloc/cart_state.dart';
+// 🚨 ADDED: Import the CartItem entity
+import '../../../cart/domain/entities/cart_item.dart';
+
 import '../bloc/wishlist_bloc.dart';
 import '../bloc/wishlist_event.dart';
 
@@ -130,12 +135,37 @@ class WishlistListView extends StatelessWidget {
                       );
                     },
                     onAddToCart: () {
-                      context.read<CartBloc>().add(
-                        AddToCartEvent(
-                          productVariantId: item.productVariantId,
-                          quantity: 1,
-                        ),
+                      if (item.productVariantId.isEmpty) {
+                        toastification.show(
+                          title: const Text('Cannot Add to Cart'),
+                          description: const Text(
+                            'Please select a color and size for this product first',
+                          ),
+                          type: ToastificationType.error,
+                          style: ToastificationStyle.fillColored,
+                          autoCloseDuration: const Duration(seconds: 3),
+                        );
+                        return;
+                      }
+
+                      // 🚨 FIXED: Construct the full CartItem object locally
+                      final cartItem = CartItem(
+                        id: item
+                            .productVariantId, // Use variant ID as the unique cart ID
+                        productId: item.id,
+                        productVariantId: item.productVariantId,
+                        name: item.name,
+                        imageUrl: item.imageUrl,
+                        price: item.price,
+                        quantity: 1,
+                        maxStock: 999, // Assume in stock for wishlist
+                        inStock: true,
+                        color: null,
+                        size: null,
                       );
+
+                      // 🚨 FIXED: Pass the CartItem object to the event
+                      context.read<CartBloc>().add(AddToCartEvent(cartItem));
                     },
                   ),
                 );

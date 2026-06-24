@@ -5,14 +5,18 @@ import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/chart_data_model.dart';
 import 'package:mobile/features/admin/data/models/dashboard_stats_model.dart';
+import 'package:mobile/features/admin/data/models/device_traffic_model.dart';
+import 'package:mobile/features/admin/data/models/location_traffic_model.dart';
+import 'package:mobile/features/admin/data/models/product_traffic_model.dart';
+import 'package:mobile/features/admin/domain/entities/chart_data_entity.dart';
+import 'package:mobile/features/admin/domain/entities/dashboard_stats_entity.dart';
+import 'package:mobile/features/admin/domain/entities/device_traffic_entity.dart';
+import 'package:mobile/features/admin/domain/entities/location_traffic_entity.dart';
+import 'package:mobile/features/admin/domain/entities/product_traffic_entity.dart';
+import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
 
 abstract class DashboardRemoteDataSource {
-  Future<DashboardStatsModel> getDashboardStats(String period);
-  Future<List<ChartDataModel>> getUsersChartData(String period);
-  Future<List<DeviceTrafficModel>> getDeviceTraffic();
-  Future<List<LocationTrafficModel>> getLocationTraffic();
-  Future<List<ProductTrafficModel>> getProductTraffic(String period);
-  Future<List<ChartDataModel>> getRevenueChart(String period);
+  Future<DashboardLoaded> getAllDashboardData(String period);
 }
 
 class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
@@ -30,132 +34,60 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
     return token;
   }
 
+  // ✅ OPTIMIZED: Single API call for all dashboard data
   @override
-  Future<DashboardStatsModel> getDashboardStats(String period) async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse('${ApiConstants.baseUrl}/dashboard/stats?period=$period'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+  Future<DashboardLoaded> getAllDashboardData(String period) async {
+    print(
+      '🚀 [Dashboard] Fetching ALL data in ONE request for period: $period',
     );
+    final stopwatch = Stopwatch()..start();
 
-    if (response.statusCode == 200) {
-      return DashboardStatsModel.fromJson(json.decode(response.body));
-    } else {
-      throw ServerException('Failed to load stats: ${response.statusCode}');
-    }
-  }
+    try {
+      final token = await _getToken();
+      final url = '${ApiConstants.baseUrl}/admin/dashboard/all?period=$period';
+      print('📍 [Dashboard] URL: $url');
 
-  @override
-  Future<List<ChartDataModel>> getUsersChartData(String period) async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse('${ApiConstants.baseUrl}/dashboard/users-chart?period=$period'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
-      return jsonList.map((json) => ChartDataModel.fromJson(json)).toList();
-    } else {
-      throw ServerException('Failed to load chart: ${response.statusCode}');
-    }
-  }
-
-  @override
-  Future<List<DeviceTrafficModel>> getDeviceTraffic() async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse('${ApiConstants.baseUrl}/dashboard/device-traffic'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
-      return jsonList.map((json) => DeviceTrafficModel.fromJson(json)).toList();
-    } else {
-      throw ServerException(
-        'Failed to load device traffic: ${response.statusCode}',
+      final response = await client.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
-    }
-  }
 
-  @override
-  Future<List<LocationTrafficModel>> getLocationTraffic() async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse('${ApiConstants.baseUrl}/dashboard/location-traffic'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+      print('📡 [Dashboard] Response Status: ${response.statusCode}');
+      print('⏱️ [Dashboard] Response Time: ${stopwatch.elapsedMilliseconds}ms');
 
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
-      return jsonList
-          .map((json) => LocationTrafficModel.fromJson(json))
-          .toList();
-    } else {
-      throw ServerException(
-        'Failed to load location traffic: ${response.statusCode}',
-      );
-    }
-  }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('✅ [Dashboard] All data parsed successfully');
 
-  @override
-  Future<List<ProductTrafficModel>> getProductTraffic(String period) async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse(
-        '${ApiConstants.baseUrl}/dashboard/product-traffic?period=$period',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
-      return jsonList
-          .map((json) => ProductTrafficModel.fromJson(json))
-          .toList();
-    } else {
-      throw ServerException(
-        'Failed to load product traffic: ${response.statusCode}',
-      );
-    }
-  }
-
-  @override
-  Future<List<ChartDataModel>> getRevenueChart(String period) async {
-    final token = await _getToken();
-    final response = await client.get(
-      Uri.parse(
-        '${ApiConstants.baseUrl}/dashboard/revenue-chart?period=$period',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
-      return jsonList.map((json) => ChartDataModel.fromJson(json)).toList();
-    } else {
-      throw ServerException(
-        'Failed to load revenue chart: ${response.statusCode}',
-      );
+        return DashboardLoaded(
+          stats: DashboardStatsModel.fromJson(data['stats']),
+          usersChartData: (data['usersChartData'] as List)
+              .map((json) => ChartDataModel.fromJson(json).toEntity())
+              .toList(),
+          revenueChartData: (data['revenueChartData'] as List)
+              .map((json) => ChartDataModel.fromJson(json).toEntity())
+              .toList(),
+          deviceTraffic: (data['deviceTraffic'] as List)
+              .map((json) => DeviceTrafficModel.fromJson(json).toEntity())
+              .toList(),
+          locationTraffic: (data['locationTraffic'] as List)
+              .map((json) => LocationTrafficModel.fromJson(json).toEntity())
+              .toList(),
+          productTraffic: (data['productTraffic'] as List)
+              .map((json) => ProductTrafficModel.fromJson(json).toEntity())
+              .toList(),
+          period: period,
+        );
+      } else {
+        throw ServerException('Failed: ${response.statusCode}');
+      }
+    } catch (e, stackTrace) {
+      print('❌ [Dashboard] Exception: $e');
+      print('📚 [Dashboard] Stack trace: $stackTrace');
+      rethrow;
     }
   }
 }

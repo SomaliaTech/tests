@@ -50,6 +50,20 @@
       "when": 1782050914015,
       "tag": "0006_spooky_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782243233459,
+      "tag": "0007_brief_true_believers",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782267044056,
+      "tag": "0008_vengeful_blizzard",
+      "breakpoints": true
     }
   ]
 }

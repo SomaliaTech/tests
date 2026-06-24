@@ -35,49 +35,22 @@ class CartItemCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Product Image
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  item.imageUrl,
-                  width: 90,
-                  height: 90,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: 90,
-                      height: 90,
-                      color: Colors.grey[200],
-                      child: const Icon(Iconsax.image, color: Colors.grey),
-                    );
-                  },
-                ),
-              ),
-              if (!item.inStock)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Out of Stock',
-                        style: TextStyle(
-                          color: Color(0xFFFF4757),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          // 🚀 FIXED: Robust Image Loading
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: item.imageUrl.isNotEmpty
+                ? Image.network(
+                    item.imageUrl,
+                    width: 90,
+                    height: 90,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return _buildPlaceholder();
+                    },
+                  )
+                : _buildPlaceholder(),
           ),
           const SizedBox(width: 12),
-          // Product Details
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,7 +78,6 @@ class CartItemCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Quantity Controls
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
@@ -124,7 +96,7 @@ class CartItemCard extends StatelessWidget {
                                 size: 16,
                                 color: item.quantity == 1
                                     ? Colors.grey[400]
-                                    : const Color(0xFF333333),
+                                    : const Color(0xFF33),
                               ),
                             ),
                           ),
@@ -151,14 +123,13 @@ class CartItemCard extends StatelessWidget {
                                 size: 16,
                                 color: !item.inStock
                                     ? Colors.grey[400]
-                                    : const Color(0xFF333333),
+                                    : const Color(0xFF3333),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    // Remove Button
                     GestureDetector(
                       onTap: onRemove,
                       child: Container(
@@ -177,6 +148,16 @@ class CartItemCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  // Helper widget for missing images
+  Widget _buildPlaceholder() {
+    return Container(
+      width: 90,
+      height: 90,
+      color: Colors.grey[200],
+      child: const Icon(Iconsax.image, color: Colors.grey, size: 32),
     );
   }
 }

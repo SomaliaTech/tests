@@ -13,14 +13,13 @@ class CheckoutPaymentModal extends StatefulWidget {
   final List<CartItem> cartItems;
   final Address address;
   final double totalAmount;
-  final VoidCallback onOrderComplete;
 
+  // 🚨 FIXED: Removed the 'onOrderComplete' parameter
   const CheckoutPaymentModal({
     super.key,
     required this.cartItems,
     required this.address,
     required this.totalAmount,
-    required this.onOrderComplete,
   });
 
   @override
@@ -38,7 +37,6 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
       icon: Iconsax.mobile,
       color: Color(0xFF2ED573),
     ),
-
     PaymentMethod(
       id: 'cash_on_delivery',
       name: 'Cash on Delivery',
@@ -138,14 +136,13 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
           // Close dialog
           Navigator.of(dialogContext).pop();
 
-          // Dispatch cart order completed event to clear cache
+          // 🚨 Dispatch cart order completed event (This triggers the success dialog in CartView)
           context.read<CartBloc>().add(CartOrderCompletedEvent());
 
           // Close modal
           Navigator.of(context).pop();
 
-          // Call callback
-          widget.onOrderComplete();
+          // 🚨 REMOVED: widget.onOrderComplete(); // No longer needed
         },
       ),
     );
@@ -158,11 +155,11 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
       builder: (_) => CheckoutFailedDialog(
         errorMessage: errorMessage,
         onTryAgain: () {
-          Navigator.pop(context); // Close dialog
+          Navigator.pop(context);
         },
         onCancel: () {
-          Navigator.pop(context); // Close dialog
-          Navigator.pop(context); // Close modal
+          Navigator.pop(context);
+          Navigator.pop(context);
         },
       ),
     );

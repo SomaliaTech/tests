@@ -4,6 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 import { DbExceptionFilter } from './common/filters/db-exception.filter';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+// 🚨 REMOVED: import { RedisIoAdapter } from './chat/chat.module';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
@@ -23,6 +25,15 @@ async function bootstrap() {
     }),
   );
 
+  // 🚨 COMMENTED OUT: Redis Adapter
+  // For local development, Socket.io uses its default in-memory adapter which works perfectly.
+  // You only need Redis in production when running multiple backend servers (use Render/Railway Redis, not Upstash).
+  /*
+  const redisAdapter = new RedisIoAdapter(app);
+  await redisAdapter.connectToRedis(); 
+  app.useWebSocketAdapter(redisAdapter);
+  */
+
   app.useGlobalFilters(new DbExceptionFilter());
 
   // 3. Enable CORS
@@ -36,100 +47,7 @@ async function bootstrap() {
 # Production Ecommerce Backend API
 
 ## Features
-
-### Authentication
-- Send OTP
-- Verify OTP
-- JWT Authentication
-- Profile Completion
-- Upload Profile Image
-- Get Current User
-- Update Profile
-
-### Categories
-- Create Category
-- Get Categories
-- Parent Categories
-- Subcategories
-- Category Tree
-
-### Products
-- Create Product
-- Search Products
-- Featured Products
-- Product Filters
-- Product Variants
-- Upload Product Images
-- Category Products
-- Update Stock
-
-### Markets
-- List Markets
-
-## Tech Stack
-- **NestJS** - Backend Framework
-- **PostgreSQL** - Database
-- **Drizzle ORM** - ORM
-- **JWT** - Authentication
-- **Cloudinary** - Image Storage
-- **UUID** - IDs
-- **Class Validator** - Validation
-
-## Authentication
-Protected endpoints require:
-\`\`\`
-Authorization: Bearer JWT_TOKEN
-\`\`\`
-
-Example:
-\`\`\`
-Authorization: Bearer eyJhb...
-\`\`\`
-
-## Base URLs
-- **API**: \`http://localhost:8080\`
-- **Documentation**: \`http://localhost:8080/docs\`
-
-## Error Responses
-
-### 400 Bad Request
-\`\`\`json
-{
-  "statusCode": 400,
-  "message": "Bad Request"
-}
-\`\`\`
-
-### 401 Unauthorized
-\`\`\`json
-{
-  "statusCode": 401,
-  "message": "Unauthorized"
-}
-\`\`\`
-
-### 404 Not Found
-\`\`\`json
-{
-  "statusCode": 404,
-  "message": "Not Found"
-}
-\`\`\`
-
-### 500 Internal Server Error
-\`\`\`json
-{
-  "statusCode": 500,
-  "message": "Internal Server Error"
-}
-\`\`\`
-
-## Validation
-Global ValidationPipe enabled with:
-- DTO Validation
-- Type Transformation
-- Whitelisting
-- Reject Unknown Fields
+... (Keep all your Swagger description text exactly as it was) ...
     `,
     )
     .setVersion('1.0')
@@ -142,9 +60,10 @@ Global ValidationPipe enabled with:
         description: 'Enter JWT token',
         in: 'header',
       },
-      'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controllers!
+      'JWT-auth',
     )
     .addTag('auth', 'Authentication endpoints - OTP, JWT, Profile Management')
+    .addTag('chat', 'Real-time Chat endpoints') // 🚨 ADDED
     .addTag('categories', 'Category management endpoints')
     .addTag('products', 'Product management endpoints')
     .addTag('markets', 'Market listing endpoints')

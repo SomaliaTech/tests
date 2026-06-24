@@ -11,8 +11,10 @@ import { AppController } from './app.controller';
 import { AdminModule } from './admin/admin.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AppService } from './app.service';
-import { CloudflareModule } from './cloudfare/cloudflare.module';
 
+import { SupabaseModule } from './supabase/supabase.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ChatModule } from './chat/chat.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -20,7 +22,8 @@ import { CloudflareModule } from './cloudfare/cloudflare.module';
     }),
 
     DrizzleModule,
-    CloudflareModule,
+    // CloudflareModule,
+    SupabaseModule,
     CategoriesModule,
     ProductsModule,
     AuthModule,
@@ -28,6 +31,8 @@ import { CloudflareModule } from './cloudfare/cloudflare.module';
     MarketsModule,
     OrdersModule,
     DashboardModule,
+    NotificationsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

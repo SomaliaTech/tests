@@ -8,6 +8,9 @@ import {
   Delete,
   ParseUUIDPipe,
   Query,
+  UseGuards,
+  Request,
+  Put,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +29,9 @@ import {
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 import { SearchProductDto } from './dto/search-product.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+// ✅ Fixed: Import from the correct path
+import { AddProductToCartDto, UpdateCartItemQuantityDto } from './dto/cart.dto';
 
 @ApiTags('products')
 @Controller('products')
@@ -33,6 +39,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Create a new product',
@@ -309,6 +316,7 @@ export class ProductsController {
   }
 
   @Post(':id/images/urls')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Upload product images (URLs)',
@@ -350,6 +358,7 @@ export class ProductsController {
   }
 
   @Post(':id/images/base64')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Upload product image (Base64)',
@@ -377,6 +386,7 @@ export class ProductsController {
   }
 
   @Post(':id/variants')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Add product variant',
@@ -404,6 +414,7 @@ export class ProductsController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Update product',
@@ -435,6 +446,7 @@ export class ProductsController {
   }
 
   @Delete(':id/images/:imageId')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Delete product image',
@@ -466,6 +478,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Delete product',
@@ -493,6 +506,7 @@ export class ProductsController {
   }
 
   @Patch('variants/:variantId/stock')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Update variant stock',
@@ -532,5 +546,77 @@ export class ProductsController {
     @Body('quantity') quantity: number,
   ) {
     return this.productsService.updateVariantStock(variantId, quantity);
+  }
+
+  // ==========================================
+  // CART ENDPOINTS
+  // ==========================================
+
+  @Post('cart')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Add item to cart',
+    description: "Adds a product variant to the user's cart.",
+  })
+  @ApiBody({ type: AddProductToCartDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Item added to cart successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or insufficient stock',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async addToCart(@Request() req, @Body() addToCartDto: AddProductToCartDto) {
+    const userId = req.user.id;
+    // ✅ FIXED: Pass the entire DTO, not individual fields
+    return this.productsService.addToCart(userId, addToCartDto);
+  }
+
+  @Put('cart/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Update cart item quantity',
+    description: 'Updates the quantity of a specific cart item.',
+  })
+  @ApiParam({
+    name: 'itemId',
+    description: 'Cart item ID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiBody({ type: UpdateCartItemQuantityDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Cart item updated successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or insufficient stock',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Cart item not found',
+  })
+  async updateCartItem(
+    @Request() req,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() updateCartItemDto: UpdateCartItemQuantityDto,
+  ) {
+    const userId = req.user.id;
+    return this.productsService.updateCartItem(
+      userId,
+      itemId,
+      updateCartItemDto.quantity,
+    );
   }
 }

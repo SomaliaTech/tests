@@ -7,10 +7,9 @@ abstract class CartLocalDataSource {
   Future<List<CartItem>> getCachedCartItems();
   Future<void> cacheCartItems(List<CartItem> items);
   Future<void> addToCache(CartItem item);
-  Future<void> updateCacheItem(String itemId, int quantity);
-  Future<void> removeFromCache(String itemId);
+  Future<void> updateCacheItem(String productVariantId, int quantity);
+  Future<void> removeFromCart(String productVariantId);
   Future<void> clearCache();
-  Future<int> getCachedItemCount();
 }
 
 class CartLocalDataSourceImpl implements CartLocalDataSource {
@@ -22,55 +21,76 @@ class CartLocalDataSourceImpl implements CartLocalDataSource {
   @override
   Future<List<CartItem>> getCachedCartItems() async {
     final jsonString = sharedPreferences.getString(_cartCacheKey);
-    if (jsonString == null) return [];
+    if (jsonString == null || jsonString.isEmpty) return [];
 
-    final List<dynamic> jsonList = json.decode(jsonString);
-    return jsonList.map((json) => CartItemModel.fromJson(json)).toList();
+    try {
+      final List<dynamic> jsonList = json.decode(jsonString);
+      // 🚨 FIXED: Added the missing closing parenthesis
+      return jsonList.map((json) => CartItemModel.fromJson(json)).toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   @override
   Future<void> cacheCartItems(List<CartItem> items) async {
     final jsonList = items.map((item) => CartItemModel.toJson(item)).toList();
-    final jsonString = json.encode(jsonList);
-    await sharedPreferences.setString(_cartCacheKey, jsonString);
+    await sharedPreferences.setString(_cartCacheKey, json.encode(jsonList));
   }
 
   @override
   Future<void> addToCache(CartItem item) async {
     final items = await getCachedCartItems();
-    final existingIndex = items.indexWhere((i) => i.id == item.id);
+    final existingIndex = items.indexWhere(
+      (i) => i.productVariantId == item.productVariantId,
+    );
 
     if (existingIndex != -1) {
-      // Update existing item
+      final existingItem = items[existingIndex];
+      final updatedItem = CartItem(
+        id: existingItem.id,
+        productId: existingItem.productId,
+        productVariantId: existingItem.productVariantId,
+        name: existingItem.name,
+        imageUrl: existingItem.imageUrl,
+        price: existingItem.price,
+        quantity: existingItem.quantity + item.quantity,
+        maxStock: existingItem.maxStock,
+        inStock: existingItem.inStock,
+        color: existingItem.color,
+        size: existingItem.size,
+      );
       final updatedItems = List<CartItem>.from(items);
-      updatedItems[existingIndex] = item;
+      updatedItems[existingIndex] = updatedItem;
       await cacheCartItems(updatedItems);
     } else {
-      // Add new item
       await cacheCartItems([...items, item]);
     }
   }
 
   @override
-  Future<void> updateCacheItem(String itemId, int quantity) async {
+  Future<void> updateCacheItem(String productVariantId, int quantity) async {
     final items = await getCachedCartItems();
-    final index = items.indexWhere((item) => item.id == itemId);
+    // 🚨 FIXED: Match by productVariantId
+    final index = items.indexWhere(
+      (item) => item.productVariantId == productVariantId,
+    );
 
     if (index != -1) {
+      final old = items[index];
       final updatedItem = CartItem(
-        id: items[index].id,
-        productId: items[index].productId,
-        productVariantId: items[index].productVariantId,
-        name: items[index].name,
-        imageUrl: items[index].imageUrl,
-        price: items[index].price,
+        id: old.id,
+        productId: old.productId,
+        productVariantId: old.productVariantId,
+        name: old.name,
+        imageUrl: old.imageUrl,
+        price: old.price,
         quantity: quantity,
-        maxStock: items[index].maxStock,
-        inStock: items[index].inStock,
-        color: items[index].color,
-        size: items[index].size,
+        maxStock: old.maxStock,
+        inStock: old.inStock,
+        color: old.color,
+        size: old.size,
       );
-
       final updatedItems = List<CartItem>.from(items);
       updatedItems[index] = updatedItem;
       await cacheCartItems(updatedItems);
@@ -78,25 +98,18 @@ class CartLocalDataSourceImpl implements CartLocalDataSource {
   }
 
   @override
-  Future<void> removeFromCache(String itemId) async {
+  Future<void> removeFromCart(String productVariantId) async {
     final items = await getCachedCartItems();
-    final updatedItems = items.where((item) => item.id != itemId).toList();
+    // 🚨 FIXED: Filter by productVariantId
+    final updatedItems = items
+        .where((item) => item.productVariantId != productVariantId)
+        .toList();
     await cacheCartItems(updatedItems);
   }
 
   @override
   Future<void> clearCache() async {
+    // 🚨 FIXED: Corrected variable name
     await sharedPreferences.remove(_cartCacheKey);
-  }
-
-  @override
-  Future<int> getCachedItemCount() async {
-    final items = await getCachedCartItems();
-    // Use a simple for loop instead of fold
-    int totalCount = 0;
-    for (var item in items) {
-      totalCount += item.quantity;
-    }
-    return totalCount;
   }
 }

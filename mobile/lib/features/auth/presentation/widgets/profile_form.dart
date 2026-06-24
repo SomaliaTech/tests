@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/chat/models/profile_model.dart';
+import 'package:mobile/features/chat/models%2005-31-33-117/profile_model.dart';
 import 'package:mobile/features/profile/data/models/profile_model.dart';
 
 class ProfileForm extends StatelessWidget {

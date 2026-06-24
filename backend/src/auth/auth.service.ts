@@ -10,6 +10,8 @@ import { CloudflareService } from 'src/cloudfare/cloudflare.service';
 import { users } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { SupabaseService } from 'src/supabase/supabase.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface User {
   id: string;
@@ -32,7 +34,9 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private drizzle: DrizzleService,
-    private cloudflareService: CloudflareService, // ✅ Fixed
+    private cloudflareService: CloudflareService,
+    private supabaseService: SupabaseService,
+    private notificationsService: NotificationsService, // ✅ Added
   ) {}
 
   async sendOtp(phoneNumber: string) {
@@ -139,7 +143,7 @@ export class AuthService {
 
   async uploadProfileImage(userId: string, base64Image: string) {
     try {
-      const result = await this.cloudflareService.uploadBase64(
+      const result = await this.supabaseService.uploadBase64(
         base64Image,
         'users/profiles',
       );
@@ -152,6 +156,13 @@ export class AuthService {
         })
         .where(eq(users.id, userId))
         .returning();
+
+      // ✅ Send notification for profile image update
+      await this.notificationsService.createSystemNotification(
+        userId,
+        'Profile Image Updated',
+        'Your profile image has been updated successfully.',
+      );
 
       return {
         message: 'Profile image uploaded successfully',
@@ -194,6 +205,13 @@ export class AuthService {
       .returning();
 
     const token = this.generateToken(updatedUser.id, updatedUser.phoneNumber);
+
+    // ✅ Send notification for profile completion
+    await this.notificationsService.createSystemNotification(
+      userId,
+      'Profile Completed',
+      'Your profile has been successfully completed.',
+    );
 
     return {
       message: 'Profile completed successfully',
@@ -262,10 +280,50 @@ export class AuthService {
         ` Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
       );
 
+      // Get old user data to compare changes
+      const [oldUser] = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
       const updateData: Partial<User> = { updatedAt: new Date() };
-      if (name) updateData.name = name;
-      if (email) updateData.email = email;
-      if (marketId) updateData.marketId = marketId;
+      const changes: string[] = [];
+
+      if (name && name !== oldUser.name) {
+        updateData.name = name;
+        changes.push('name');
+      }
+      if (email && email !== oldUser.email) {
+        updateData.email = email;
+        changes.push('email');
+      }
+      if (marketId && marketId !== oldUser.marketId) {
+        updateData.marketId = marketId;
+        changes.push('market');
+      }
+
+      if (Object.keys(updateData).length === 1) {
+        // Only updatedAt was set, nothing changed
+        const result = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        const user = result[0];
+        return {
+          message: 'No changes made',
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            profileImage: user.profileImage,
+            marketId: user.marketId,
+            isAdmin: user.isAdmin ?? false,
+          },
+        };
+      }
 
       const result = await this.drizzle.db
         .update(users)
@@ -274,6 +332,16 @@ export class AuthService {
         .returning();
 
       const updatedUser = result[0];
+
+      // ✅ Send notification for profile updates
+      if (changes.length > 0) {
+        const changeMessage = changes.join(', ');
+        await this.notificationsService.createSystemNotification(
+          userId,
+          'Profile Updated',
+          `Your profile has been updated: ${changeMessage} changed.`,
+        );
+      }
 
       console.log(`✅ Profile updated for user: ${userId}`);
 

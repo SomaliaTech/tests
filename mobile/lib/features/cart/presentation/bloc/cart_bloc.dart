@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/cart/domain/usecases/add_to_cart.dart';
@@ -7,7 +5,6 @@ import 'package:mobile/features/cart/domain/usecases/clear_cart.dart';
 import 'package:mobile/features/cart/domain/usecases/get_cart_items.dart';
 import 'package:mobile/features/cart/domain/usecases/remove_item.dart';
 import 'package:mobile/features/cart/domain/usecases/update_quantity.dart';
-
 import 'cart_event.dart';
 import 'cart_state.dart';
 
@@ -34,6 +31,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   }
 
   Future<void> _onLoadCart(LoadCartEvent event, Emitter<CartState> emit) async {
+    emit(CartLoading());
     final result = await getCartItems();
     result.fold(
       (failure) => emit(CartError(failure.message)),
@@ -45,47 +43,10 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     AddToCartEvent event,
     Emitter<CartState> emit,
   ) async {
-    final currentState = state;
-
-    if (currentState is CartLoaded) {
-      // Find if item already exists in cart
-      final existingItemIndex = currentState.items.indexWhere(
-        (item) => item.productVariantId == event.productVariantId,
-      );
-
-      if (existingItemIndex != -1) {
-        // Optimistic update for existing item
-        final updatedItems = List<CartItem>.from(currentState.items);
-        final existingItem = updatedItems[existingItemIndex];
-        updatedItems[existingItemIndex] = CartItem(
-          id: existingItem.id, // Keep real ID
-          productId: existingItem.productId,
-          productVariantId: existingItem.productVariantId,
-          name: existingItem.name,
-          imageUrl: existingItem.imageUrl,
-          price: existingItem.price,
-          quantity: existingItem.quantity + event.quantity,
-          maxStock: existingItem.maxStock,
-          inStock: existingItem.inStock,
-          color: existingItem.color,
-          size: existingItem.size,
-        );
-        _emitCartLoaded(updatedItems, emit);
-      } else {
-        // Don't add temporary item, just show loading indicator
-        emit(CartLoading());
-      }
-    } else {
-      emit(CartLoading());
-    }
-
-    // Send to backend
-    final result = await addToCart(event.productVariantId, event.quantity);
-
-    result.fold(
-      (failure) => emit(CartError(failure.message)),
-      (_) => _onLoadCart(LoadCartEvent(), emit),
-    );
+    // 1. Save to local storage
+    await addToCart(event.item);
+    // 2. Reload local storage and emit
+    add(LoadCartEvent());
   }
 
   Future<void> _onUpdateQuantity(
@@ -94,9 +55,9 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   ) async {
     final currentState = state;
     if (currentState is CartLoaded) {
-      // OPTIMISTIC UPDATE: Update quantity locally
+      // 🚨 FIXED: Match by productVariantId instead of id
       final updatedItems = currentState.items.map((item) {
-        if (item.id == event.itemId) {
+        if (item.productVariantId == event.itemId) {
           return CartItem(
             id: item.id,
             productId: item.productId,
@@ -113,11 +74,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         }
         return item;
       }).toList();
-
       _emitCartLoaded(updatedItems, emit);
 
-      // Send request to backend (don't reload on success)
-      await updateQuantity(event.itemId, event.quantity);
+      final result = await updateQuantity(event.itemId, event.quantity);
+
+      result.fold(
+        (failure) => emit(CartError(failure.message)),
+        (_) => add(LoadCartEvent()),
+      );
     }
   }
 
@@ -127,14 +91,18 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   ) async {
     final currentState = state;
     if (currentState is CartLoaded) {
-      // Remove from UI immediately
+      // 🚨 FIXED: Filter by productVariantId instead of id
       final updatedItems = currentState.items
-          .where((item) => item.id != event.itemId)
+          .where((item) => item.productVariantId != event.itemId)
           .toList();
       _emitCartLoaded(updatedItems, emit);
 
-      // Send to backend (don't wait for response to avoid race conditions)
-      unawaited(removeItem(event.itemId));
+      final result = await removeItem(event.itemId);
+
+      result.fold(
+        (failure) => emit(CartError(failure.message)),
+        (_) => add(LoadCartEvent()),
+      );
     }
   }
 
@@ -142,24 +110,16 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     ClearCartEvent event,
     Emitter<CartState> emit,
   ) async {
-    final currentState = state;
-    if (currentState is CartLoaded) {
-      // OPTIMISTIC UPDATE: Clear cart locally
-      _emitCartLoaded([], emit);
-
-      // Send request to backend
-      await clearCart();
-    }
+    await clearCart();
+    _emitCartLoaded([], emit);
   }
 
   Future<void> _onCartOrderCompleted(
     CartOrderCompletedEvent event,
     Emitter<CartState> emit,
   ) async {
-    // Clear cart locally
-    _emitCartLoaded([], emit);
-    // Clear remote cart
-    await clearCart();
+    await clearCart(); // Clear local storage after successful checkout
+    emit(const CartOrderSuccess('Order placed successfully!'));
   }
 
   void _emitCartLoaded(List<CartItem> items, Emitter<CartState> emit) {
@@ -167,7 +127,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     const discount = 0.0;
     final subtotal = items.fold(0.0, (sum, item) => sum + item.totalPrice);
     final total = subtotal + shippingFee - discount;
-    final itemCount = items.fold(0, (sum, item) => sum + item.quantity);
+    final itemCount = items.length; // Distinct items count for badge
     final isCheckoutEnabled =
         items.isNotEmpty && items.every((item) => item.inStock);
 

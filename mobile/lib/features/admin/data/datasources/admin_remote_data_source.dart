@@ -23,7 +23,7 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
 
   Future<String> _getToken() async {
     final token = await storageService.getAuthToken();
-    if (token == null) throw const ServerException('Token not found');
+    if (token == null) throw ServerException('Token not found');
     return token;
   }
 

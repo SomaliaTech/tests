@@ -41,7 +41,6 @@ class _CartViewState extends State<CartView> {
           setState(() {
             _selectedAddress = address;
           });
-          // After address is selected, show payment options
           Future.delayed(const Duration(milliseconds: 100), () {
             _showPaymentOptions();
           });
@@ -53,8 +52,6 @@ class _CartViewState extends State<CartView> {
   void _showPaymentOptions() {
     final state = context.read<CartBloc>().state;
     if (state is CartLoaded && _selectedAddress != null) {
-      // Create a temporary product object for the order
-      // This will be used to create the order from cart items
       final totalAmount = state.total;
 
       showModalBottomSheet(
@@ -65,12 +62,6 @@ class _CartViewState extends State<CartView> {
           cartItems: state.items,
           address: _selectedAddress!,
           totalAmount: totalAmount,
-          onOrderComplete: () {
-            // Refresh cart after order is complete
-            context.read<CartBloc>().add(LoadCartEvent());
-            // Navigate back to home or order confirmation
-            Navigator.popUntil(context, (route) => route.isFirst);
-          },
         ),
       );
     }
@@ -105,7 +96,9 @@ class _CartViewState extends State<CartView> {
       ),
       body: BlocListener<CartBloc, CartState>(
         listener: (context, state) {
-          if (state is CartError) {
+          if (state is CartOrderSuccess) {
+            _showOrderSuccessDialog(context);
+          } else if (state is CartError) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -143,6 +136,7 @@ class _CartViewState extends State<CartView> {
                       padding: const EdgeInsets.all(15),
                       child: Column(
                         children: [
+                          // 🚨 FIXED: Removed the extra closing brackets and parentheses here
                           ...state.items.map(
                             (item) => CartItemCard(
                               item: item,
@@ -150,25 +144,27 @@ class _CartViewState extends State<CartView> {
                                 if (item.canIncrease) {
                                   context.read<CartBloc>().add(
                                     UpdateQuantityEvent(
-                                      item.id,
+                                      item.productVariantId,
                                       item.quantity + 1,
                                     ),
                                   );
-                                  // No need for snackbar - UI updates instantly
                                 }
                               },
                               onDecrement: () {
                                 if (item.canDecrease) {
                                   context.read<CartBloc>().add(
                                     UpdateQuantityEvent(
-                                      item.id,
+                                      item.productVariantId,
                                       item.quantity - 1,
                                     ),
                                   );
                                 }
                               },
                               onRemove: () {
-                                _showRemoveItemDialog(context, item.id);
+                                _showRemoveItemDialog(
+                                  context,
+                                  item.productVariantId,
+                                );
                               },
                             ),
                           ),
@@ -201,7 +197,49 @@ class _CartViewState extends State<CartView> {
     );
   }
 
-  void _showRemoveItemDialog(BuildContext context, String id) {
+  void _showOrderSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Iconsax.tick_circle, color: Color(0xFF2ED573), size: 28),
+            SizedBox(width: 10),
+            Text('Order Successful!'),
+          ],
+        ),
+        content: const Text(
+          'Thank you for your purchase. Your order has been placed successfully.',
+        ),
+        actions: [
+          Expanded(
+            child: TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                context.read<CartBloc>().add(ClearCartEvent());
+                Navigator.popUntil(context, (route) => route.isFirst);
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFF2ED573),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Continue Shopping',
+                style: TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemoveItemDialog(BuildContext context, String productVariantId) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -222,7 +260,9 @@ class _CartViewState extends State<CartView> {
               onPressed: () {
                 Navigator.pop(dialogContext);
                 if (context.mounted) {
-                  context.read<CartBloc>().add(RemoveItemEvent(id));
+                  context.read<CartBloc>().add(
+                    RemoveItemEvent(productVariantId),
+                  );
                 }
               },
               style: TextButton.styleFrom(

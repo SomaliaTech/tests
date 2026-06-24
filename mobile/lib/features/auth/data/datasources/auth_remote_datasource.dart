@@ -89,14 +89,24 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   @override
   Future<Map<String, dynamic>> getCurrentUser(String token) async {
-    final response = await client.get(
-      Uri.parse('${ApiConstants.baseUrl}/auth/me'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      throw ServerException('Failed to get user');
+    try {
+      final response = await client.get(
+        Uri.parse('${ApiConstants.baseUrl}/auth/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 401) {
+        // 🚨 Throw specific exception for 401
+        throw UnauthorizedException('Token expired or invalid');
+      } else {
+        throw ServerException('Failed to get user: ${response.statusCode}');
+      }
+    } on UnauthorizedException {
+      rethrow; // Pass it up to the repository
+    } catch (e) {
+      // This catches SocketException (no internet)
+      throw ServerException('Network error: $e');
     }
   }
 

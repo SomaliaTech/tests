@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/notifications/data/datasources/notifications_local_datasource.dart';
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
-import 'package:mobile/features/notifications/domain/usecases/clear_all_notifications.dart';
-import 'package:mobile/features/notifications/domain/usecases/delete_notification.dart';
-import 'package:mobile/features/notifications/domain/usecases/get_notifications.dart';
-import 'package:mobile/features/notifications/domain/usecases/mark_all_as_read.dart';
-import 'package:mobile/features/notifications/domain/usecases/mark_as_read.dart';
-import '../bloc/notifications_bloc.dart';
-import '../bloc/notifications_event.dart';
+import 'package:mobile/core/services/notification_injection.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_event.dart';
 import 'notifications_view.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -16,24 +11,26 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final localDataSource = NotificationsLocalDataSource();
-    final repository = NotificationsRepositoryImpl(
-      localDataSource: localDataSource,
-    );
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, authState) {
+        // ✅ Wait for AuthBloc to finish checking
+        if (authState is AuthChecking) {
+          return const Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+            ),
+          );
+        }
 
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider<NotificationsBloc>(
-          create: (context) => NotificationsBloc(
-            getNotifications: GetNotifications(repository),
-            markAsRead: MarkAsRead(repository),
-            markAllAsRead: MarkAllAsRead(repository),
-            deleteNotification: DeleteNotification(repository),
-            clearAllNotifications: ClearAllNotifications(repository),
-          )..add(LoadNotifications()),
-        ),
-      ],
-      child: const NotificationsView(),
+        // 🚨 FIX: We no longer need to manually extract or pass the token!
+        // The NotificationsRepository now fetches it directly from StorageService.
+
+        return BlocProvider.value(
+          value: getNotificationBloc()..add(LoadNotifications()),
+          child: const NotificationsView(),
+        );
+      },
     );
   }
 }

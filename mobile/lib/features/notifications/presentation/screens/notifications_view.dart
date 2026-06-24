@@ -8,6 +8,7 @@ import 'package:mobile/features/notifications/presentation/bloc/notifications_st
 import 'package:mobile/features/notifications/presentation/widgets/empty_state.dart';
 import 'package:mobile/features/notifications/presentation/widgets/filter_tab.dart';
 import 'package:mobile/features/notifications/presentation/widgets/notification_card.dart';
+import 'package:mobile/features/order/presentation/screens/order_details_screen.dart';
 
 class NotificationsView extends StatelessWidget {
   const NotificationsView({super.key});
@@ -39,7 +40,6 @@ class NotificationsView extends StatelessWidget {
                 return TextButton(
                   onPressed: () {
                     if (state.unreadCount > 0) {
-                      // Fixed: Use MarkAllNotificationsAsRead
                       context.read<NotificationsBloc>().add(
                         MarkAllNotificationsAsRead(),
                       );
@@ -173,7 +173,6 @@ class NotificationsView extends StatelessWidget {
                                 return NotificationCard(
                                   notification: notification,
                                   onMarkRead: () {
-                                    // Fixed: Use MarkNotificationAsRead
                                     context.read<NotificationsBloc>().add(
                                       MarkNotificationAsRead(notification.id),
                                     );
@@ -192,8 +191,6 @@ class NotificationsView extends StatelessWidget {
                             ),
                     ),
                   ),
-
-                  // Footer Action
                 ],
               );
             }
@@ -203,6 +200,19 @@ class NotificationsView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // ✅ Helper method to extract order ID from actionLink
+  String? _extractOrderIdFromActionLink(String? actionLink) {
+    if (actionLink == null || actionLink.isEmpty) return null;
+
+    // Extract the last part of the URL
+    // Example: /orders/54db6b6c-e7b4-4eec-9449-1948ed966140
+    final parts = actionLink.split('/');
+    if (parts.length >= 2) {
+      return parts.last;
+    }
+    return null;
   }
 
   void _showDeleteDialog(BuildContext context, String id) {
@@ -225,7 +235,6 @@ class NotificationsView extends StatelessWidget {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                // Fixed: Use DeleteNotificationEvent
                 context.read<NotificationsBloc>().add(
                   DeleteNotificationEvent(id),
                 );
@@ -261,7 +270,6 @@ class NotificationsView extends StatelessWidget {
             TextButton(
               onPressed: () {
                 Navigator.pop(dialogContext);
-                // Fixed: Use ClearAllNotificationsEvent
                 context.read<NotificationsBloc>().add(
                   ClearAllNotificationsEvent(),
                 );
@@ -281,21 +289,39 @@ class NotificationsView extends StatelessWidget {
     BuildContext context,
     NotificationEntity notification,
   ) {
+    // Mark as read if not already
     if (!notification.read) {
-      // Fixed: Use MarkNotificationAsRead
       context.read<NotificationsBloc>().add(
         MarkNotificationAsRead(notification.id),
       );
     }
 
-    if (notification.actionLink != null) {
-      // Navigate based on action link
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Navigate to: ${notification.actionLink}'),
-          duration: const Duration(seconds: 1),
-        ),
-      );
+    // Handle navigation based on action link
+    if (notification.actionLink != null &&
+        notification.actionLink!.isNotEmpty) {
+      print("📱 Notification clicked: ${notification.actionLink}");
+
+      // ✅ Extract order ID from actionLink
+      final orderId = _extractOrderIdFromActionLink(notification.actionLink);
+
+      if (orderId != null && orderId.isNotEmpty) {
+        print("📦 Navigating to order details: $orderId");
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OrderDetailsScreen(orderId: orderId),
+          ),
+        );
+      } else {
+        // Fallback: show snackbar if no order ID found
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Navigate to: ${notification.actionLink}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 }

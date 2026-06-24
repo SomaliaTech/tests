@@ -1,5 +1,4 @@
 import 'package:equatable/equatable.dart';
-
 import '../../domain/entities/user.dart';
 
 abstract class AuthState extends Equatable {
@@ -21,6 +20,15 @@ class OtpSent extends AuthState {
 
   @override
   List<Object?> get props => [debugOtp];
+}
+
+class Authenticated extends AuthState {
+  final User user;
+  final String token;
+  const Authenticated(this.user, this.token);
+
+  @override
+  List<Object?> get props => [user, token];
 }
 
 class OtpVerified extends AuthState {
@@ -47,15 +55,6 @@ class ProfileImageUploaded extends AuthState {
 
   @override
   List<Object?> get props => [imageUrl];
-}
-
-class Authenticated extends AuthState {
-  final User user;
-  final String token;
-  const Authenticated(this.user, this.token);
-
-  @override
-  List<Object?> get props => [user, token];
 }
 
 class Unauthenticated extends AuthState {}

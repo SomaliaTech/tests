@@ -4,6 +4,8 @@ import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_event.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_state.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
+// 🚨 ADDED: Import CartItem entity
+import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:toastification/toastification.dart';
 import 'package:iconsax/iconsax.dart';
 
@@ -28,23 +30,23 @@ class AddToCartButton extends StatefulWidget {
 class _AddToCartButtonState extends State<AddToCartButton> {
   bool _isAdding = false;
 
-  String get _variantId {
-    if (widget.product.variants.isEmpty) return '';
+  ProductVariant? get _selectedVariant {
+    if (widget.product.variants.isEmpty) return null;
     try {
-      final variant = widget.product.variants.firstWhere(
+      return widget.product.variants.firstWhere(
         (v) =>
             v.colorName == widget.selectedColor &&
             v.sizeName == widget.selectedSize,
         orElse: () => widget.product.variants.first,
       );
-      return variant.id;
     } catch (_) {
-      return widget.product.variants.first.id;
+      return widget.product.variants.first;
     }
   }
 
   void _handleAddToCart() async {
-    if (_variantId.isEmpty) {
+    final variant = _selectedVariant;
+    if (variant == null) {
       toastification.show(
         title: const Text('Error'),
         description: const Text('Product has no available variants'),
@@ -57,14 +59,26 @@ class _AddToCartButtonState extends State<AddToCartButton> {
 
     setState(() => _isAdding = true);
 
-    final cartBloc = context.read<CartBloc>();
-    // FIXED: Use widget.product, not item
-    cartBloc.add(
-      AddToCartEvent(
-        productVariantId: _variantId, // Use _variantId here
-        quantity: widget.quantity,
-      ),
+    // 🚨 FIXED: Construct the full CartItem object locally
+    final cartItem = CartItem(
+      id: variant.id, // Use variant ID as the unique cart item ID
+      productId: widget.product.id,
+      productVariantId: variant.id,
+      name: widget.product.name,
+      imageUrl: widget.product.imageUrls.isNotEmpty
+          ? widget.product.imageUrls.first
+          : '',
+      price: variant.price,
+      quantity: widget.quantity,
+      maxStock: variant.stock,
+      inStock: variant.stock > 0,
+      color: variant.colorName,
+      size: variant.sizeName,
     );
+
+    final cartBloc = context.read<CartBloc>();
+    // 🚨 FIXED: Pass the CartItem object instead of ID/quantity
+    cartBloc.add(AddToCartEvent(cartItem));
 
     // Wait for the state to update
     await Future.delayed(const Duration(milliseconds: 500));
@@ -115,9 +129,9 @@ class _AddToCartButtonState extends State<AddToCartButton> {
                   color: Colors.white,
                 ),
               )
-            : Row(
+            : const Row(
                 mainAxisSize: MainAxisSize.min,
-                children: const [
+                children: [
                   Icon(Iconsax.shopping_cart, size: 18),
                   SizedBox(width: 8),
                   Text(

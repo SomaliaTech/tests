@@ -5,6 +5,7 @@ import '../repositories/cart_repository.dart';
 class AddToCart {
   final CartRepository repository;
   const AddToCart(this.repository);
-  ResultFuture<CartItem> call(String productVariantId, int quantity) =>
-      repository.addToCart(productVariantId, quantity);
+
+  // 🚨 FIXED: Changed return type to void and parameter to CartItem
+  ResultFuture<void> call(CartItem item) => repository.addToCart(item);
 }

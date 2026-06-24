@@ -145,7 +145,7 @@ export const productVariants = pgTable(
 );
 
 // ==========================================
-// USERS TABLE
+// USERS TABLE (FIXED)
 // ==========================================
 export const users = pgTable(
   'users',
@@ -162,6 +162,10 @@ export const users = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     isAdmin: boolean('is_admin').default(false),
+
+    // 🚨 CRITICAL FIX: These MUST be inside the table definition!
+    isOnline: boolean('is_online').default(false),
+    lastSeen: timestamp('last_seen'),
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
@@ -205,31 +209,6 @@ export const markets = pgTable('markets', {
 });
 
 // ==========================================
-// CART ITEMS TABLE
-// ==========================================
-export const cartItems = pgTable(
-  'cart_items',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    productVariantId: uuid('product_variant_id')
-      .notNull()
-      .references(() => productVariants.id),
-    quantity: integer('quantity').notNull().default(1),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (table) => ({
-    userIdIdx: index('cart_user_id_idx').on(table.userId),
-    productVariantIdx: index('cart_product_variant_idx').on(
-      table.productVariantId,
-    ),
-  }),
-);
-
-// ==========================================
 // ORDERS TABLE
 // ==========================================
 export const orders = pgTable(
@@ -259,6 +238,66 @@ export const orders = pgTable(
 );
 
 // ==========================================
+// MESSAGES TABLE
+export const messages = pgTable('messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id').references(() => conversations.id), // ✅ NEW
+  senderId: uuid('sender_id')
+    .notNull()
+    .references(() => users.id),
+  receiverId: uuid('receiver_id')
+    .notNull()
+    .references(() => users.id),
+  content: text('content'),
+  type: varchar('type', { length: 20 }).notNull().default('text'),
+  mediaUrl: text('media_url'),
+  isRead: boolean('is_read').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  participant1: uuid('participant1')
+    .notNull()
+    .references(() => users.id),
+  participant2: uuid('participant2')
+    .notNull()
+    .references(() => users.id),
+  lastMessage: text('last_message'),
+  lastMessageType: varchar('last_message_type', { length: 20 }).default('text'),
+  lastMessageAt: timestamp('last_message_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// ==========================================
+// CART ITEMS TABLE
+// ==========================================
+export const cartItems = pgTable(
+  'cart_items',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    productId: uuid('product_id'),
+    productVariantId: uuid('product_variant_id').references(
+      () => productVariants.id,
+    ),
+    quantity: integer('quantity').notNull().default(1),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('cart_user_id_idx').on(table.userId),
+    productVariantIdx: index('cart_product_variant_idx').on(
+      table.productVariantId,
+    ),
+    productIdIdx: index('cart_product_id_idx').on(table.productId),
+  }),
+);
+
+// ==========================================
 // ORDER ITEMS TABLE
 // ==========================================
 export const orderItems = pgTable(
@@ -268,11 +307,12 @@ export const orderItems = pgTable(
     orderId: uuid('order_id')
       .notNull()
       .references(() => orders.id, { onDelete: 'cascade' }),
-    productVariantId: uuid('product_variant_id')
-      .notNull()
-      .references(() => productVariants.id),
+    productId: uuid('product_id'),
+    productVariantId: uuid('product_variant_id').references(
+      () => productVariants.id,
+    ),
     productName: varchar('product_name', { length: 255 }).notNull(),
-    variantSku: varchar('variant_sku', { length: 255 }).notNull(),
+    variantSku: varchar('variant_sku', { length: 255 }),
     colorName: varchar('color_name', { length: 100 }),
     sizeName: varchar('size_name', { length: 100 }),
     unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
@@ -283,6 +323,7 @@ export const orderItems = pgTable(
   (table) => ({
     orderIdx: index('order_item_order_idx').on(table.orderId),
     variantIdx: index('order_item_variant_idx').on(table.productVariantId),
+    productIdIdx: index('order_item_product_id_idx').on(table.productId),
   }),
 );
 
@@ -339,7 +380,7 @@ export const notifications = pgTable(
 );
 
 // ==========================================
-// 🚀 FIXED & OPTIMIZED RELATIONS
+// 🚀 RELATIONS
 // ==========================================
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -371,7 +412,6 @@ export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   }),
 }));
 
-// 🚨 FIXED: Added 'image' relation for variant-specific images
 export const productVariantsRelations = relations(
   productVariants,
   ({ one, many }) => ({
@@ -396,7 +436,6 @@ export const productVariantsRelations = relations(
   }),
 );
 
-// 🚨 FIXED: Added 'market' relation for users
 export const usersRelations = relations(users, ({ one, many }) => ({
   market: one(markets, {
     fields: [users.marketId],
@@ -406,6 +445,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   orders: many(orders),
   cartItems: many(cartItems),
   notifications: many(notifications),
+  sentMessages: many(messages, { relationName: 'sender' }),
+  receivedMessages: many(messages, { relationName: 'receiver' }),
 }));
 
 export const addressesRelations = relations(addresses, ({ one }) => ({
@@ -419,6 +460,10 @@ export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   user: one(users, {
     fields: [cartItems.userId],
     references: [users.id],
+  }),
+  product: one(products, {
+    fields: [cartItems.productId],
+    references: [products.id],
   }),
   variant: one(productVariants, {
     fields: [cartItems.productVariantId],
@@ -443,6 +488,10 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
     fields: [orderItems.orderId],
     references: [orders.id],
   }),
+  product: one(products, {
+    fields: [orderItems.productId],
+    references: [products.id],
+  }),
   variant: one(productVariants, {
     fields: [orderItems.productVariantId],
     references: [productVariants.id],
@@ -463,5 +512,18 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
     references: [users.id],
+  }),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+    relationName: 'sender',
+  }),
+  receiver: one(users, {
+    fields: [messages.receiverId],
+    references: [users.id],
+    relationName: 'receiver',
   }),
 }));

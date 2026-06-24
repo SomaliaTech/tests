@@ -1,6 +1,9 @@
 import 'package:equatable/equatable.dart';
 import 'package:mobile/features/admin/domain/entities/chart_data_entity.dart';
 import 'package:mobile/features/admin/domain/entities/dashboard_stats_entity.dart';
+import 'package:mobile/features/admin/domain/entities/device_traffic_entity.dart';
+import 'package:mobile/features/admin/domain/entities/location_traffic_entity.dart';
+import 'package:mobile/features/admin/domain/entities/product_traffic_entity.dart';
 
 abstract class DashboardState extends Equatable {
   const DashboardState();

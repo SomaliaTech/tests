@@ -19,6 +19,7 @@ import {
 import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderDto, AddressDto } from './dto/create-order.dto';
+import { AddToCartDto } from '../products/dto/cart.dto';
 
 @Injectable()
 export class OrdersService {
@@ -95,7 +96,7 @@ export class OrdersService {
   }
 
   // ==========================================
-  // ORDER MANAGEMENT (OPTIMIZED)
+  // ORDER MANAGEMENT
   // ==========================================
 
   async createOrder(userId: string, orderData: CreateOrderDto) {
@@ -207,8 +208,6 @@ export class OrdersService {
     });
   }
 
-  // 🚀 SUPER OPTIMIZED: Drizzle Relational Query API
-  // Fetches Orders -> Items -> Variants -> Products -> Images in ONE native SQL query!
   async getOrders(userId: string, status?: string) {
     const conditions = [eq(orders.userId, userId)];
     if (status) conditions.push(eq(orders.status, status));
@@ -223,12 +222,12 @@ export class OrdersService {
               with: {
                 product: {
                   with: {
-                    images: true, // 🚀 Automatically fetches product images!
+                    images: true,
                   },
                 },
                 color: true,
                 size: true,
-                image: true, // 🚀 Fetches variant-specific image if it exists
+                image: true,
               },
             },
           },
@@ -238,7 +237,6 @@ export class OrdersService {
   }
 
   async getOrderById(orderId: string, userId: string) {
-    // Validate that orderId is a valid UUID format
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(orderId)) {
@@ -270,6 +268,7 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     return order;
   }
+
   async updateOrderStatus(orderId: string, status: string) {
     const [order] = await this.drizzle.db
       .update(orders)
@@ -421,12 +420,14 @@ export class OrdersService {
       order: updatedOrder,
     };
   }
+
   // ==========================================
-  // 🚀 SUPER OPTIMIZED CART MANAGEMENT
+  // CART MANAGEMENT
+  // ==========================================
+  // CART MANAGEMENT
   // ==========================================
 
   async getCart(userId: string) {
-    // 🚀 OPTIMIZATION: Fetches Cart -> Variant -> Product -> Images in exactly 1 query!
     const userCartItems = await this.drizzle.db.query.cartItems.findMany({
       where: eq(cartItems.userId, userId),
       with: {
@@ -434,7 +435,7 @@ export class OrdersService {
           with: {
             product: {
               with: {
-                images: true, // 🚀 Automatically fetches product images!
+                images: true,
               },
             },
             color: true,
@@ -449,7 +450,6 @@ export class OrdersService {
       const variant = cartItem.variant;
       const product = variant?.product;
 
-      // Price logic: variant price overrides product price
       const unitPrice = variant?.price
         ? Number(variant.price)
         : Number(product?.price || 0);
@@ -465,7 +465,7 @@ export class OrdersService {
         quantity: cartItem.quantity,
         totalPrice,
         inStock: (variant?.stock || 0) > 0,
-        imageUrl: product?.images?.[0]?.url || '', // 🚀 Extract the first image URL
+        imageUrl: product?.images?.[0]?.url || '',
         color: variant?.color?.name || null,
         size: variant?.size?.name || null,
       };
@@ -478,7 +478,38 @@ export class OrdersService {
     };
   }
 
-  async addToCart(userId: string, productVariantId: string, quantity: number) {
+  async addToCart(userId: string, dto: AddToCartDto) {
+    const { productId, productVariantId, quantity } = dto;
+
+    // Validate product exists
+    const product = await this.drizzle.db.query.products.findFirst({
+      where: eq(products.id, productId),
+    });
+
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
+
+    let variant: any = null; // ✅ FIXED: Use 'any' to avoid type issues
+    if (productVariantId) {
+      variant = await this.drizzle.db.query.productVariants.findFirst({
+        where: and(
+          eq(productVariants.id, productVariantId),
+          eq(productVariants.productId, productId),
+        ),
+      });
+
+      if (!variant) {
+        throw new NotFoundException(
+          `Variant with ID ${productVariantId} not found`,
+        );
+      }
+
+      if (variant.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    }
+
     // Check if item already exists in cart
     const [existingItem] = await this.drizzle.db
       .select()
@@ -486,13 +517,15 @@ export class OrdersService {
       .where(
         and(
           eq(cartItems.userId, userId),
-          eq(cartItems.productVariantId, productVariantId),
+          eq(cartItems.productId, productId),
+          productVariantId
+            ? eq(cartItems.productVariantId, productVariantId)
+            : sql`${cartItems.productVariantId} IS NULL`,
         ),
       )
       .limit(1);
 
     if (existingItem) {
-      // Update quantity
       const [updated] = await this.drizzle.db
         .update(cartItems)
         .set({
@@ -503,20 +536,21 @@ export class OrdersService {
         .returning();
       return updated;
     } else {
-      // Add new item
       const [newItem] = await this.drizzle.db
         .insert(cartItems)
         .values({
           id: uuidv4(),
           userId,
-          productVariantId,
+          productId,
+          productVariantId: productVariantId || null,
           quantity,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         })
         .returning();
       return newItem;
     }
   }
-
   async removeCartItem(userId: string, itemId: string) {
     const [deleted] = await this.drizzle.db
       .delete(cartItems)
@@ -531,8 +565,8 @@ export class OrdersService {
     await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
     return { message: 'Cart cleared successfully' };
   }
+
   async updateCartItem(userId: string, itemId: string, quantity: number) {
-    // First verify the cart item belongs to the user
     const [existingItem] = await this.drizzle.db
       .select()
       .from(cartItems)
@@ -544,17 +578,29 @@ export class OrdersService {
     }
 
     // Check stock availability
-    const [variant] = await this.drizzle.db
-      .select()
-      .from(productVariants)
-      .where(eq(productVariants.id, existingItem.productVariantId))
-      .limit(1);
+    if (existingItem.productVariantId) {
+      const [variant] = await this.drizzle.db
+        .select()
+        .from(productVariants)
+        .where(eq(productVariants.id, existingItem.productVariantId))
+        .limit(1);
 
-    if (variant && variant.stock < quantity) {
-      throw new BadRequestException('Insufficient stock');
+      if (variant && variant.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    } else {
+      // ✅ FIXED: Use existingItem.productId (non-nullable in schema)
+      const [product] = await this.drizzle.db
+        .select()
+        .from(products)
+        .where(eq(products.id, existingItem.productId as string))
+        .limit(1);
+
+      if (product && product.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
     }
 
-    // Update quantity
     const [updated] = await this.drizzle.db
       .update(cartItems)
       .set({
@@ -566,11 +612,11 @@ export class OrdersService {
 
     if (!updated) throw new NotFoundException('Cart item not found');
 
-    // Return the updated cart item with product details
+    // ✅ FIXED: Use existingItem.productId with type assertion
     const product = await this.drizzle.db
       .select()
       .from(products)
-      .where(eq(products.id, variant.productId))
+      .where(eq(products.id, existingItem.productId as string))
       .limit(1);
 
     return {
@@ -578,13 +624,11 @@ export class OrdersService {
       productId: product[0].id,
       productVariantId: updated.productVariantId,
       name: product[0].name,
-      imageUrl: '', // Add image URL if needed
-      price: variant.price ? Number(variant.price) : Number(product[0].price),
+      imageUrl: '',
+      price: Number(product[0].price),
       quantity: updated.quantity,
-      totalPrice:
-        (variant.price ? Number(variant.price) : Number(product[0].price)) *
-        updated.quantity,
-      inStock: variant.stock > 0,
+      totalPrice: Number(product[0].price) * updated.quantity,
+      inStock: true,
     };
   }
 }

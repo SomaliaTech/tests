@@ -1,5 +1,6 @@
 // lib/core/services/auth_injection.dart
 import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:mobile/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
@@ -63,6 +64,8 @@ void authRegisterDependencies(GetIt sl) {
         getCurrentUser: sl(),
         checkAuthStatus: sl(),
         logout: sl(),
+        storageService: sl(),
+        chatSocketService: sl<ChatSocketService>(), // 🚨 ADD THIS LINE
       ),
     );
   }

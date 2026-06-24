@@ -1,113 +1,147 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../../../core/constants/api_constants.dart';
+import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/notification.dart';
 
-class NotificationsLocalDataSource {
-  List<NotificationEntity> _notifications = [];
+class NotificationsRemoteDataSource {
+  final http.Client client;
 
-  NotificationsLocalDataSource() {
-    _notifications = _getMockData();
-  }
+  NotificationsRemoteDataSource({required this.client});
 
-  Future<List<NotificationEntity>> getNotifications() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    return _notifications;
-  }
+  Future<List<NotificationEntity>> getNotifications(String token) async {
+    try {
+      // ✅ FIX: Only log token if it's long enough
+      if (token.isNotEmpty) {
+        final displayToken = token.length > 20
+            ? '${token.substring(0, 20)}...'
+            : token;
+        print('🔍 Fetching notifications with token: $displayToken');
+      } else {
+        print('❌ Token is empty');
+        throw Exception('Authentication token is empty');
+      }
 
-  Future<void> markAsRead(String id) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    final index = _notifications.indexWhere((n) => n.id == id);
-    if (index != -1) {
-      _notifications[index] = _notifications[index].copyWith(read: true);
+      final response = await client.get(
+        Uri.parse('${ApiConstants.baseUrl}/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📦 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = json.decode(response.body);
+        print('✅ Found ${jsonList.length} notifications');
+        return jsonList
+            .map((json) => NotificationEntity.fromJson(json))
+            .toList();
+      } else if (response.statusCode == 401) {
+        print('❌ Token expired or invalid');
+        throw ServerException('Session expired. Please login again.');
+      } else {
+        throw ServerException(
+          'Failed to load notifications: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      print('❌ Network error: $e');
+      throw ServerException('Network error: $e');
     }
   }
 
-  Future<void> markAllAsRead() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _notifications = _notifications.map((n) => n.copyWith(read: true)).toList();
+  Future<void> markAsRead(String token, String id) async {
+    try {
+      final response = await client.put(
+        Uri.parse('${ApiConstants.baseUrl}/notifications/$id/read'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to mark notification as read');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
   }
 
-  Future<void> deleteNotification(String id) async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _notifications.removeWhere((n) => n.id == id);
+  Future<void> markAllAsRead(String token) async {
+    try {
+      final response = await client.put(
+        Uri.parse('${ApiConstants.baseUrl}/notifications/read-all'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to mark all notifications as read');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
   }
 
-  Future<void> clearAllNotifications() async {
-    await Future.delayed(const Duration(milliseconds: 200));
-    _notifications.clear();
+  Future<void> deleteNotification(String token, String id) async {
+    try {
+      final response = await client.delete(
+        Uri.parse('${ApiConstants.baseUrl}/notifications/$id'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to delete notification');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
   }
 
-  List<NotificationEntity> _getMockData() {
-    final now = DateTime.now();
+  Future<void> clearAllNotifications(String token) async {
+    try {
+      final response = await client.delete(
+        Uri.parse('${ApiConstants.baseUrl}/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
 
-    return [
-      NotificationEntity(
-        id: '1',
-        type: NotificationType.order,
-        title: 'Order Delivered',
-        message:
-            'Your order ORD-2024-001 has been delivered successfully. Thank you for shopping with SOOMAR!',
-        date: now.subtract(const Duration(hours: 2)),
-        read: false,
-        actionText: 'View Order',
-        actionLink: '/order-details/ORD-2024-001',
-      ),
-      NotificationEntity(
-        id: '2',
-        type: NotificationType.order,
-        title: 'Order Shipped',
-        message:
-            'Your order ORD-2024-002 is out for delivery. Expected delivery: Today by 6 PM',
-        date: now.subtract(const Duration(hours: 5)),
-        read: false,
-        actionText: 'Track Order',
-        actionLink: '/tracking/ORD-2024-002',
-      ),
-      NotificationEntity(
-        id: '3',
-        type: NotificationType.promotion,
-        title: 'Special Offer! 🎉',
-        message:
-            'Get 20% off on all electronics. Use code: SAVE20. Valid until June 15, 2026',
-        date: now.subtract(const Duration(days: 1)),
-        read: true,
-        actionText: 'Shop Now',
-        actionLink: '/category/electronics',
-      ),
-      NotificationEntity(
-        id: '4',
-        type: NotificationType.payment,
-        title: 'Payment Received',
-        message:
-            'We have received your payment of \$36.00 for order ORD-2024-001',
-        date: now.subtract(const Duration(days: 2)),
-        read: true,
-      ),
-      NotificationEntity(
-        id: '5',
-        type: NotificationType.system,
-        title: 'Profile Updated',
-        message: 'Your profile information has been successfully updated',
-        date: now.subtract(const Duration(days: 3)),
-        read: true,
-      ),
-      NotificationEntity(
-        id: '6',
-        type: NotificationType.promotion,
-        title: 'New Arrivals',
-        message: 'Check out our latest products in Home & Kitchen category',
-        date: now.subtract(const Duration(days: 5)),
-        read: true,
-        actionText: 'Browse',
-        actionLink: '/category/home-kitchen',
-      ),
-      NotificationEntity(
-        id: '7',
-        type: NotificationType.order,
-        title: 'Order Confirmed',
-        message:
-            'Your order ORD-2024-003 has been confirmed and is being processed',
-        date: now.subtract(const Duration(days: 7)),
-        read: true,
-      ),
-    ];
+      if (response.statusCode != 200) {
+        throw ServerException('Failed to clear notifications');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
+  }
+
+  Future<int> getUnreadCount(String token) async {
+    try {
+      final response = await client.get(
+        Uri.parse('${ApiConstants.baseUrl}/notifications/unread/count'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['unreadCount'] as int? ?? 0;
+      } else {
+        throw ServerException('Failed to get unread count');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
   }
 }

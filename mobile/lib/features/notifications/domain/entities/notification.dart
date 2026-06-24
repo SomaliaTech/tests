@@ -136,6 +136,37 @@ class NotificationEntity extends Equatable {
     );
   }
 
+  // ✅ ADD fromJson method for API response
+  factory NotificationEntity.fromJson(Map<String, dynamic> json) {
+    // Handle both camelCase and snake_case
+    return NotificationEntity(
+      id: json['id'] as String,
+      type: _parseNotificationType(json['type'] as String),
+      title: json['title'] as String,
+      message: json['message'] as String,
+      date: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : DateTime.now(),
+      read: json['isRead'] ?? json['is_read'] ?? false,
+      actionText: json['actionText'] ?? json['action_text'],
+      actionLink: json['actionLink'] ?? json['action_link'],
+    );
+  }
+  static NotificationType _parseNotificationType(String type) {
+    switch (type.toLowerCase()) {
+      case 'order':
+        return NotificationType.order;
+      case 'promotion':
+        return NotificationType.promotion;
+      case 'system':
+        return NotificationType.system;
+      case 'payment':
+        return NotificationType.payment;
+      default:
+        return NotificationType.system;
+    }
+  }
+
   @override
   List<Object?> get props => [
     id,

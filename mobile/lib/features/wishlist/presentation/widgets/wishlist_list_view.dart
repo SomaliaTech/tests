@@ -1,83 +1,172 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
-import 'package:mobile/features/cart/presentation/bloc/cart_event.dart';
+import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/wishlist/presentation/bloc/wishlist_state.dart';
+import 'package:mobile/features/wishlist/presentation/widgets/wishlist_item_card.dart';
 import 'package:toastification/toastification.dart';
+
+// Cart imports
+import '../../../cart/presentation/bloc/cart_bloc.dart';
+import '../../../cart/presentation/bloc/cart_event.dart';
+import '../../../cart/presentation/bloc/cart_state.dart';
+// 🚨 ADDED: Import the CartItem entity
+import '../../../cart/domain/entities/cart_item.dart';
+
 import '../bloc/wishlist_bloc.dart';
 import '../bloc/wishlist_event.dart';
-import '../bloc/wishlist_state.dart';
-import 'wishlist_item_card.dart';
 
 class WishlistListView extends StatelessWidget {
   const WishlistListView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<WishlistBloc, WishlistState>(
-      builder: (context, state) {
-        if (state is WishlistLoaded) {
-          if (state.items.isEmpty) {
-            return const Center(child: Text('No items in wishlist'));
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 16),
-            itemCount: state.items.length,
-            itemBuilder: (context, index) {
-              final item = state.items[index];
-              return WishlistItemCard(
-                item: item,
-                onRemove: () {
-                  context.read<WishlistBloc>().add(
-                    RemoveFromWishlistEvent(item.id),
-                  );
-                  toastification.show(
-                    title: const Text('Removed'),
-                    description: Text('${item.name} removed from wishlist'),
-                    type: ToastificationType.success,
-                    style: ToastificationStyle.fillColored,
-                    autoCloseDuration: const Duration(seconds: 2),
-                  );
-                },
-                onAddToCart: () {
-                  print('🛒 Wishlist: Add to cart pressed for ${item.name}');
-                  print('   Product Variant ID: ${item.productVariantId}');
-
-                  // Check if CartBloc is available
-                  try {
-                    final cartBloc = context.read<CartBloc>();
-                    print('✅ CartBloc is available: ${cartBloc != null}');
-
-                    cartBloc.add(
-                      AddToCartEvent(
-                        productVariantId: item.productVariantId,
-                        quantity: 1,
-                      ),
-                    );
-                    print('✅ AddToCartEvent dispatched');
-
-                    toastification.show(
-                      title: const Text('Adding to Cart'),
-                      description: Text('Adding ${item.name}...'),
-                      type: ToastificationType.info,
-                      autoCloseDuration: const Duration(seconds: 1),
-                    );
-                  } catch (e) {
-                    print('❌ Error: CartBloc not found - $e');
-                    toastification.show(
-                      title: const Text('Error'),
-                      description: Text('Cart service not available'),
-                      type: ToastificationType.error,
-                      autoCloseDuration: const Duration(seconds: 2),
-                    );
-                  }
-                },
-              );
-            },
+    return BlocListener<CartBloc, CartState>(
+      listener: (context, cartState) {
+        if (cartState is CartLoaded) {
+          toastification.show(
+            title: const Text('Added to Cart'),
+            description: const Text('Item successfully added to your cart'),
+            type: ToastificationType.success,
+            style: ToastificationStyle.fillColored,
+            autoCloseDuration: const Duration(seconds: 2),
+          );
+        } else if (cartState is CartError) {
+          toastification.show(
+            title: const Text('Error'),
+            description: Text(cartState.message),
+            type: ToastificationType.error,
+            style: ToastificationStyle.fillColored,
+            autoCloseDuration: const Duration(seconds: 3),
           );
         }
-        return const SizedBox.shrink();
       },
+      child: BlocBuilder<WishlistBloc, WishlistState>(
+        builder: (context, state) {
+          if (state is WishlistLoaded) {
+            if (state.items.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Iconsax.heart,
+                          size: 48,
+                          color: Colors.red.shade300,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Your wishlist is empty',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF333333),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Save your favorite items to buy them later',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+              itemCount: state.items.length,
+              itemBuilder: (context, index) {
+                final item = state.items[index];
+                return Dismissible(
+                  key: Key(item.id),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade400,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Iconsax.trash,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  onDismissed: (direction) {
+                    context.read<WishlistBloc>().add(
+                      RemoveFromWishlistEvent(item.id),
+                    );
+                    toastification.show(
+                      title: const Text('Removed'),
+                      description: Text('${item.name} removed from wishlist'),
+                      type: ToastificationType.success,
+                      style: ToastificationStyle.fillColored,
+                      autoCloseDuration: const Duration(seconds: 2),
+                    );
+                  },
+                  child: WishlistItemCard(
+                    item: item,
+                    onRemove: () {
+                      context.read<WishlistBloc>().add(
+                        RemoveFromWishlistEvent(item.id),
+                      );
+                      toastification.show(
+                        title: const Text('Removed'),
+                        description: Text('${item.name} removed from wishlist'),
+                        type: ToastificationType.success,
+                        style: ToastificationStyle.fillColored,
+                        autoCloseDuration: const Duration(seconds: 2),
+                      );
+                    },
+                    onAddToCart: () {
+                      // 🚨 FIXED: Removed the block that required a variant ID.
+                      // If the item was saved without a variant, it will just use the base product data.
+
+                      // Construct the full CartItem object locally
+                      final cartItem = CartItem(
+                        id: item.productVariantId.isNotEmpty
+                            ? item.productVariantId
+                            : item.id,
+                        productId: item.id,
+                        productVariantId:
+                            item.productVariantId, // Can be empty now
+                        name: item.name,
+                        imageUrl: item.imageUrl,
+                        price: item.price,
+                        quantity: 1,
+                        maxStock: 999, // Assume in stock for wishlist
+                        inStock: true,
+                        color: null,
+                        size: null,
+                      );
+
+                      // Pass the CartItem object to the event
+                      context.read<CartBloc>().add(AddToCartEvent(cartItem));
+                    },
+                  ),
+                );
+              },
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
     );
   }
 }

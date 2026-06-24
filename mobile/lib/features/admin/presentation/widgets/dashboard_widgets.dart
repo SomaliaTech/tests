@@ -13,6 +13,7 @@ class DashboardStatCard extends StatelessWidget {
   final double trend;
   final IconData icon;
   final Color color;
+  final VoidCallback onPressed;
 
   const DashboardStatCard({
     super.key,
@@ -21,84 +22,91 @@ class DashboardStatCard extends StatelessWidget {
     required this.trend,
     required this.icon,
     required this.color,
+    required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
     final isPositive = trend >= 0;
-    return Container(
-      padding: const EdgeInsets.all(14), // Reduced padding
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min, // ✅ Changed to min
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12, // Reduced font size
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis, // ✅ Prevent overflow
-                maxLines: 1,
-              ),
-              Container(
-                padding: const EdgeInsets.all(6), // Reduced padding
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 16), // Reduced size
-              ),
-            ],
-          ),
-          const SizedBox(height: 6), // Reduced spacing
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.black87,
-              fontSize: 20, // Reduced font size
-              fontWeight: FontWeight.bold,
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.all(8), // Reduced padding
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.05),
+              spreadRadius: 1,
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-          const SizedBox(height: 4), // Reduced spacing
-          Row(
-            children: [
-              Icon(
-                isPositive ? Iconsax.arrow_up_3 : Iconsax.arrow3,
-                color: isPositive ? AppTheme.primaryColor : Colors.redAccent,
-                size: 12, // Reduced size
-              ),
-              const SizedBox(width: 2),
-              Text(
-                '${isPositive ? '+' : ''}${trend.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  color: isPositive ? AppTheme.primaryColor : Colors.redAccent,
-                  fontSize: 10, // Reduced font size
-                  fontWeight: FontWeight.w600,
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min, // ✅ Changed to min
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12, // Reduced font size
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis, // ✅ Prevent overflow
+                  maxLines: 1,
                 ),
+                Container(
+                  padding: const EdgeInsets.all(3), // Reduced padding
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 16), // Reduced size
+                ),
+              ],
+            ),
+            const SizedBox(height: 6), // Reduced spacing
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.black87,
+                fontSize: 17, // Reduced font size
+                fontWeight: FontWeight.bold,
               ),
-            ],
-          ),
-        ],
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+            const SizedBox(height: 4), // Reduced spacing
+            Row(
+              children: [
+                Icon(
+                  isPositive ? Iconsax.add_square5 : Iconsax.send_sqaure_2,
+                  color: isPositive ? AppTheme.primaryColor : Colors.redAccent,
+                  size: 12, // Reduced size
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  '${isPositive ? '+' : ''}${trend.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: isPositive
+                        ? AppTheme.primaryColor
+                        : Colors.redAccent,
+                    fontSize: 16, // Reduced font size
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

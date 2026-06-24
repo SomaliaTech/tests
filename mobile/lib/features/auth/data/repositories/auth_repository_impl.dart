@@ -134,20 +134,25 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       final token = await storageService.getAuthToken();
       if (token == null) {
-        return Left(ServerFailure('No authentication token found'));
+        return Left(UnauthorizedFailure('No authentication token found'));
       }
 
       final data = await remoteDataSource.getCurrentUser(token);
       final user = UserModel.fromJson(data);
 
-      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
+      // Save to local storage for offline access
       await storageService.saveUserName(user.name ?? '');
       if (user.email != null) await storageService.saveUserEmail(user.email!);
       if (user.profileImage != null)
         await storageService.saveUserProfileImage(user.profileImage!);
 
       return Right(user);
+    } on UnauthorizedException catch (e) {
+      // 🚨 Token is actually invalid. Clear local storage.
+      await storageService.clearAuthData();
+      return Left(UnauthorizedFailure(e.message));
     } on ServerException catch (e) {
+      // 🚨 Network error or 500. DO NOT clear local storage.
       return Left(ServerFailure(e.message));
     } catch (e) {
       return Left(ServerFailure('Unexpected error: $e'));

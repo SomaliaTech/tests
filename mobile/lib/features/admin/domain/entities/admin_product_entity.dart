@@ -1,0 +1,130 @@
+import 'package:equatable/equatable.dart';
+
+class AdminProductEntity extends Equatable {
+  final String id;
+  final String name;
+  final String slug;
+  final String? description;
+  final double price;
+  final int stock;
+  final String? categoryId;
+  final String? categoryName;
+  final String? brand;
+  final String? tags;
+  final bool isActive;
+  final List<AdminProductImageEntity> images;
+  final List<AdminProductVariantEntity> variants;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const AdminProductEntity({
+    required this.id,
+    required this.name,
+    required this.slug,
+    this.description,
+    required this.price,
+    required this.stock,
+    this.categoryId,
+    this.categoryName,
+    this.brand,
+    this.tags,
+    required this.isActive,
+    required this.images,
+    required this.variants,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  @override
+  List<Object?> get props => [
+    id,
+    name,
+    slug,
+    description,
+    price,
+    stock,
+    categoryId,
+    categoryName,
+    brand,
+    tags,
+    isActive,
+    images,
+    variants,
+    createdAt,
+    updatedAt,
+  ];
+}
+
+class AdminProductImageEntity extends Equatable {
+  final String id;
+  final String url;
+  final String publicId;
+  final bool isMain;
+  final int order;
+
+  const AdminProductImageEntity({
+    required this.id,
+    required this.url,
+    required this.publicId,
+    required this.isMain,
+    required this.order,
+  });
+
+  @override
+  List<Object?> get props => [id, url, publicId, isMain, order];
+}
+
+class AdminProductVariantEntity extends Equatable {
+  final String id;
+  final String? sku;
+  final int stock;
+  final double? price;
+  final String? colorId;
+  final String? colorName;
+  final String? sizeId;
+  final String? sizeName;
+
+  const AdminProductVariantEntity({
+    required this.id,
+    this.sku,
+    required this.stock,
+    this.price,
+    this.colorId,
+    this.colorName,
+    this.sizeId,
+    this.sizeName,
+  });
+
+  @override
+  List<Object?> get props => [
+    id,
+    sku,
+    stock,
+    price,
+    colorId,
+    colorName,
+    sizeId,
+    sizeName,
+  ];
+}
+
+class AdminCategoryEntity extends Equatable {
+  final String id;
+  final String name;
+  final String slug;
+  final String? description;
+  final String? parentId;
+  final List<AdminCategoryEntity> children;
+
+  const AdminCategoryEntity({
+    required this.id,
+    required this.name,
+    required this.slug,
+    this.description,
+    this.parentId,
+    this.children = const [],
+  });
+
+  @override
+  List<Object?> get props => [id, name, slug, description, parentId, children];
+}

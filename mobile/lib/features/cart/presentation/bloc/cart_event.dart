@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../domain/entities/cart_item.dart';
 
 abstract class CartEvent extends Equatable {
   const CartEvent();
@@ -7,6 +8,14 @@ abstract class CartEvent extends Equatable {
 }
 
 class LoadCartEvent extends CartEvent {}
+
+// 🚨 CHANGED: Now accepts a full CartItem object
+class AddToCartEvent extends CartEvent {
+  final CartItem item;
+  const AddToCartEvent(this.item);
+  @override
+  List<Object?> get props => [item];
+}
 
 class UpdateQuantityEvent extends CartEvent {
   final String itemId;
@@ -23,19 +32,6 @@ class RemoveItemEvent extends CartEvent {
   List<Object?> get props => [itemId];
 }
 
-class AddToCartEvent extends CartEvent {
-  final String productVariantId;
-  final int quantity;
-  const AddToCartEvent({
-    required this.productVariantId,
-    required this.quantity,
-  });
-  @override
-  List<Object?> get props => [productVariantId, quantity];
-}
-
 class ClearCartEvent extends CartEvent {}
 
-class ProceedToCheckoutEvent extends CartEvent {}
-
-class CartOrderCompletedEvent extends CartEvent {} // Add this
+class CartOrderCompletedEvent extends CartEvent {}
