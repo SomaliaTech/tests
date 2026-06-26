@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/auth/domain/usecases/upload_profile_image.dart';
+import 'package:mobile/features/profile/domain/entities/profile.dart';
 import 'package:mobile/features/profile/domain/usecases/delete_account.dart';
 import 'package:mobile/features/profile/domain/usecases/get_profile.dart';
 import 'package:mobile/features/profile/domain/usecases/update_profile.dart';
-
+import 'package:mobile/features/auth/domain/usecases/upload_profile_image.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
 
@@ -42,17 +42,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     emit(ProfileLoading());
+
     final result = await updateProfile(
       name: event.name,
+      email: event.email,
       marketId: event.marketId,
     );
 
     result.fold((failure) => emit(ProfileError(failure.message)), (
       updatedProfile,
     ) {
-      // Emit the updated profile directly
-      emit(ProfileLoaded(updatedProfile));
-      // Also emit success state if needed
       emit(ProfileUpdated(updatedProfile));
     });
   }
@@ -61,11 +60,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     UploadProfileImageEvent event,
     Emitter<ProfileState> emit,
   ) async {
-    emit(ProfileLoading());
     final result = await uploadProfileImage(event.base64Image);
     result.fold((failure) => emit(ProfileError(failure.message)), (imageUrl) {
       emit(ProfileImageUploaded(imageUrl));
-      // Reload profile to get updated image URL
       add(LoadProfileEvent());
     });
   }

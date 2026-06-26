@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/cart/presentation/widgets/checkout_payment_modal.dart';
+import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
+import 'package:mobile/features/product/presentation/blocs/address_event.dart';
+import 'package:mobile/features/product/presentation/blocs/address_state.dart';
 import '../../../product/domain/entities/address.dart';
+
 import '../../../product/presentation/widgets/address/address_selection_modal.dart';
 
 import '../bloc/cart_bloc.dart';
@@ -22,6 +26,18 @@ class CartView extends StatefulWidget {
 
 class _CartViewState extends State<CartView> {
   Address? _selectedAddress;
+  bool _addressesLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Load addresses when cart view opens
+    _loadAddresses();
+  }
+
+  void _loadAddresses() {
+    context.read<AddressBloc>().add(LoadAddressesEvent());
+  }
 
   void _proceedToCheckout() {
     if (_selectedAddress == null) {
@@ -94,26 +110,48 @@ class _CartViewState extends State<CartView> {
           ),
         ],
       ),
-      body: BlocListener<CartBloc, CartState>(
-        listener: (context, state) {
-          if (state is CartOrderSuccess) {
-            _showOrderSuccessDialog(context);
-          } else if (state is CartError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red,
-              ),
-            );
-          } else if (state is CartSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: const Color(0xFF2ED573),
-              ),
-            );
-          }
-        },
+      body: MultiBlocListener(
+        listeners: [
+          // ✅ Listen to address changes
+          BlocListener<AddressBloc, AddressState>(
+            listener: (context, state) {
+              if (state is AddressesLoaded && !_addressesLoaded) {
+                _addressesLoaded = true;
+                // ✅ Auto-select default address
+                if (state.addresses.isNotEmpty) {
+                  final defaultAddress = state.addresses.firstWhere(
+                    (addr) => addr.isDefault,
+                    orElse: () => state.addresses.first,
+                  );
+                  setState(() {
+                    _selectedAddress = defaultAddress;
+                  });
+                }
+              }
+            },
+          ),
+          BlocListener<CartBloc, CartState>(
+            listener: (context, state) {
+              if (state is CartOrderSuccess) {
+                _showOrderSuccessDialog(context);
+              } else if (state is CartError) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              } else if (state is CartSuccess) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(state.message),
+                    backgroundColor: const Color(0xFF2ED573),
+                  ),
+                );
+              }
+            },
+          ),
+        ],
         child: BlocBuilder<CartBloc, CartState>(
           builder: (context, state) {
             if (state is CartLoading) {
@@ -131,12 +169,77 @@ class _CartViewState extends State<CartView> {
 
               return Column(
                 children: [
+                  // ✅ Show selected address info
+                  if (_selectedAddress != null)
+                    Container(
+                      margin: const EdgeInsets.all(15),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFF2ED573),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2ED573).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Iconsax.location,
+                              color: Color(0xFF2ED573),
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedAddress!.label,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF333333),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _selectedAddress!.fullAddress,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF666666),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _showAddressSelection,
+                            child: const Text(
+                              'Change',
+                              style: TextStyle(
+                                color: Color(0xFF2ED573),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(15),
                       child: Column(
                         children: [
-                          // 🚨 FIXED: Removed the extra closing brackets and parentheses here
                           ...state.items.map(
                             (item) => CartItemCard(
                               item: item,
@@ -217,7 +320,7 @@ class _CartViewState extends State<CartView> {
           Expanded(
             child: TextButton(
               onPressed: () {
-                Navigator.pop(context); // Close dialog
+                Navigator.pop(context);
                 context.read<CartBloc>().add(ClearCartEvent());
                 Navigator.popUntil(context, (route) => route.isFirst);
               },

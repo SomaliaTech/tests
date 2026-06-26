@@ -25,7 +25,6 @@ import {
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
-import { CompleteProfileDto } from './dto/complete-profile.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UploadProfileImageDto } from './dto/upload-profile-image.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -93,49 +92,36 @@ export class AuthController {
       verifyOtpDto.otpCode,
     );
   }
-
   @Post('complete-profile')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Complete user profile',
-    description:
-      'Completes the user profile with name, email, and optional profile image URL.',
+    description: 'Complete user profile after OTP verification',
   })
-  @ApiBody({ type: CompleteProfileDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Profile completed successfully',
-    schema: {
-      example: {
-        message: 'Profile completed successfully',
-        token: 'eyJhbGciOiJIUzI1NiIs...',
-        user: {
-          id: '550e8400-e29b-41d4-a716-446655440000',
-          phoneNumber: '+252612345678',
-          name: 'farah jamac',
-          email: 'farah@example.com',
-          profileImage: 'https://example.com/profile.jpg',
-          hasProfile: true,
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - Invalid or missing JWT token',
-  })
+  @UseInterceptors(FileInterceptor('profileImage'))
   async completeProfile(
     @Request() req,
-    @Body() completeProfileDto: CompleteProfileDto,
+    @Body()
+    body: {
+      name: string;
+      email: string;
+      marketId: string;
+      profileImage?: string;
+    },
   ) {
-    const userId = req.user.userId;
-    return this.authService.completeProfile(
-      userId,
-      completeProfileDto.name,
-      completeProfileDto.email,
-      completeProfileDto.profileImage,
-    );
+    // Validate required fields
+    if (!body.name || !body.email || !body.marketId) {
+      throw new BadRequestException('Name, email, and market are required');
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(body.email)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    // ✅ FIXED: Use req.user.userId instead of req.user.id
+    return this.authService.completeProfile(req.user.userId, body);
   }
 
   @Post('upload-profile-image')

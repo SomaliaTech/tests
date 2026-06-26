@@ -1,238 +1,7 @@
-// import 'package:flutter_bloc/flutter_bloc.dart';
-// import 'package:mobile/core/error/failures.dart';
-// import 'package:mobile/core/services/storage/storage_service.dart';
-// import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
-// import '../../domain/usecases/check_auth_status.dart';
-// import '../../domain/usecases/get_current_user.dart';
-// import '../../domain/usecases/logout.dart';
-// import '../../domain/usecases/send_otp.dart';
-// import '../../domain/usecases/upload_profile_image.dart';
-// import '../../domain/usecases/verify_otp.dart';
-// import 'auth_event.dart';
-// import 'auth_state.dart';
-// import 'dart:developer' as developer;
-// import '../../domain/entities/user.dart';
-
-// class AuthBloc extends Bloc<AuthEvent, AuthState> {
-//   final SendOtp sendOtp;
-//   final VerifyOtp verifyOtp;
-//   final CompleteProfile completeProfile;
-//   final UploadProfileImage uploadProfileImage;
-//   final GetCurrentUser getCurrentUser;
-//   final CheckAuthStatus checkAuthStatus;
-//   final Logout logout;
-//   final StorageService storageService;
-
-//   AuthBloc({
-//     required this.sendOtp,
-//     required this.verifyOtp,
-//     required this.completeProfile,
-//     required this.uploadProfileImage,
-//     required this.getCurrentUser,
-//     required this.checkAuthStatus,
-//     required this.logout,
-//     required this.storageService,
-//   }) : super(AuthInitial()) {
-//     on<SendOtpEvent>(_onSendOtp);
-//     on<VerifyOtpEvent>(_onVerifyOtp);
-//     on<CompleteProfileEvent>(_onCompleteProfile);
-//     on<UploadProfileImageEvent>(_onUploadProfileImage);
-//     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
-//     on<LogoutEvent>(_onLogout);
-//   }
-
-//   Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
-//     developer.log('📞 Sending OTP for: ${event.phoneNumber}');
-//     emit(AuthLoading());
-
-//     try {
-//       final result = await sendOtp(event.phoneNumber);
-//       developer.log('📦 OTP Result: $result');
-
-//       result.fold(
-//         (failure) {
-//           developer.log('❌ OTP Failure: ${failure.message}');
-//           emit(AuthError(failure.message));
-//         },
-//         (debugOtp) {
-//           developer.log('✅ OTP Sent Successfully: $debugOtp');
-//           emit(OtpSent(debugOtp));
-//         },
-//       );
-//     } catch (e) {
-//       developer.log('❌ OTP Exception: $e');
-//       emit(AuthError('An unexpected error occurred: $e'));
-//     }
-//   }
-
-//   Future<void> _onVerifyOtp(
-//     VerifyOtpEvent event,
-//     Emitter<AuthState> emit,
-//   ) async {
-//     emit(AuthLoading());
-//     final result = await verifyOtp(event.phoneNumber, event.otpCode);
-
-//     // 🚨 CRITICAL FIX: Await the fold function so it waits for the async callbacks to finish
-//     await result.fold(
-//       (failure) async {
-//         emit(AuthError(failure.message));
-//       },
-//       (data) async {
-//         print(
-//           '🔑 Saving token: ${data.token.length > 20 ? data.token.substring(0, 20) : data.token}...',
-//         );
-
-//         // 🚨 CRITICAL FIX: Await ALL storage writes to prevent race conditions!
-//         await storageService.saveAuthToken(data.token);
-//         await storageService.saveUserId(data.user.id);
-//         await storageService.saveLoginStatus(true);
-//         await storageService.saveUserName(data.user.name ?? '');
-//         await storageService.saveUserPhone(data.user.phoneNumber);
-
-//         if (data.user.email != null) {
-//           await storageService.saveUserEmail(data.user.email!);
-//         }
-//         if (data.user.profileImage != null) {
-//           await storageService.saveUserProfileImage(data.user.profileImage!);
-//         }
-//         await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-
-//         // Now that everything is safely saved to disk, emit the state and navigate
-//         emit(OtpVerified(data.token, data.user));
-//       },
-//     );
-//   }
-
-//   Future<void> _onCompleteProfile(
-//     CompleteProfileEvent event,
-//     Emitter<AuthState> emit,
-//   ) async {
-//     emit(AuthLoading());
-//     final result = await completeProfile(
-//       name: event.name,
-//       profileImageUrl: event.profileImageUrl,
-//     );
-
-//     // 🚨 CRITICAL FIX: Await the fold function
-//     await result.fold(
-//       (failure) async {
-//         emit(AuthError(failure.message));
-//       },
-//       (data) async {
-//         // 🚨 CRITICAL FIX: Await storage writes
-//         await storageService.saveUserName(event.name);
-//         if (event.profileImageUrl != null) {
-//           await storageService.saveUserProfileImage(event.profileImageUrl!);
-//         }
-//         await storageService.saveLoginStatus(true);
-
-//         emit(ProfileCompleted(data.token, data.user));
-//       },
-//     );
-//   }
-
-//   Future<void> _onUploadProfileImage(
-//     UploadProfileImageEvent event,
-//     Emitter<AuthState> emit,
-//   ) async {
-//     emit(AuthLoading());
-//     final result = await uploadProfileImage(event.base64Image);
-
-//     // 🚨 CRITICAL FIX: Await the fold function
-//     await result.fold(
-//       (failure) async {
-//         emit(AuthError(failure.message));
-//       },
-//       (imageUrl) async {
-//         // 🚨 CRITICAL FIX: Await storage write
-//         await storageService.saveUserProfileImage(imageUrl);
-//         emit(ProfileImageUploaded(imageUrl));
-//       },
-//     );
-//   }
-
-//   Future<void> _onCheckAuthStatus(
-//     CheckAuthStatusEvent event,
-//     Emitter<AuthState> emit,
-//   ) async {
-//     emit(AuthChecking());
-
-//     // ✅ Check if authenticated using storageService
-//     final isAuthenticated = await storageService.isAuthenticated();
-
-//     if (!isAuthenticated) {
-//       emit(Unauthenticated());
-//       return;
-//     }
-
-//     // Get token
-//     final token = await storageService.getAuthToken();
-//     if (token == null || token.isEmpty) {
-//       emit(Unauthenticated());
-//       return;
-//     }
-
-//     // Get user from API
-//     final userResult = await getCurrentUser();
-//     await userResult.fold(
-//       (failure) async {
-//         // If API fails, load from local storage
-//         final name = await storageService.getUserName() ?? 'User';
-//         final phone = await storageService.getUserPhone() ?? '';
-//         final email = await storageService.getUserEmail();
-//         final profileImage = await storageService.getUserProfileImage();
-//         final userId = await storageService.getUserId() ?? '';
-//         final isAdmin = await storageService.getIsAdmin();
-
-//         final localUser = User(
-//           id: userId,
-//           phoneNumber: phone,
-//           name: name,
-//           email: email,
-//           profileImage: profileImage,
-//           isVerified: true,
-//           hasProfile: name.isNotEmpty,
-//           isAdmin: isAdmin,
-//         );
-
-//         emit(Authenticated(localUser, token));
-//       },
-//       (user) async {
-//         // ✅ Save user data to storage
-//         storageService.saveUserId(user.id);
-//         storageService.saveUserName(user.name ?? '');
-//         storageService.saveUserPhone(user.phoneNumber);
-//         if (user.email != null) {
-//           storageService.saveUserEmail(user.email!);
-//         }
-//         if (user.profileImage != null) {
-//           storageService.saveUserProfileImage(user.profileImage!);
-//         }
-//         storageService.saveIsAdmin(user.isAdmin ?? false);
-//         storageService.saveLoginStatus(true);
-
-//         emit(Authenticated(user, token));
-//       },
-//     );
-//   }
-
-//   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
-//     emit(AuthLoading());
-//     await logout.call();
-//     // ✅ Clear all auth data
-//     await storageService.clearAuthData();
-//     emit(Unauthenticated());
-//   }
-
-//   // ✅ Helper method to get current token
-//   Future<String?> getCurrentToken() async {
-//     return await storageService.getAuthToken();
-//   }
-// }
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/core/error/failures.dart';
+import 'package:mobile/core/services/push_notification_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
-import 'package:mobile/core/services/chat_socket_service.dart'; // 🚨 ADDED IMPORT
+import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
 import '../../domain/usecases/check_auth_status.dart';
 import '../../domain/usecases/get_current_user.dart';
@@ -244,6 +13,9 @@ import 'auth_event.dart';
 import 'auth_state.dart';
 import 'dart:developer' as developer;
 import '../../domain/entities/user.dart';
+import 'dart:convert'; // ✅ Add this
+import 'package:http/http.dart' as http; // ✅ Add this
+import 'package:mobile/core/constants/api_constants.dart'; // ✅ Add this
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SendOtp sendOtp;
@@ -254,7 +26,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final CheckAuthStatus checkAuthStatus;
   final Logout logout;
   final StorageService storageService;
-  final ChatSocketService chatSocketService; // 🚨 ADDED FIELD
+  final ChatSocketService chatSocketService;
 
   AuthBloc({
     required this.sendOtp,
@@ -265,7 +37,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.checkAuthStatus,
     required this.logout,
     required this.storageService,
-    required this.chatSocketService, // 🚨 ADDED PARAM
+    required this.chatSocketService,
   }) : super(AuthInitial()) {
     on<SendOtpEvent>(_onSendOtp);
     on<VerifyOtpEvent>(_onVerifyOtp);
@@ -273,6 +45,30 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<UploadProfileImageEvent>(_onUploadProfileImage);
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LogoutEvent>(_onLogout);
+  }
+  Future<void> _registerDeviceToken(String token) async {
+    try {
+      final authToken = await storageService.getAuthToken();
+      if (authToken == null) return;
+
+      // ✅ FIX: Use the imported http package directly, not with import()
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/chat/device-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: json.encode({'token': token, 'platform': 'web'}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log('📱 Device token registered successfully');
+      } else {
+        developer.log('❌ Failed to register token: ${response.statusCode}');
+      }
+    } catch (e) {
+      developer.log('❌ Failed to register token: $e');
+    }
   }
 
   Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
@@ -309,7 +105,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await storageService.saveUserProfileImage(data.user.profileImage!);
       await storageService.saveIsAdmin(data.user.isAdmin ?? false);
 
-      chatSocketService.connect(); // 🚨 CONNECT WEBSOCKET IMMEDIATELY
+      // ✅ Register device token after login
+      try {
+        final pushService = PushNotificationService();
+        final token = await pushService.getToken();
+        if (token != null) {
+          await _registerDeviceToken(token);
+          developer.log('📱 Device token registered after login');
+        }
+      } catch (e) {
+        developer.log('⚠️ Could not register token: $e');
+      }
+
+      // ✅ Connect WebSocket after successful login
+      chatSocketService.connect();
+      developer.log('🔌 WebSocket connect() called after login');
 
       emit(OtpVerified(data.token, data.user));
     });
@@ -322,17 +132,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     final result = await completeProfile(
       name: event.name,
+      email: event.email, // ✅ Pass email
+      marketId: event.marketId, // ✅ Pass marketId
       profileImageUrl: event.profileImageUrl,
     );
     await result.fold((failure) async => emit(AuthError(failure.message)), (
       data,
     ) async {
       await storageService.saveUserName(event.name);
+      await storageService.saveUserEmail(event.email); // ✅ Save email
+      await storageService.saveUserMarketId(event.marketId); // ✅ Save marketId
       if (event.profileImageUrl != null)
         await storageService.saveUserProfileImage(event.profileImageUrl!);
       await storageService.saveLoginStatus(true);
 
-      chatSocketService.connect(); // 🚨 CONNECT WEBSOCKET
+      chatSocketService.connect();
+      developer.log('🔌 WebSocket connect() after profile completion');
+
       emit(ProfileCompleted(data.token, data.user));
     });
   }
@@ -357,7 +173,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   ) async {
     emit(AuthChecking());
     final isAuthenticated = await storageService.isAuthenticated();
-
     if (!isAuthenticated) {
       emit(Unauthenticated());
       return;
@@ -369,7 +184,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
-    chatSocketService.connect(); // 🚨 CONNECT WEBSOCKET ON APP RESTART
+    // ✅ Connect on app restart (already logged in)
+    chatSocketService.connect();
+    developer.log('🔌 WebSocket connect() on app restart');
 
     final userResult = await getCurrentUser();
     await userResult.fold(
@@ -408,7 +225,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   }
 
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
-    chatSocketService.disconnect(); // 🚨 DISCONNECT WEBSOCKET ON LOGOUT
+    chatSocketService.disconnect(); // ✅ Disconnect on logout
+    developer.log('🔌 WebSocket disconnected on logout');
     emit(AuthLoading());
     await logout.call();
     await storageService.clearAuthData();

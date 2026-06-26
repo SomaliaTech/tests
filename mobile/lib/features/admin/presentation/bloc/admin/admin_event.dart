@@ -24,3 +24,12 @@ class UpdateOrderStatusEvent extends AdminEvent {
   @override
   List<Object?> get props => [orderId, newStatus];
 }
+
+// In admin_event.dart
+class LoadAdminOrdersEvent extends AdminEvent {
+  final String? search;
+  const LoadAdminOrdersEvent({this.search});
+
+  @override
+  List<Object?> get props => [search];
+}

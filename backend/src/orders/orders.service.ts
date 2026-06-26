@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import {
@@ -20,10 +22,15 @@ import { eq, and, sql, desc, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderDto, AddressDto } from './dto/create-order.dto';
 import { AddToCartDto } from '../products/dto/cart.dto';
+import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class OrdersService {
-  constructor(private drizzle: DrizzleService) {}
+  constructor(
+    private drizzle: DrizzleService,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
+  ) {}
 
   // ==========================================
   // ADDRESS MANAGEMENT
@@ -194,6 +201,7 @@ export class OrdersService {
 
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
+      // ✅ Notify the customer
       await tx.insert(notifications).values({
         id: uuidv4(),
         userId,
@@ -203,6 +211,9 @@ export class OrdersService {
         actionText: 'View Order',
         actionLink: `/orders/${order.id}`,
       });
+
+      // ✅ Notify all admins (real-time + database)
+      await this.notifyAdminsNewOrder(tx, order, user.name || 'Customer');
 
       return { order, totalAmount, items: orderItemsData };
     });
@@ -424,8 +435,6 @@ export class OrdersService {
   // ==========================================
   // CART MANAGEMENT
   // ==========================================
-  // CART MANAGEMENT
-  // ==========================================
 
   async getCart(userId: string) {
     const userCartItems = await this.drizzle.db.query.cartItems.findMany({
@@ -490,7 +499,7 @@ export class OrdersService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    let variant: any = null; // ✅ FIXED: Use 'any' to avoid type issues
+    let variant: any = null;
     if (productVariantId) {
       variant = await this.drizzle.db.query.productVariants.findFirst({
         where: and(
@@ -551,6 +560,7 @@ export class OrdersService {
       return newItem;
     }
   }
+
   async removeCartItem(userId: string, itemId: string) {
     const [deleted] = await this.drizzle.db
       .delete(cartItems)
@@ -589,7 +599,6 @@ export class OrdersService {
         throw new BadRequestException('Insufficient stock');
       }
     } else {
-      // ✅ FIXED: Use existingItem.productId (non-nullable in schema)
       const [product] = await this.drizzle.db
         .select()
         .from(products)
@@ -612,7 +621,6 @@ export class OrdersService {
 
     if (!updated) throw new NotFoundException('Cart item not found');
 
-    // ✅ FIXED: Use existingItem.productId with type assertion
     const product = await this.drizzle.db
       .select()
       .from(products)
@@ -630,5 +638,74 @@ export class OrdersService {
       totalPrice: Number(product[0].price) * updated.quantity,
       inStock: true,
     };
+  }
+
+  // ==========================================
+  // ADMIN NOTIFICATION HELPERS
+  // ==========================================
+
+  /**
+   * Notify all admin users about a new order
+   * Creates database notifications and emits real-time WebSocket events
+   */
+  private async notifyAdminsNewOrder(
+    tx: any,
+    order: any,
+    customerName: string,
+  ) {
+    try {
+      // Get all admin users
+      const admins = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.isAdmin, true));
+
+      const notificationTitle = 'New Order Received';
+      const notificationMessage = `New order #${order.orderNumber} from ${customerName} - $${order.totalAmount}`;
+
+      // Create notification for each admin in database
+      for (const admin of admins) {
+        await tx.insert(notifications).values({
+          id: uuidv4(),
+          userId: admin.id,
+          type: 'order',
+          title: notificationTitle,
+          message: notificationMessage,
+          actionText: 'View Order',
+          actionLink: `/admin/orders/${order.id}`,
+        });
+      }
+
+      // ✅ Emit real-time notification to all admins via WebSocket
+      this.chatGateway.server.to('admins').emit('new_notification', {
+        id: uuidv4(),
+        type: 'order',
+        title: notificationTitle,
+        message: notificationMessage,
+        actionText: 'View Orders',
+        actionLink: '/admin/orders',
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        customerName: customerName,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+
+      // ✅ Also emit specific new_order event for dashboard refresh
+      this.chatGateway.server.to('admins').emit('new_order', {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customerName: customerName,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        createdAt: order.createdAt,
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('⚠️ Failed to notify admins:', errorMessage);
+    }
   }
 }

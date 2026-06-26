@@ -10,6 +10,7 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     on<FetchAdminStatsEvent>(_onFetchStats);
     on<FetchAllOrdersEvent>(_onFetchOrders);
     on<UpdateOrderStatusEvent>(_onUpdateStatus);
+    on<LoadAdminOrdersEvent>(_onLoadOrders);
   }
 
   Future<void> _onFetchStats(
@@ -46,12 +47,11 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
     try {
       await repository.updateOrderStatus(event.orderId, event.newStatus);
 
-      // ✅ Include both message AND newStatus
       emit(
         AdminStatusUpdated(
           message: 'Order status updated successfully',
           newStatus: event.newStatus,
-          orderId: event.orderId, // Add this if your state requires it
+          orderId: event.orderId,
         ),
       );
 
@@ -59,6 +59,21 @@ class AdminBloc extends Bloc<AdminEvent, AdminState> {
       add(const FetchAllOrdersEvent());
     } catch (e) {
       emit(AdminStatusUpdateError(e.toString()));
+    }
+  }
+
+  // ✅ NEW: Handler for LoadAdminOrdersEvent
+  Future<void> _onLoadOrders(
+    LoadAdminOrdersEvent event,
+    Emitter<AdminState> emit,
+  ) async {
+    try {
+      // ✅ Pass null for search parameter (load all orders)
+      final orders = await repository.getAllOrders(null);
+      emit(AdminOrdersLoaded(orders));
+    } catch (e) {
+      // ✅ Use AdminOrdersError, not AdminError
+      emit(AdminOrdersError('Failed to load orders: $e'));
     }
   }
 }

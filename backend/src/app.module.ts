@@ -28,6 +28,7 @@ import { ChatModule } from './chat/chat.module';
     ProductsModule,
     AuthModule,
     AdminModule,
+    ChatModule,
     MarketsModule,
     OrdersModule,
     DashboardModule,

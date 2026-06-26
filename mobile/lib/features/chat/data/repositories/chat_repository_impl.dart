@@ -25,10 +25,22 @@ class ChatRepositoryImpl implements ChatRepository {
   }
 
   @override
+  ResultFuture<List<Conversation>> searchConversations(String query) async {
+    try {
+      final conversations = await remoteDataSource.searchConversations(query);
+      return Right(conversations);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   ResultFuture<List<ChatMessage>> getChatHistory(String partnerId) async {
     try {
-      final history = await remoteDataSource.getChatHistory(partnerId);
-      return Right(history);
+      final messages = await remoteDataSource.getMessages(partnerId);
+      return Right(messages);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -41,6 +53,66 @@ class ChatRepositoryImpl implements ChatRepository {
     try {
       await remoteDataSource.markAsRead(partnerId);
       return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  ResultFuture<List<Map<String, dynamic>>> getAvailableAdmins() async {
+    try {
+      final admins = await remoteDataSource.getAvailableAdmins();
+      return Right(admins);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  ResultFuture<Map<String, dynamic>> createConversation(
+    String participantId,
+  ) async {
+    try {
+      final result = await remoteDataSource.createConversation(participantId);
+      return Right(result);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  ResultFuture<ChatMessage> sendMessage({
+    required String receiverId,
+    String? content,
+    String type = 'text',
+    String? mediaUrl,
+  }) async {
+    try {
+      final message = await remoteDataSource.sendMessage(
+        receiverId: receiverId,
+        content: content,
+        type: type,
+        mediaUrl: mediaUrl,
+      );
+      return Right(message);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  ResultFuture<Map<String, dynamic>> getUnreadCount() async {
+    try {
+      final result = await remoteDataSource.getUnreadCount();
+      return Right(result);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {

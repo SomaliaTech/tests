@@ -24,7 +24,7 @@ import {
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateProductAdminDto } from './dto/create-proudct-admin-dto';
-import { AdminGuard } from 'src/auth/guards/admin.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -58,8 +58,10 @@ export class AdminController {
   async getAllDashboardData(@Query('period') period: string = 'week') {
     return this.adminService.getAllDashboardData(period);
   }
-  // Add these endpoints to AdminController
 
+  // ==========================================
+  // COLORS & SIZES
+  // ==========================================
   @Get('colors')
   @ApiOperation({ summary: 'Get all colors' })
   getColors() {
@@ -68,8 +70,11 @@ export class AdminController {
 
   @Get('sizes')
   @ApiOperation({ summary: 'Get all sizes' })
-  getSizes() {
-    return this.adminService.getSizes();
+  async getSizes() {
+    const sizes = await this.adminService.getSizes();
+    console.log('📏 [Admin] Sizes fetched:', sizes.length, 'sizes');
+    console.log('📏 [Admin] Sizes data:', sizes);
+    return sizes;
   }
   // ==========================================
   // DASHBOARD STATS
@@ -246,6 +251,7 @@ export class AdminController {
   getAllUsers(@Query('search') search?: string) {
     return this.adminService.getAllUsers(search);
   }
+
   @Get('users/:userId')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
@@ -317,6 +323,96 @@ export class AdminController {
   }
 
   // ==========================================
+  // COLORS
+  // ==========================================
+  @Get('colors/all')
+  @ApiOperation({ summary: 'Get all colors' })
+  getAllColors() {
+    return this.adminService.getAllColors();
+  }
+
+  @Post('colors')
+  @ApiOperation({ summary: 'Create a new color' })
+  createColor(@Body() data: { name: string; code: string }) {
+    return this.adminService.createColor(data);
+  }
+
+  @Put('colors/:colorId')
+  @ApiOperation({ summary: 'Update color' })
+  updateColor(
+    @Param('colorId') colorId: string,
+    @Body() data: { name?: string; code?: string },
+  ) {
+    return this.adminService.updateColor(colorId, data);
+  }
+
+  @Delete('colors/:colorId')
+  @ApiOperation({ summary: 'Delete color' })
+  deleteColor(@Param('colorId') colorId: string) {
+    return this.adminService.deleteColor(colorId);
+  }
+
+  // ==========================================
+  // SIZES
+  // ==========================================
+  @Get('sizes/all')
+  @ApiOperation({ summary: 'Get all sizes' })
+  getAllSizes() {
+    return this.adminService.getAllSizes();
+  }
+
+  @Post('sizes')
+  @ApiOperation({ summary: 'Create a new size' })
+  createSize(@Body() data: { name: string; value: string }) {
+    return this.adminService.createSize(data);
+  }
+
+  @Put('sizes/:sizeId')
+  @ApiOperation({ summary: 'Update size' })
+  updateSize(
+    @Param('sizeId') sizeId: string,
+    @Body() data: { name?: string; value?: string },
+  ) {
+    return this.adminService.updateSize(sizeId, data);
+  }
+
+  @Delete('sizes/:sizeId')
+  @ApiOperation({ summary: 'Delete size' })
+  deleteSize(@Param('sizeId') sizeId: string) {
+    return this.adminService.deleteSize(sizeId);
+  }
+
+  // ==========================================
+  // MARKETS
+  // ==========================================
+  @Get('markets/all')
+  @ApiOperation({ summary: 'Get all markets' })
+  getAllMarkets() {
+    return this.adminService.getAllMarkets();
+  }
+
+  @Post('markets')
+  @ApiOperation({ summary: 'Create a new market' })
+  createMarket(@Body() data: { name: string; slug?: string; city?: string }) {
+    return this.adminService.createMarket(data);
+  }
+
+  @Put('markets/:marketId')
+  @ApiOperation({ summary: 'Update market' })
+  updateMarket(
+    @Param('marketId') marketId: string,
+    @Body()
+    data: { name?: string; slug?: string; city?: string; isActive?: boolean },
+  ) {
+    return this.adminService.updateMarket(marketId, data);
+  }
+
+  @Delete('markets/:marketId')
+  @ApiOperation({ summary: 'Delete market' })
+  deleteMarket(@Param('marketId') marketId: string) {
+    return this.adminService.deleteMarket(marketId);
+  }
+  // ==========================================
   // ADMIN PRODUCTS MANAGEMENT
   // ==========================================
   @Get('products/all')
@@ -338,6 +434,7 @@ export class AdminController {
   createProduct(@Body() createProductDto: CreateProductAdminDto) {
     return this.adminService.createProduct(createProductDto);
   }
+
   @Put('products/:productId')
   @ApiOperation({ summary: 'Update product' })
   @ApiParam({ name: 'productId', description: 'Product UUID' })
@@ -360,7 +457,39 @@ export class AdminController {
   getCategoriesTree() {
     return this.adminService.getCategoriesTree();
   }
+  @Post('categories')
+  @ApiOperation({ summary: 'Create a new category' })
+  createCategory(
+    @Body()
+    data: {
+      name: string;
+      slug?: string;
+      description?: string;
+      parentId?: string;
+    },
+  ) {
+    return this.adminService.createCategory(data);
+  }
 
+  @Put('categories/:categoryId')
+  @ApiOperation({ summary: 'Update category' })
+  updateCategory(
+    @Param('categoryId') categoryId: string,
+    @Body()
+    data: {
+      name?: string;
+      slug?: string;
+      description?: string;
+    },
+  ) {
+    return this.adminService.updateCategory(categoryId, data);
+  }
+
+  @Delete('categories/:categoryId')
+  @ApiOperation({ summary: 'Delete category' })
+  deleteCategory(@Param('categoryId') categoryId: string) {
+    return this.adminService.deleteCategory(categoryId);
+  }
   @Post('products/:productId/images')
   @ApiOperation({ summary: 'Upload product images' })
   @ApiParam({ name: 'productId', description: 'Product UUID' })

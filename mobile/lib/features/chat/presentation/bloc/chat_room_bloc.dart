@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/chat/domain/entities/chat_message.dart';
-import 'package:mobile/features/chat/domain/usecases/get_chat_history.dart';
-import 'package:mobile/features/chat/domain/usecases/mark_as_read.dart' as chat;
+import '../../domain/entities/chat_message.dart';
+import '../../domain/usecases/get_chat_history.dart';
+import '../../domain/usecases/mark_as_read.dart' as chat;
 import 'chat_room_event.dart';
 import 'chat_room_state.dart';
 import '../../../../core/services/chat_socket_service.dart';
@@ -17,14 +17,13 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   String? _currentPartnerId;
   StreamSubscription? _msgSub;
   StreamSubscription? _statusSub;
+  StreamSubscription? _sentSub;
 
   ChatRoomBloc({
     required this.getChatHistory,
     required this.markAsRead,
     required this.socketService,
   }) : super(ChatRoomInitial()) {
-    print('📦 ChatRoomBloc initialized with socket: ${socketService.hashCode}');
-
     on<LoadChatHistoryEvent>(_onLoadHistory);
     on<SendMessageEvent>(_onSendMessage);
     on<ReceiveMessageEvent>(_onReceiveMessage);
@@ -34,27 +33,56 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   }
 
   void _setupSocketListeners() {
-    print('🎧 Setting up socket listeners');
+    // Listen for new messages
+    _msgSub = socketService.onNewMessage.listen((message) {
+      if (isClosed) return;
 
-    _msgSub = socketService.onNewMessage.listen((data) {
-      print('📩 Socket message received: $data');
-      try {
-        final message = ChatMessage.fromJson(Map<String, dynamic>.from(data));
+      // ✅ Now receives ChatMessage directly, no need to parse
+      if ((message.senderId == _currentPartnerId ||
+              message.receiverId == _currentPartnerId) &&
+          !isClosed) {
         add(ReceiveMessageEvent(message));
-      } catch (e) {
-        print('❌ Error parsing socket message: $e');
       }
     });
 
+    // ✅ Listen for partner status changes
     _statusSub = socketService.onStatusChange.listen((data) {
-      print('🔄 Status change received: $data');
-      if (data['userId'] == _currentPartnerId) {
-        add(
-          UpdatePartnerStatusEvent(
-            data['userId'] as String,
-            data['isOnline'] as bool? ?? false,
-          ),
-        );
+      if (isClosed) return;
+
+      print('🟢 ChatRoomBloc received status change: $data');
+
+      final userId = data['userId'] as String?;
+      final isOnline = data['isOnline'] as bool? ?? false;
+
+      print(
+        '🟢 Checking: userId=$userId, currentPartner=$_currentPartnerId, isOnline=$isOnline',
+      );
+
+      if (userId == _currentPartnerId && !isClosed) {
+        print('✅ Dispatching UpdatePartnerStatusEvent');
+        add(UpdatePartnerStatusEvent(userId!, isOnline));
+      }
+    });
+
+    // Listen for sent message confirmations
+    _sentSub = socketService.onMessageSent.listen((data) {
+      if (isClosed) return;
+
+      try {
+        if (data is Map && !isClosed) {
+          final confirmedMessage = ChatMessage.fromJson(data);
+          final index = _messages.indexWhere(
+            (m) =>
+                m.id.startsWith('temp_') &&
+                m.content == confirmedMessage.content,
+          );
+          if (index >= 0 && !isClosed) {
+            _messages[index] = confirmedMessage;
+            add(ReceiveMessageEvent(confirmedMessage));
+          }
+        }
+      } catch (e) {
+        // Ignore parse errors
       }
     });
   }
@@ -63,46 +91,49 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     LoadChatHistoryEvent event,
     Emitter<ChatRoomState> emit,
   ) async {
-    print('📂 Loading history for partner: ${event.partnerId}');
+    if (isClosed) return;
+
     _currentPartnerId = event.partnerId;
+    _isPartnerOnline = event.isOnline;
+
     emit(ChatRoomLoading());
 
-    try {
-      final result = await getChatHistory(event.partnerId);
-      result.fold(
-        (failure) {
-          print('❌ Failed to load history: ${failure.message}');
-          emit(ChatRoomLoaded(messages: [], isPartnerOnline: _isPartnerOnline));
-        },
-        (messages) {
-          print('✅ Loaded ${messages.length} messages');
-          _messages = messages;
+    final result = await getChatHistory(event.partnerId);
+
+    if (isClosed) return;
+
+    result.fold(
+      (failure) {
+        if (!isClosed) {
+          emit(
+            ChatRoomLoaded(
+              messages: const [],
+              isPartnerOnline: _isPartnerOnline,
+            ),
+          );
+        }
+      },
+      (history) {
+        if (!isClosed) {
+          _messages = List.from(history);
           emit(
             ChatRoomLoaded(
               messages: _messages,
               isPartnerOnline: _isPartnerOnline,
             ),
           );
-          // Mark messages as read
-          markAsRead(event.partnerId);
-        },
-      );
-    } catch (e) {
-      print('❌ Error loading history: $e');
-      emit(ChatRoomError(e.toString()));
-    }
+          markAsRead.call(event.partnerId);
+        }
+      },
+    );
   }
 
-  void _onSendMessage(
-    SendMessageEvent event,
-    Emitter<ChatRoomState> emit,
-  ) async {
-    print('📤 Sending message: ${event.content}');
+  void _onSendMessage(SendMessageEvent event, Emitter<ChatRoomState> emit) {
+    if (isClosed) return;
 
-    // Create optimistic message
     final tempMessage = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: 'me', // Will be replaced with real ID when server responds
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      senderId: 'me',
       receiverId: event.partnerId,
       content: event.content,
       type: event.type,
@@ -111,21 +142,22 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       createdAt: DateTime.now(),
     );
 
-    // Add to messages list immediately
     _messages.insert(0, tempMessage);
-    emit(
-      ChatRoomLoaded(
-        messages: List.from(_messages),
-        isPartnerOnline: _isPartnerOnline,
-      ),
-    );
 
-    // Send via socket
+    if (!isClosed) {
+      emit(
+        ChatRoomLoaded(
+          messages: List.from(_messages),
+          isPartnerOnline: _isPartnerOnline,
+        ),
+      );
+    }
+
     socketService.sendMessage(
-      event.partnerId,
-      event.content,
-      event.type,
-      event.mediaUrl,
+      receiverId: event.partnerId,
+      content: event.content,
+      type: event.type,
+      mediaUrl: event.mediaUrl,
     );
   }
 
@@ -133,27 +165,28 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     ReceiveMessageEvent event,
     Emitter<ChatRoomState> emit,
   ) {
-    print('📨 Processing received message: ${event.message.id}');
+    if (isClosed) return;
 
-    // Check for duplicates
     final exists = _messages.any((m) => m.id == event.message.id);
     if (!exists) {
-      // Add new message at the beginning (newest first)
+      _messages.removeWhere(
+        (m) => m.id.startsWith('temp_') && m.content == event.message.content,
+      );
       _messages.insert(0, event.message);
+    } else {
+      final index = _messages.indexWhere((m) => m.id == event.message.id);
+      if (index >= 0) {
+        _messages[index] = event.message;
+      }
+    }
+
+    if (!isClosed) {
       emit(
         ChatRoomLoaded(
           messages: List.from(_messages),
           isPartnerOnline: _isPartnerOnline,
         ),
       );
-
-      // Mark as read if it's from the partner
-      if (_currentPartnerId != null &&
-          event.message.senderId == _currentPartnerId) {
-        markAsRead(_currentPartnerId!);
-      }
-    } else {
-      print('⚠️ Duplicate message ignored');
     }
   }
 
@@ -161,21 +194,29 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     UpdatePartnerStatusEvent event,
     Emitter<ChatRoomState> emit,
   ) {
-    print('🔄 Updating partner status: ${event.isOnline}');
+    if (isClosed) return;
+
+    print('✅ _onUpdatePartnerStatus called: isOnline=${event.isOnline}');
+
     _isPartnerOnline = event.isOnline;
 
-    if (state is ChatRoomLoaded) {
+    // ✅ Always emit if we have messages loaded
+    if (state is ChatRoomLoaded && !isClosed) {
+      print('✅ Emitting ChatRoomLoaded with isPartnerOnline=$_isPartnerOnline');
       emit(
-        ChatRoomLoaded(messages: _messages, isPartnerOnline: _isPartnerOnline),
+        ChatRoomLoaded(
+          messages: List.from(_messages),
+          isPartnerOnline: _isPartnerOnline,
+        ),
       );
     }
   }
 
   @override
   Future<void> close() {
-    print('🔌 Closing ChatRoomBloc');
     _msgSub?.cancel();
     _statusSub?.cancel();
+    _sentSub?.cancel();
     return super.close();
   }
 }

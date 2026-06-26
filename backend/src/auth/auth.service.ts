@@ -2,12 +2,13 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  NotFoundException, // ✅ ADDED
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from 'src/cloudfare/cloudflare.service';
-import { users } from '../drizzle/schema';
+import { markets, users } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseService } from 'src/supabase/supabase.service';
@@ -36,7 +37,7 @@ export class AuthService {
     private drizzle: DrizzleService,
     private cloudflareService: CloudflareService,
     private supabaseService: SupabaseService,
-    private notificationsService: NotificationsService, // ✅ Added
+    private notificationsService: NotificationsService,
   ) {}
 
   async sendOtp(phoneNumber: string) {
@@ -119,8 +120,11 @@ export class AuthService {
         updatedAt: new Date(),
       })
       .where(eq(users.phoneNumber, phoneNumber));
-
-    const token = this.generateToken(currentUser.id, phoneNumber);
+    const token = this.generateToken(
+      currentUser.id,
+      phoneNumber,
+      currentUser.isAdmin ?? false,
+    );
     const hasProfile = !!(
       currentUser.name && currentUser.name.trim().length > 0
     );
@@ -157,7 +161,6 @@ export class AuthService {
         .where(eq(users.id, userId))
         .returning();
 
-      // ✅ Send notification for profile image update
       await this.notificationsService.createSystemNotification(
         userId,
         'Profile Image Updated',
@@ -186,26 +189,98 @@ export class AuthService {
 
   async completeProfile(
     userId: string,
-    name: string,
-    email?: string,
-    profileImageUrl?: string,
+    data: {
+      name: string;
+      email: string;
+      marketId: string;
+      profileImage?: string;
+    },
   ) {
-    const updateData: Partial<User> = {
-      name,
+    console.log('🔍 Completing profile for user:', userId);
+    console.log('📦 Data received:', data);
+
+    // ✅ Validate required fields
+    if (!data.name || !data.email || !data.marketId) {
+      throw new BadRequestException('Name, email, and market are required');
+    }
+
+    // ✅ Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(data.email)) {
+      throw new BadRequestException('Invalid email format');
+    }
+
+    // ✅ Validate market exists
+    const marketResult = await this.drizzle.db
+      .select()
+      .from(markets)
+      .where(eq(markets.id, data.marketId))
+      .limit(1);
+
+    if (!marketResult || marketResult.length === 0) {
+      console.error('❌ Market not found:', data.marketId);
+      throw new BadRequestException('Invalid market selected');
+    }
+
+    const market = marketResult[0];
+    console.log('✅ Market found:', market.name);
+
+    // ✅ Check if email is already taken
+    const existingEmail = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.email, data.email))
+      .limit(1);
+
+    if (existingEmail.length > 0 && existingEmail[0].id !== userId) {
+      throw new BadRequestException('Email already in use');
+    }
+
+    const updateData: any = {
+      name: data.name,
+      email: data.email,
+      marketId: data.marketId,
+      isVerified: true,
       updatedAt: new Date(),
     };
 
-    if (email) updateData.email = email;
-    if (profileImageUrl) updateData.profileImage = profileImageUrl;
+    // ✅ Handle profile image upload if provided
+    if (data.profileImage) {
+      try {
+        console.log('📸 Uploading profile image...');
+        const uploadResult = await this.supabaseService.uploadBase64(
+          data.profileImage,
+          'profiles',
+        );
+        // ✅ FIXED: Use secure_url instead of url
+        updateData.profileImage = uploadResult.secure_url;
+        console.log('✅ Image uploaded:', uploadResult.secure_url);
+      } catch (error) {
+        console.error('❌ Image upload failed:', error);
+        throw new BadRequestException('Failed to upload profile image');
+      }
+    }
 
+    // ✅ Update user
     const [updatedUser] = await this.drizzle.db
       .update(users)
       .set(updateData)
       .where(eq(users.id, userId))
       .returning();
 
-    const token = this.generateToken(updatedUser.id, updatedUser.phoneNumber);
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
 
+    console.log('✅ Profile completed successfully');
+
+    // ✅ Generate new token with updated user data
+    // In completeProfile method (already correct, but verify)
+    const token = this.jwtService.sign({
+      sub: updatedUser.id,
+      phoneNumber: updatedUser.phoneNumber,
+      isAdmin: updatedUser.isAdmin ?? false, // ✅ Already correct in completeProfile
+    });
     // ✅ Send notification for profile completion
     await this.notificationsService.createSystemNotification(
       userId,
@@ -218,10 +293,11 @@ export class AuthService {
       token,
       user: {
         id: updatedUser.id,
-        phoneNumber: updatedUser.phoneNumber,
         name: updatedUser.name,
         email: updatedUser.email,
+        phoneNumber: updatedUser.phoneNumber,
         profileImage: updatedUser.profileImage,
+        marketId: updatedUser.marketId,
         isVerified: updatedUser.isVerified,
         hasProfile: true,
         isAdmin: updatedUser.isAdmin ?? false,
@@ -280,7 +356,6 @@ export class AuthService {
         ` Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
       );
 
-      // Get old user data to compare changes
       const [oldUser] = await this.drizzle.db
         .select()
         .from(users)
@@ -304,7 +379,6 @@ export class AuthService {
       }
 
       if (Object.keys(updateData).length === 1) {
-        // Only updatedAt was set, nothing changed
         const result = await this.drizzle.db
           .select()
           .from(users)
@@ -333,7 +407,6 @@ export class AuthService {
 
       const updatedUser = result[0];
 
-      // ✅ Send notification for profile updates
       if (changes.length > 0) {
         const changeMessage = changes.join(', ');
         await this.notificationsService.createSystemNotification(
@@ -365,16 +438,20 @@ export class AuthService {
     }
   }
 
-  private generateToken(userId: string, phoneNumber: string): string {
+  // ✅ Fixed - Include isAdmin
+  private generateToken(
+    userId: string,
+    phoneNumber: string,
+    isAdmin?: boolean,
+  ): string {
     const expiresIn = 364 * 24 * 60 * 60;
     return this.jwtService.sign(
       {
         sub: userId,
         phoneNumber,
+        isAdmin: isAdmin ?? false, // ✅ Include isAdmin
       },
-      {
-        expiresIn: expiresIn,
-      },
+      { expiresIn: expiresIn },
     );
   }
 }

@@ -26,18 +26,61 @@ class CategoryItem extends StatelessWidget {
         width: 75,
         child: Column(
           children: [
+            // ✅ Show image if exists, otherwise show icon
             Container(
               width: 65,
               height: 65,
               decoration: BoxDecoration(
                 color: Colors.green.withValues(alpha: 0.09),
                 shape: BoxShape.circle,
+                // ✅ Add border if image exists
+                border: category.hasIcon
+                    ? Border.all(
+                        color: Colors.green.withOpacity(0.3),
+                        width: 1.5,
+                      )
+                    : null,
               ),
-              child: Icon(
-                _getIconForCategory(category.name),
-                size: 32,
-                color: Colors.green,
-              ),
+              child: category.hasIcon
+                  ? ClipOval(
+                      child: Image.network(
+                        category.iconUrl!,
+                        fit: BoxFit.cover,
+                        width: 65,
+                        height: 65,
+                        errorBuilder: (context, error, stackTrace) {
+                          // ✅ Fallback to icon if image fails to load
+                          return Icon(
+                            _getIconForCategory(category.name),
+                            size: 32,
+                            color: Colors.green,
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.green,
+                                value:
+                                    loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : Icon(
+                      _getIconForCategory(category.name),
+                      size: 32,
+                      color: Colors.green,
+                    ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -68,6 +111,14 @@ class CategoryItem extends StatelessWidget {
         return Iconsax.home;
       case 'beauty & personal care':
         return Iconsax.brush;
+      case 'sports & outdoors':
+        return Iconsax.blend;
+      case 'health & wellness':
+        return Iconsax.heart;
+      case 'books & media':
+        return Iconsax.book;
+      case 'toys & games':
+        return Iconsax.game;
       default:
         return Iconsax.category;
     }

@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from '../cloudfare/cloudflare.service';
@@ -13,19 +15,104 @@ import {
   orderItems,
   productVariants,
   categories,
+  markets,
   mediaAssets,
 } from '../drizzle/schema';
-import { sql, eq, desc, or, like, and, gte, lte, lt } from 'drizzle-orm';
+import {
+  sql,
+  eq,
+  desc,
+  or,
+  like,
+  and,
+  gte,
+  lte,
+  lt,
+  inArray,
+  SQL,
+} from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { colors, sizes } from '../drizzle/schema';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { CreateProductAdminDto } from './dto/create-proudct-admin-dto';
+import { ChatGateway } from '../chat/chat.gateway';
+
+// Type definitions
+interface CategoryData {
+  name: string;
+  slug?: string;
+  description?: string;
+  parentId?: string;
+  iconBase64?: string;
+}
+
+interface CategoryUpdateData {
+  name?: string;
+  slug?: string;
+  description?: string;
+  iconBase64?: string;
+}
+
+interface ColorData {
+  name: string;
+  code: string;
+}
+
+interface ColorUpdateData {
+  name?: string;
+  code?: string;
+}
+
+interface SizeData {
+  name: string;
+  value: string;
+}
+
+interface SizeUpdateData {
+  name?: string;
+  value?: string;
+}
+
+interface MarketData {
+  name: string;
+  slug?: string;
+  city?: string;
+}
+
+interface MarketUpdateData {
+  name?: string;
+  slug?: string;
+  city?: string;
+  isActive?: boolean;
+}
+
+interface VariantData {
+  colorId: string;
+  sizeId: string;
+  sku?: string;
+  stock?: number;
+  price?: number;
+}
+
+interface ProductUpdateData {
+  name?: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  categoryId?: string;
+  brand?: string;
+  tags?: string;
+  isActive?: boolean;
+}
+
 @Injectable()
 export class AdminService {
   constructor(
     private drizzle: DrizzleService,
     private cloudflareService: CloudflareService,
-    private supabaseService: SupabaseService, // ✅ Changed
+    private supabaseService: SupabaseService,
+    @Inject(forwardRef(() => ChatGateway))
+    private chatGateway: ChatGateway,
   ) {}
 
   async getStats() {
@@ -56,106 +143,7 @@ export class AdminService {
     };
   }
 
-  async getAllOrders(search?: string) {
-    if (search && search.trim()) {
-      const searchPattern = `%${search.trim()}%`;
-      return this.drizzle.db.query.orders.findMany({
-        where: or(
-          like(orders.orderNumber, searchPattern),
-          like(orders.customerName, searchPattern),
-          like(orders.customerEmail, searchPattern),
-        ),
-        orderBy: [desc(orders.createdAt)],
-        with: {
-          user: true,
-          items: {
-            with: {
-              variant: {
-                with: {
-                  product: true,
-                },
-              },
-            },
-          },
-        },
-      });
-    }
-
-    return this.drizzle.db.query.orders.findMany({
-      orderBy: [desc(orders.createdAt)],
-      with: {
-        user: true,
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: true,
-              },
-            },
-          },
-        },
-      },
-    });
-  }
-
-  async getUserById(userId: string) {
-    const user = await this.drizzle.db.query.users.findFirst({
-      where: eq(users.id, userId),
-      with: {
-        addresses: true,
-        orders: {
-          orderBy: [desc(orders.createdAt)],
-          limit: 10,
-        },
-      },
-    });
-
-    if (!user) throw new NotFoundException('User not found');
-    return user;
-  }
-
-  async updateOrderStatus(orderId: string, status: string) {
-    const [order] = await this.drizzle.db
-      .update(orders)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(orders.id, orderId))
-      .returning();
-
-    if (!order) throw new NotFoundException('Order not found');
-
-    if (order.userId) {
-      await this.drizzle.db.insert(notifications).values({
-        id: uuidv4(),
-        userId: order.userId,
-        type: 'order',
-        title: 'Order Status Updated',
-        message: `Your order #${order.orderNumber} is now ${status.toLowerCase()}`,
-        actionText: 'View Order',
-        actionLink: `/orders/${order.id}`,
-      });
-    }
-
-    return {
-      message: 'Order status updated successfully',
-      order: {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-      },
-    };
-  }
-
-  async deleteUser(userId: string) {
-    const [deletedUser] = await this.drizzle.db
-      .delete(users)
-      .where(eq(users.id, userId))
-      .returning();
-
-    if (!deletedUser) throw new NotFoundException('User not found');
-
-    return { message: 'User deleted successfully' };
-  }
-
+  // User Management
   async updateUser(
     userId: string,
     updateData: {
@@ -202,14 +190,66 @@ export class AdminService {
       })
       .returning();
 
+    try {
+      this.chatGateway.server.to('admins').emit('new_notification', {
+        id: uuidv4(),
+        type: 'system',
+        title: 'New User Registered',
+        message: `${newUser.name || 'A new user'} has registered`,
+        actionText: 'View User',
+        actionLink: `/admin/users/${newUser.id}`,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('⚠️ Failed to emit admin notification:', errorMessage);
+    }
+
     return { message: 'User created successfully', user: newUser };
   }
 
-  async getAllProducts() {
-    return this.drizzle.db.query.products.findMany({
-      orderBy: [desc(products.createdAt)],
-      with: { images: true, category: true },
+  async deleteUser(userId: string) {
+    const [deletedUser] = await this.drizzle.db
+      .delete(users)
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!deletedUser) throw new NotFoundException('User not found');
+
+    try {
+      this.chatGateway.server.to('admins').emit('new_notification', {
+        id: uuidv4(),
+        type: 'system',
+        title: 'User Deleted',
+        message: `${deletedUser.name || 'A user'} has been deleted`,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('⚠️ Failed to emit admin notification:', errorMessage);
+    }
+
+    return { message: 'User deleted successfully' };
+  }
+
+  async getUserById(userId: string) {
+    const user = await this.drizzle.db.query.users.findFirst({
+      where: eq(users.id, userId),
+      with: {
+        addresses: true,
+        orders: {
+          orderBy: [desc(orders.createdAt)],
+          limit: 10,
+        },
+      },
     });
+
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
   async getAllUsers(search?: string) {
@@ -232,6 +272,127 @@ export class AdminService {
     });
   }
 
+  // Order Management
+  async getAllOrders(search?: string) {
+    if (search && search.trim()) {
+      const searchPattern = `%${search.trim()}%`;
+      return this.drizzle.db.query.orders.findMany({
+        where: or(
+          like(orders.orderNumber, searchPattern),
+          like(orders.customerName, searchPattern),
+          like(orders.customerEmail, searchPattern),
+        ),
+        orderBy: [desc(orders.createdAt)],
+        with: {
+          user: true,
+          items: {
+            with: {
+              variant: {
+                with: {
+                  product: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    return this.drizzle.db.query.orders.findMany({
+      orderBy: [desc(orders.createdAt)],
+      with: {
+        user: true,
+        items: {
+          with: {
+            variant: {
+              with: {
+                product: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async updateOrderStatus(orderId: string, status: string) {
+    const [order] = await this.drizzle.db
+      .update(orders)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.userId) {
+      const [notification] = await this.drizzle.db
+        .insert(notifications)
+        .values({
+          id: uuidv4(),
+          userId: order.userId,
+          type: 'order',
+          title: 'Order Status Updated',
+          message: `Your order #${order.orderNumber} is now ${status.toLowerCase()}`,
+          actionText: 'View Order',
+          actionLink: `/orders/${order.id}`,
+        })
+        .returning();
+
+      try {
+        this.chatGateway.server
+          .to(`user:${order.userId}`)
+          .emit('new_notification', {
+            id: notification.id,
+            type: 'order',
+            title: 'Order Status Updated',
+            message: `Your order #${order.orderNumber} is now ${status.toLowerCase()}`,
+            actionText: 'View Order',
+            actionLink: `/orders/${order.id}`,
+            createdAt: new Date().toISOString(),
+            isRead: false,
+          });
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        console.error(
+          '⚠️ Failed to emit real-time notification:',
+          errorMessage,
+        );
+      }
+    }
+
+    return {
+      message: 'Order status updated successfully',
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+      },
+    };
+  }
+
+  async getRecentOrders(limit: number = 5) {
+    const recentOrders = await this.drizzle.db.query.orders.findMany({
+      orderBy: [desc(orders.createdAt)],
+      limit,
+      with: { items: true, user: true },
+    });
+
+    return recentOrders.map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail || '',
+      totalAmount: Number(order.totalAmount),
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
+      itemsCount: order.items?.length || 0,
+    }));
+  }
+
+  // Dashboard & Analytics
+  // Dashboard & Analytics
   async getAllDashboardData(period: string) {
     const [
       stats,
@@ -244,7 +405,7 @@ export class AdminService {
       this.getDashboardStats(period),
       this.getUsersChartData(period),
       this.getRevenueChart(period),
-      this.getDeviceTraffic(),
+      Promise.resolve(this.getDeviceTraffic()), // ✅ Wrap in Promise.resolve()
       this.getLocationTraffic(),
       this.getProductTraffic(period),
     ]);
@@ -258,7 +419,6 @@ export class AdminService {
       productTraffic,
     };
   }
-
   async getDashboardStats(period: string) {
     const currentStats = await this.getStatsForPeriod(period);
     const previousPeriod = this.getPreviousPeriod(period);
@@ -294,7 +454,7 @@ export class AdminService {
   }
 
   private getPreviousPeriod(period: string): string {
-    const periodMap = {
+    const periodMap: Record<string, string> = {
       day: 'previous_day',
       week: 'previous_week',
       month: 'previous_month',
@@ -453,7 +613,7 @@ export class AdminService {
     start: Date,
     end: Date,
   ) {
-    const result: any[] = [];
+    const result: Array<{ date: string; value: number; count: number }> = [];
     const dataMap = new Map(data.map((d) => [d.date, d]));
 
     const current = new Date(start);
@@ -471,7 +631,7 @@ export class AdminService {
     return result;
   }
 
-  async getDeviceTraffic() {
+  getDeviceTraffic() {
     return [
       { device: 'Mobile', value: 58, color: '#2ED573' },
       { device: 'Desktop', value: 32, color: '#1E90FF' },
@@ -541,33 +701,13 @@ export class AdminService {
       }
 
       return productStats.filter((p) => p.productId !== null);
-    } catch (error) {
+    } catch {
       return [
         { productId: 'mock-1', productName: 'iPhone 15 Pro', views: 45 },
         { productId: 'mock-2', productName: 'MacBook Pro', views: 32 },
         { productId: 'mock-3', productName: 'AirPods Pro', views: 28 },
       ];
     }
-  }
-
-  async getRecentOrders(limit: number = 5) {
-    const recentOrders = await this.drizzle.db.query.orders.findMany({
-      orderBy: [desc(orders.createdAt)],
-      limit,
-      with: { items: true, user: true },
-    });
-
-    return recentOrders.map((order) => ({
-      id: order.id,
-      orderNumber: order.orderNumber,
-      customerName: order.customerName,
-      customerEmail: order.customerEmail || '',
-      totalAmount: Number(order.totalAmount),
-      status: order.status,
-      paymentStatus: order.paymentStatus,
-      createdAt: order.createdAt,
-      itemsCount: order.items?.length || 0,
-    }));
   }
 
   async getRevenueSummary(period: string = 'week') {
@@ -653,7 +793,7 @@ export class AdminService {
     limit: number = 50,
     offset: number = 0,
   ) {
-    const conditions: any[] = [eq(orders.paymentStatus, 'PAID')];
+    const conditions: SQL[] = [eq(orders.paymentStatus, 'PAID')];
 
     if (search && search.trim()) {
       const searchPattern = `%${search.trim()}%`;
@@ -777,9 +917,14 @@ export class AdminService {
     };
   }
 
-  // ==========================================
-  // ADMIN PRODUCTS MANAGEMENT
-  // ==========================================
+  // Product Management
+  async getAllProducts() {
+    return this.drizzle.db.query.products.findMany({
+      orderBy: [desc(products.createdAt)],
+      with: { images: true, category: true },
+    });
+  }
+
   async getAllProductsAdmin() {
     return this.drizzle.db.query.products.findMany({
       orderBy: [desc(products.createdAt)],
@@ -814,6 +959,7 @@ export class AdminService {
     if (!product) throw new NotFoundException('Product not found');
     return product;
   }
+
   async createProduct(createProductDto: CreateProductAdminDto) {
     const productId = uuidv4();
 
@@ -824,20 +970,17 @@ export class AdminService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-    // ✅ DYNAMIC INSERT: Only add fields that have actual values
-    // This prevents sending null/undefined to columns that might not accept them
-    const insertData: any = {
+    const insertData: Record<string, unknown> = {
       id: productId,
       name: createProductDto.name,
       slug: slug,
-      price: createProductDto.price.toString(), // Numeric columns in Drizzle usually expect strings
+      price: createProductDto.price.toString(),
       stock: createProductDto.stock ?? 0,
       isActive: createProductDto.isActive ?? true,
       isFeatured: createProductDto.isFeatured ?? false,
       categoryId: createProductDto.categoryId,
     };
 
-    // Add optional string fields
     if (createProductDto.description)
       insertData.description = createProductDto.description;
     if (createProductDto.sku) insertData.sku = createProductDto.sku;
@@ -849,7 +992,6 @@ export class AdminService {
     if (createProductDto.seoDescription)
       insertData.seoDescription = createProductDto.seoDescription;
 
-    // Add optional numeric fields (convert to string for Postgres numeric types)
     if (
       createProductDto.compareAtPrice !== undefined &&
       createProductDto.compareAtPrice !== null
@@ -870,12 +1012,10 @@ export class AdminService {
     }
 
     try {
-      const [product] = await this.drizzle.db
+      await this.drizzle.db
         .insert(products)
-        .values(insertData)
+        .values(insertData as typeof products.$inferInsert)
         .returning();
-
-      // Handle Variants
       if (createProductDto.variants && createProductDto.variants.length > 0) {
         for (const variant of createProductDto.variants) {
           await this.drizzle.db.insert(productVariants).values({
@@ -893,17 +1033,18 @@ export class AdminService {
       }
 
       return this.getProductById(productId);
-    } catch (error: any) {
-      // ✅ THIS WILL PRINT THE EXACT POSTGRES ERROR
-      console.error('❌ Database Insert Error:', error.message);
-      if (error.detail) console.error('🔍 Error Detail:', error.detail);
+    } catch (error: unknown) {
+      const err = error as { message?: string; detail?: string };
+      console.error('❌ Database Insert Error:', err.message);
+      if (err.detail) console.error('🔍 Error Detail:', err.detail);
       throw new BadRequestException(
-        `Failed to create product: ${error.detail || error.message}`,
+        `Failed to create product: ${err.detail || err.message}`,
       );
     }
   }
-  async updateProduct(productId: string, updateData: any) {
-    const updateValues: any = { updatedAt: new Date() };
+
+  async updateProduct(productId: string, updateData: ProductUpdateData) {
+    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
 
     if (updateData.name !== undefined) updateValues.name = updateData.name;
     if (updateData.description !== undefined)
@@ -929,7 +1070,6 @@ export class AdminService {
     return this.getProductById(updated.id);
   }
 
-  // ✅ Updated deleteProduct to use Supabase
   async deleteProduct(productId: string) {
     const product = await this.getProductById(productId);
 
@@ -945,35 +1085,8 @@ export class AdminService {
     return { message: 'Product deleted successfully' };
   }
 
-  // ✅ Updated uploadProductImages to use Supabase
-
-  async getCategoriesTree() {
-    const allCategories = await this.drizzle.db.select().from(categories);
-
-    const categoryMap = new Map();
-    const roots: any[] = [];
-
-    allCategories.forEach((category) => {
-      categoryMap.set(category.id, { ...category, children: [] });
-    });
-
-    allCategories.forEach((category) => {
-      const node = categoryMap.get(category.id);
-      if (category.parentId && categoryMap.has(category.parentId)) {
-        const parent = categoryMap.get(category.parentId);
-        if (parent) {
-          parent.children.push(node);
-        }
-      } else {
-        roots.push(node);
-      }
-    });
-
-    return roots;
-  }
-
   async uploadProductImages(productId: string, images: Express.Multer.File[]) {
-    const product = await this.getProductById(productId);
+    await this.getProductById(productId);
 
     const uploadResults = await Promise.all(
       images.map((image) => {
@@ -982,7 +1095,14 @@ export class AdminService {
       }),
     );
 
-    const insertedImages: any[] = [];
+    const insertedImages: Array<{
+      id: string;
+      url: string;
+      publicId: string;
+      productId: string | null;
+      isMain: boolean | null;
+      order: number | null;
+    }> = [];
     for (let i = 0; i < uploadResults.length; i++) {
       const result = uploadResults[i];
       const [image] = await this.drizzle.db
@@ -1001,6 +1121,212 @@ export class AdminService {
 
     return insertedImages;
   }
+
+  // Categories
+  async getCategoriesTree() {
+    const allCategories = await this.drizzle.db.select().from(categories);
+
+    const iconIds = allCategories.filter((c) => c.iconId).map((c) => c.iconId!);
+
+    const icons =
+      iconIds.length > 0
+        ? await this.drizzle.db
+            .select()
+            .from(mediaAssets)
+            .where(inArray(mediaAssets.id, iconIds))
+        : [];
+
+    const iconMap = new Map(icons.map((icon) => [icon.id, icon.url]));
+
+    const categoryMap = new Map<string, Record<string, unknown>>();
+    const roots: Record<string, unknown>[] = [];
+
+    allCategories.forEach((category) => {
+      categoryMap.set(category.id, {
+        ...category,
+        iconUrl: category.iconId ? iconMap.get(category.iconId) || null : null,
+        children: [],
+      });
+    });
+
+    allCategories.forEach((category) => {
+      const node = categoryMap.get(category.id);
+      if (!node) return; // ✅ Guard against undefined
+
+      if (category.parentId && categoryMap.has(category.parentId)) {
+        const parent = categoryMap.get(category.parentId);
+        if (parent) {
+          const children = parent.children as Record<string, unknown>[];
+          children.push(node);
+        }
+      } else {
+        roots.push(node);
+      }
+    });
+    return roots;
+  }
+
+  async createCategory(data: CategoryData) {
+    const slug =
+      data.slug || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    let iconId: string | null = null;
+
+    if (data.iconBase64) {
+      const uploadResult = await this.supabaseService.uploadBase64(
+        data.iconBase64,
+        'categories',
+      );
+
+      const [mediaAsset] = await this.drizzle.db
+        .insert(mediaAssets)
+        .values({
+          id: uuidv4(),
+          url: uploadResult.secure_url,
+          publicId: uploadResult.public_id,
+        })
+        .returning();
+
+      iconId = mediaAsset.id;
+    }
+
+    const [category] = await this.drizzle.db
+      .insert(categories)
+      .values({
+        id: uuidv4(),
+        name: data.name,
+        slug,
+        description: data.description || null,
+        parentId: data.parentId || null,
+        iconId,
+      })
+      .returning();
+
+    return this._formatCategoryWithIcon(category);
+  }
+
+  async updateCategory(categoryId: string, data: CategoryUpdateData) {
+    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name) updateValues.name = data.name;
+    if (data.slug) updateValues.slug = data.slug;
+    if (data.description !== undefined)
+      updateValues.description = data.description;
+
+    if (data.iconBase64) {
+      const [existingCategory] = await this.drizzle.db
+        .select()
+        .from(categories)
+        .where(eq(categories.id, categoryId));
+
+      if (existingCategory?.iconId) {
+        const [oldIcon] = await this.drizzle.db
+          .select()
+          .from(mediaAssets)
+          .where(eq(mediaAssets.id, existingCategory.iconId));
+
+        if (oldIcon) {
+          await this.supabaseService
+            .deleteImage(oldIcon.publicId)
+            .catch(() => {});
+          await this.drizzle.db
+            .delete(mediaAssets)
+            .where(eq(mediaAssets.id, oldIcon.id));
+        }
+      }
+
+      const uploadResult = await this.supabaseService.uploadBase64(
+        data.iconBase64,
+        'categories',
+      );
+
+      const [mediaAsset] = await this.drizzle.db
+        .insert(mediaAssets)
+        .values({
+          id: uuidv4(),
+          url: uploadResult.secure_url,
+          publicId: uploadResult.public_id,
+        })
+        .returning();
+
+      updateValues.iconId = mediaAsset.id;
+    }
+
+    const [category] = await this.drizzle.db
+      .update(categories)
+      .set(updateValues)
+      .where(eq(categories.id, categoryId))
+      .returning();
+
+    if (!category) throw new NotFoundException('Category not found');
+
+    return this._formatCategoryWithIcon(category);
+  }
+
+  async deleteCategory(categoryId: string) {
+    const children = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.parentId, categoryId));
+
+    if (children.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete category with subcategories',
+      );
+    }
+
+    const productsCount = await this.drizzle.db
+      .select()
+      .from(products)
+      .where(eq(products.categoryId, categoryId))
+      .limit(1);
+
+    if (productsCount.length > 0) {
+      throw new BadRequestException('Cannot delete category with products');
+    }
+
+    const [category] = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, categoryId));
+
+    if (category?.iconId) {
+      const [icon] = await this.drizzle.db
+        .select()
+        .from(mediaAssets)
+        .where(eq(mediaAssets.id, category.iconId));
+
+      if (icon) {
+        await this.supabaseService.deleteImage(icon.publicId).catch(() => {});
+        await this.drizzle.db
+          .delete(mediaAssets)
+          .where(eq(mediaAssets.id, icon.id));
+      }
+    }
+
+    await this.drizzle.db
+      .delete(categories)
+      .where(eq(categories.id, categoryId));
+
+    return { message: 'Category deleted successfully' };
+  }
+
+  private async _formatCategoryWithIcon(category: Record<string, unknown>) {
+    if (!category.iconId) {
+      return { ...category, iconUrl: null };
+    }
+
+    const [icon] = await this.drizzle.db
+      .select()
+      .from(mediaAssets)
+      .where(eq(mediaAssets.id, category.iconId as string));
+
+    return {
+      ...category,
+      iconUrl: icon?.url || null,
+    };
+  }
+
+  // Colors & Sizes
   async getColors() {
     return this.drizzle.db.select().from(colors);
   }
@@ -1009,7 +1335,8 @@ export class AdminService {
     return this.drizzle.db.select().from(sizes);
   }
 
-  async addProductVariant(productId: string, variantData: any) {
+  // Variants
+  async addProductVariant(productId: string, variantData: VariantData) {
     const product = await this.getProductById(productId);
 
     const [variant] = await this.drizzle.db
@@ -1028,5 +1355,162 @@ export class AdminService {
       .returning();
 
     return variant;
+  }
+
+  async getAllColors() {
+    return this.drizzle.db.select().from(colors).orderBy(colors.name);
+  }
+
+  async createColor(data: ColorData) {
+    const [color] = await this.drizzle.db
+      .insert(colors)
+      .values({
+        id: uuidv4(),
+        name: data.name,
+        code: data.code,
+      })
+      .returning();
+
+    return color;
+  }
+
+  async updateColor(colorId: string, data: ColorUpdateData) {
+    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name) updateValues.name = data.name;
+    if (data.code) updateValues.code = data.code;
+
+    const [color] = await this.drizzle.db
+      .update(colors)
+      .set(updateValues)
+      .where(eq(colors.id, colorId))
+      .returning();
+
+    if (!color) throw new NotFoundException('Color not found');
+    return color;
+  }
+
+  async deleteColor(colorId: string) {
+    const variants = await this.drizzle.db
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.colorId, colorId))
+      .limit(1);
+
+    if (variants.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete color that is used in product variants',
+      );
+    }
+
+    await this.drizzle.db.delete(colors).where(eq(colors.id, colorId));
+    return { message: 'Color deleted successfully' };
+  }
+
+  async getAllSizes() {
+    return this.drizzle.db.select().from(sizes).orderBy(sizes.name);
+  }
+
+  async createSize(data: SizeData) {
+    const [size] = await this.drizzle.db
+      .insert(sizes)
+      .values({
+        id: uuidv4(),
+        name: data.name,
+        value: data.value,
+      })
+      .returning();
+
+    return size;
+  }
+
+  async updateSize(sizeId: string, data: SizeUpdateData) {
+    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name) updateValues.name = data.name;
+    if (data.value) updateValues.value = data.value;
+
+    const [size] = await this.drizzle.db
+      .update(sizes)
+      .set(updateValues)
+      .where(eq(sizes.id, sizeId))
+      .returning();
+
+    if (!size) throw new NotFoundException('Size not found');
+    return size;
+  }
+
+  async deleteSize(sizeId: string) {
+    const variants = await this.drizzle.db
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.sizeId, sizeId))
+      .limit(1);
+
+    if (variants.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete size that is used in product variants',
+      );
+    }
+
+    await this.drizzle.db.delete(sizes).where(eq(sizes.id, sizeId));
+    return { message: 'Size deleted successfully' };
+  }
+
+  // Markets Management
+  async getAllMarkets() {
+    return this.drizzle.db.select().from(markets).orderBy(markets.name);
+  }
+
+  async createMarket(data: MarketData) {
+    const slug =
+      data.slug || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    const [market] = await this.drizzle.db
+      .insert(markets)
+      .values({
+        id: uuidv4(),
+        name: data.name,
+        slug,
+        city: data.city || null,
+        isActive: true,
+      })
+      .returning();
+
+    return market;
+  }
+
+  async updateMarket(marketId: string, data: MarketUpdateData) {
+    const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name) updateValues.name = data.name;
+    if (data.slug) updateValues.slug = data.slug;
+    if (data.city !== undefined) updateValues.city = data.city;
+    if (data.isActive !== undefined) updateValues.isActive = data.isActive;
+
+    const [market] = await this.drizzle.db
+      .update(markets)
+      .set(updateValues)
+      .where(eq(markets.id, marketId))
+      .returning();
+
+    if (!market) throw new NotFoundException('Market not found');
+    return market;
+  }
+
+  async deleteMarket(marketId: string) {
+    const usersCount = await this.drizzle.db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.marketId, marketId));
+
+    if (usersCount[0]?.count > 0) {
+      throw new BadRequestException(
+        'Cannot delete market that has users assigned',
+      );
+    }
+
+    await this.drizzle.db.delete(markets).where(eq(markets.id, marketId));
+    return { message: 'Market deleted successfully' };
   }
 }

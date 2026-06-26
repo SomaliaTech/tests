@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/core/theme/theme.dart';
+import 'package:mobile/core/services/chat_socket_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_state.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_order_details_screen.dart';
+import 'package:toastification/toastification.dart';
 
 class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
@@ -17,11 +21,55 @@ class AdminOrdersScreen extends StatefulWidget {
 class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  StreamSubscription? _newOrderSub;
+  StreamSubscription? _notificationSub;
 
   @override
   void initState() {
     super.initState();
     context.read<AdminBloc>().add(const FetchAllOrdersEvent());
+    _setupWebSocketListeners();
+  }
+
+  // ✅ NEW: Listen for real-time order notifications
+  void _setupWebSocketListeners() {
+    final socketService = sl<ChatSocketService>();
+
+    // ✅ Listen for new orders
+    _newOrderSub = socketService.onNewOrder.listen((orderData) {
+      if (!mounted) return;
+
+      // Refresh orders list
+      context.read<AdminBloc>().add(FetchAllOrdersEvent(search: _searchQuery));
+
+      // Show toast notification
+      final orderNumber = orderData['orderNumber'] ?? 'Unknown';
+      final customerName = orderData['customerName'] ?? 'Customer';
+      final totalAmount = orderData['totalAmount'] ?? '0';
+
+      toastification.show(
+        context: context,
+        title: const Text('🎉 New Order!'),
+        description: Text(
+          'Order #$orderNumber from $customerName - \$$totalAmount',
+        ),
+        type: ToastificationType.success,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 5),
+        icon: const Icon(Iconsax.shopping_bag, color: Colors.white),
+      );
+    });
+
+    // ✅ Listen for general notifications
+    _notificationSub = socketService.onNewNotification.listen((notification) {
+      if (!mounted) return;
+      if (notification['type'] == 'order') {
+        // Refresh orders when any order notification arrives
+        context.read<AdminBloc>().add(
+          FetchAllOrdersEvent(search: _searchQuery),
+        );
+      }
+    });
   }
 
   void _onSearchChanged(String query) {
@@ -34,14 +82,15 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _newOrderSub?.cancel();
+    _notificationSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA), // ✅ Light background
-
+      backgroundColor: const Color(0xFFF5F7FA),
       body: Padding(
         padding: const EdgeInsets.only(top: 60.0),
         child: Column(
@@ -55,7 +104,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
+                      color: Colors.grey.withValues(alpha: 0.1),
                       spreadRadius: 1,
                       blurRadius: 8,
                       offset: const Offset(0, 2),
@@ -96,7 +145,20 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             ),
             // Orders List
             Expanded(
-              child: BlocBuilder<AdminBloc, AdminState>(
+              child: BlocConsumer<AdminBloc, AdminState>(
+                listenWhen: (prev, current) => current is AdminStatusUpdated,
+                listener: (context, state) {
+                  if (state is AdminStatusUpdated) {
+                    toastification.show(
+                      context: context,
+                      title: const Text('✅ Success'),
+                      description: Text(state.message),
+                      type: ToastificationType.success,
+                      style: ToastificationStyle.fillColored,
+                      autoCloseDuration: const Duration(seconds: 3),
+                    );
+                  }
+                },
                 buildWhen: (prev, current) =>
                     current is AdminOrdersLoading ||
                     current is AdminOrdersLoaded ||
@@ -147,12 +209,43 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                       },
                     );
                   }
-                  return Center(
-                    child: Text(
-                      'Failed to load orders',
-                      style: TextStyle(color: Colors.red[400]),
-                    ),
-                  );
+
+                  if (state is AdminOrdersError) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Iconsax.warning_2,
+                            size: 64,
+                            color: Colors.red[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            state.message,
+                            style: TextStyle(color: Colors.red[400]),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              context.read<AdminBloc>().add(
+                                FetchAllOrdersEvent(search: _searchQuery),
+                              );
+                            },
+                            icon: const Icon(Iconsax.refresh),
+                            label: const Text('Retry'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return const SizedBox.shrink();
                 },
               ),
             ),
@@ -179,7 +272,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
               spreadRadius: 1,
               blurRadius: 8,
               offset: const Offset(0, 2),
@@ -193,14 +286,18 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '#${order.orderNumber}',
-                  style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                Flexible(
+                  child: Text(
+                    '#${order.orderNumber}',
+                    style: const TextStyle(
+                      color: Colors.black87,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
                 _buildStatusChip(order.status),
               ],
             ),
@@ -250,28 +347,28 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
     switch (status) {
       case 'PENDING':
-        bgColor = Colors.orange.withOpacity(0.15);
+        bgColor = Colors.orange.withValues(alpha: 0.15);
         textColor = Colors.orange[700]!;
         break;
       case 'CONFIRMED':
       case 'PROCESSING':
-        bgColor = Colors.purple.withOpacity(0.15);
+        bgColor = Colors.purple.withValues(alpha: 0.15);
         textColor = Colors.purple[700]!;
         break;
       case 'SHIPPED':
-        bgColor = Colors.blue.withOpacity(0.15);
+        bgColor = Colors.blue.withValues(alpha: 0.15);
         textColor = Colors.blue[700]!;
         break;
       case 'DELIVERED':
-        bgColor = Colors.green.withOpacity(0.15);
+        bgColor = Colors.green.withValues(alpha: 0.15);
         textColor = Colors.green[700]!;
         break;
       case 'CANCELLED':
-        bgColor = Colors.red.withOpacity(0.15);
+        bgColor = Colors.red.withValues(alpha: 0.15);
         textColor = Colors.red[700]!;
         break;
       default:
-        bgColor = Colors.grey.withOpacity(0.15);
+        bgColor = Colors.grey.withValues(alpha: 0.15);
         textColor = Colors.grey[700]!;
     }
 

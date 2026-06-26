@@ -1,8 +1,10 @@
+import { Logger } from '@nestjs/common';
 import {
   WebSocketGateway,
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
   WebSocketServer,
@@ -10,195 +12,491 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
+import { FirebaseService } from '../firebase/firebase.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateNotificationDto } from '../notifications/dto/notification.dto';
+import { NotificationType } from 'src/notifications/notification.entity';
+
+interface SocketMeta {
+  userId: string;
+  isAdmin: boolean;
+}
+
+interface SendMessageData {
+  receiverId: string;
+  content?: string;
+  type?: 'text' | 'image' | 'file';
+  mediaUrl?: string;
+}
+
+interface MarkReadData {
+  chatPartnerId: string;
+}
+
+interface StatusCheckData {
+  partnerId: string;
+}
+
+interface JwtPayload {
+  sub?: string;
+  userId?: string;
+  isAdmin?: boolean;
+}
 
 @WebSocketGateway({
+  namespace: '/chat',
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
   },
-  namespace: '/chat',
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  transports: ['websocket'],
+  pingInterval: 15000,
+  pingTimeout: 10000,
+  connectTimeout: 10000,
+  maxHttpBufferSize: 1e6,
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server;
+export class ChatGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
+  @WebSocketServer()
+  server!: Server;
 
-  private connectedUsers: Map<string, { userId: string; isAdmin: boolean }> =
-    new Map();
-  // ✅ Track online users for quick lookup
-  private onlineUsers: Set<string> = new Set();
+  private readonly logger = new Logger(ChatGateway.name);
+  private readonly userSockets = new Map<string, Set<string>>();
+  private readonly socketMeta = new Map<string, SocketMeta>();
 
   constructor(
-    private jwtService: JwtService,
-    private chatService: ChatService,
+    private readonly jwtService: JwtService,
+    private readonly chatService: ChatService,
+    private readonly firebaseService: FirebaseService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  async handleConnection(client: Socket) {
+  // ==========================================
+  // LIFECYCLE HOOKS
+  // ==========================================
+
+  async afterInit(): Promise<void> {
+    this.logger.log('🚀 Chat Gateway initialized');
+
+    // Reset all users to offline on server startup
+    await this.chatService.resetAllOnlineStatuses();
+
+    // Cleanup stale connections every 60 seconds
+    setInterval(() => this.cleanupStaleConnections(), 60000);
+  }
+
+  async handleConnection(client: Socket): Promise<void> {
     try {
-      console.log('🔌 New WebSocket connection attempt:', client.id);
-
-      let token = client.handshake.auth.token;
+      const token = this.extractToken(client);
       if (!token) {
-        token = client.handshake.query.token as string;
+        this.disconnectWithError(client, 'Authentication required');
+        return;
       }
-      if (!token) {
-        token = client.handshake.headers.authorization?.replace('Bearer ', '');
-      }
+      const payload: JwtPayload = this.jwtService.verify(token);
 
-      if (!token) {
-        console.log('❌ No token provided, disconnecting');
-        client.emit('error', { message: 'Authentication required' });
-        client.disconnect();
+      const userId = String(payload.sub || payload.userId || '');
+      const isAdmin = Boolean(payload.isAdmin);
+
+      console.log(
+        `🔑 [WS Auth] userId: ${userId}, isAdmin: ${isAdmin}, payload:`,
+        payload,
+      );
+
+      if (!userId) {
+        this.disconnectWithError(client, 'Invalid user ID in token');
         return;
       }
 
-      const payload = this.jwtService.verify(token);
-      const userId = payload.sub;
-      const isAdmin = payload.isAdmin || false;
+      // Store socket metadata
+      this.socketMeta.set(client.id, { userId, isAdmin });
 
-      // Store connection
-      this.connectedUsers.set(client.id, { userId, isAdmin });
-      this.onlineUsers.add(userId);
+      // Track user sockets
+      if (!this.userSockets.has(userId)) {
+        this.userSockets.set(userId, new Set());
+      }
+      const userSocketSet = this.userSockets.get(userId);
+      if (userSocketSet) {
+        userSocketSet.add(client.id);
+      }
 
-      // Join user's personal room
-      client.join(`user_${userId}`);
+      // Join rooms
+      await client.join(`user:${userId}`);
+      if (isAdmin) {
+        await client.join('admins');
+      }
 
-      // Update status in database
-      await this.chatService.updateUserStatus(userId, true);
+      // Update online status if first connection
+      const connections = this.userSockets.get(userId);
+      if (connections && connections.size === 1) {
+        await this.chatService.updateUserStatus(userId, true);
+        // ✅ Use targeted broadcast instead of global emit
+        await this.broadcastStatusToConversations(userId, true);
+        this.logger.log(`🟢 User ${userId} online`);
+      }
 
-      // ✅ Broadcast to ALL connected clients that this user is online
-      this.server.emit('user_status', {
+      // Confirm connection
+      client.emit('connected', {
         userId,
-        isOnline: true,
+        isAdmin,
         timestamp: new Date().toISOString(),
       });
 
-      console.log(`✅ WebSocket Connected: ${userId} (Admin: ${isAdmin})`);
-      console.log(`📊 Online users: ${this.onlineUsers.size}`);
-
-      // Send connection confirmation
-      client.emit('connected', {
-        status: 'ok',
-        userId,
-        onlineUsers: Array.from(this.onlineUsers),
-      });
-    } catch (error) {
-      console.error('❌ WS Auth Failed:', error.message);
-      client.emit('error', {
-        message: 'Authentication failed: ' + error.message,
-      });
-      client.disconnect();
-    }
-  }
-
-  async handleDisconnect(client: Socket) {
-    const userData = this.connectedUsers.get(client.id);
-    if (userData) {
-      this.connectedUsers.delete(client.id);
-
-      // Check if user has other active connections
-      const hasOtherConnections = Array.from(this.connectedUsers.values()).some(
-        (u) => u.userId === userData.userId,
+      this.logger.log(
+        `🔗 Client connected: ${client.id} (User: ${userId}, Admin: ${isAdmin})`,
       );
-
-      if (!hasOtherConnections) {
-        this.onlineUsers.delete(userData.userId);
-
-        // Update status in database
-        await this.chatService.updateUserStatus(userData.userId, false);
-
-        // ✅ Broadcast to ALL that this user is offline
-        this.server.emit('user_status', {
-          userId: userData.userId,
-          isOnline: false,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      console.log(`❌ Disconnected: ${userData.userId}`);
-      console.log(`📊 Online users: ${this.onlineUsers.size}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Auth failed for ${client.id}: ${errorMessage}`);
+      this.disconnectWithError(client, 'Invalid token');
     }
   }
+
+  async handleDisconnect(client: Socket): Promise<void> {
+    const meta = this.socketMeta.get(client.id);
+    if (!meta) return;
+
+    const { userId } = meta;
+
+    // Clean up socket metadata
+    this.socketMeta.delete(client.id);
+
+    // Clean up user sockets
+    const userConnections = this.userSockets.get(userId);
+    if (userConnections) {
+      userConnections.delete(client.id);
+
+      if (userConnections.size === 0) {
+        this.userSockets.delete(userId);
+
+        // User is fully offline
+        await this.chatService.updateUserStatus(userId, false);
+        // ✅ Use targeted broadcast instead of global emit
+        await this.broadcastStatusToConversations(
+          userId,
+          false,
+          new Date().toISOString(),
+        );
+
+        this.logger.log(`🔴 User ${userId} offline`);
+      }
+    }
+
+    this.logger.log(`🔌 Client disconnected: ${client.id}`);
+  }
+
+  // ==========================================
+  // MESSAGE HANDLERS
+  // ==========================================
 
   @SubscribeMessage('send_message')
   async handleMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody()
-    data: {
-      receiverId: string;
-      content?: string;
-      type: string;
-      mediaUrl?: string;
-    },
-  ) {
-    console.log('📨 Received send_message:', {
-      from: this.connectedUsers.get(client.id)?.userId,
-      to: data.receiverId,
-      type: data.type,
-    });
-
-    const senderData = this.connectedUsers.get(client.id);
-    if (!senderData) {
-      console.log('❌ Sender not found');
-      client.emit('error', { message: 'Sender not authenticated' });
+    @MessageBody() data: SendMessageData,
+  ): Promise<void> {
+    const sender = this.socketMeta.get(client.id);
+    if (!sender) {
+      client.emit('error', {
+        code: 'AUTH_REQUIRED',
+        message: 'Not authenticated',
+      });
       return;
     }
 
     try {
-      // Validate permission
-      await this.chatService.validateMessagePermission(
-        senderData.userId,
-        data.receiverId,
-        senderData.isAdmin,
-      );
+      // Validate
+      if (!data.receiverId) {
+        throw new Error('Receiver ID is required');
+      }
 
-      // Save message (this also creates conversation if needed)
-      const savedMsg = await this.chatService.saveMessage(
-        senderData.userId,
+      if (data.type === 'text' && !data.content?.trim()) {
+        throw new Error('Message content is required');
+      }
+
+      // Send message via service
+      const message = await this.chatService.sendMessage(
+        sender.userId,
         data.receiverId,
         data.content || '',
-        data.type,
+        data.type || 'text',
         data.mediaUrl,
       );
 
-      console.log('✅ Message saved:', savedMsg.id);
+      // Confirm to sender
+      client.emit('message_sent', message);
 
-      // Send confirmation to sender
-      client.emit('message_sent', savedMsg);
+      // Send to receiver via WebSocket
+      this.server.to(`user:${data.receiverId}`).emit('new_message', message);
 
-      // Send to receiver
-      this.server.to(`user_${data.receiverId}`).emit('new_message', savedMsg);
+      // Send push notification
+      await this.sendPushNotification(
+        sender.userId,
+        data.receiverId,
+        data.content,
+        data.type || 'text',
+        message.id,
+      );
 
-      // If sender is in multiple tabs, update other tabs too
-      client.broadcast
-        .to(`user_${senderData.userId}`)
-        .emit('new_message', savedMsg);
-    } catch (error: any) {
-      console.error('❌ Error handling message:', error.message);
-      client.emit('error', { message: error.message });
+      // Create in-app notification
+      await this.createInAppNotification(
+        sender.userId,
+        data.receiverId,
+        data.content,
+        data.type || 'text',
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Message send failed: ${errorMessage}`);
+      client.emit('error', { message: errorMessage });
     }
   }
 
   @SubscribeMessage('mark_read')
   async handleMarkRead(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatPartnerId: string },
-  ) {
-    const userData = this.connectedUsers.get(client.id);
-    if (!userData) return;
+    @MessageBody() data: MarkReadData,
+  ): Promise<void> {
+    const user = this.socketMeta.get(client.id);
+    if (!user) return;
 
-    await this.chatService.markAsRead(userData.userId, data.chatPartnerId);
+    try {
+      const result = await this.chatService.markAsRead(
+        user.userId,
+        data.chatPartnerId,
+      );
+      this.logger.log(
+        `✅ Marked ${result.count} messages as read: ${user.userId} → ${data.chatPartnerId}`,
+      );
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Mark read failed: ${errorMessage}`);
+    }
+  }
 
-    // Notify partner that messages were read
-    this.server.to(`user_${data.chatPartnerId}`).emit('messages_read', {
-      userId: userData.userId,
-      timestamp: new Date().toISOString(),
+  @SubscribeMessage('check_status')
+  handleStatusCheck(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: StatusCheckData,
+  ): void {
+    const userConnections = this.userSockets.get(data.partnerId);
+    const isOnline = userConnections ? userConnections.size > 0 : false;
+
+    client.emit('partner_status', {
+      userId: data.partnerId,
+      isOnline,
     });
   }
 
-  // ✅ Helper method to check if user is online
+  // ==========================================
+  // PUBLIC HELPERS
+  // ==========================================
+
   isUserOnline(userId: string): boolean {
-    return this.onlineUsers.has(userId);
+    const connections = this.userSockets.get(userId);
+    return connections ? connections.size > 0 : false;
+  }
+
+  // ==========================================
+  // PRIVATE HELPERS
+  // ==========================================
+
+  // ✅ NEW: Targeted broadcast to only relevant partners
+  private async broadcastStatusToConversations(
+    userId: string,
+    isOnline: boolean,
+    lastSeen?: string,
+  ): Promise<void> {
+    try {
+      const partnerIds: string[] = [];
+
+      // Get user conversations (works for both regular users and admins)
+      try {
+        const userConversations =
+          await this.chatService.getUserConversations(userId);
+        userConversations.forEach((c: any) => {
+          if (c.userId) partnerIds.push(c.userId);
+        });
+      } catch (e) {
+        // User might not have regular conversations, that's ok
+      }
+
+      // If user is admin, also get admin conversations
+      try {
+        const user = await this.chatService.getUserById(userId);
+        if (user?.isAdmin) {
+          const adminConversations =
+            await this.chatService.getAdminConversations(userId);
+          adminConversations.forEach((c: any) => {
+            if (c.userId) partnerIds.push(c.userId);
+          });
+        }
+      } catch (e) {
+        // Ignore errors here
+      }
+
+      // Remove duplicates and the user themselves
+      const uniquePartnerIds = [
+        ...new Set(partnerIds.filter((id) => id !== userId)),
+      ];
+
+      if (uniquePartnerIds.length > 0) {
+        // Emit to each partner's room
+        uniquePartnerIds.forEach((partnerId) => {
+          this.server.to(`user:${partnerId}`).emit('partner_status', {
+            userId,
+            isOnline,
+            lastSeen: lastSeen || null,
+          });
+        });
+
+        this.logger.log(
+          `📡 Broadcasted status to ${uniquePartnerIds.length} partners of user ${userId}`,
+        );
+      } else {
+        this.logger.log(
+          `ℹ️ No conversation partners found for user ${userId}, skipping broadcast`,
+        );
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to broadcast status: ${errorMessage}`);
+      // Fallback: broadcast to all connected clients
+      this.server.emit('partner_status', {
+        userId,
+        isOnline,
+        lastSeen: lastSeen || null,
+      });
+    }
+  }
+
+  private extractToken(client: Socket): string | null {
+    const authToken = client.handshake.auth?.token as string | undefined;
+    const queryToken = client.handshake.query?.token as string | undefined;
+    const authHeader = client.handshake.headers?.authorization;
+
+    if (authToken) return authToken;
+    if (queryToken) return queryToken;
+    if (authHeader) return authHeader.replace('Bearer ', '');
+
+    return null;
+  }
+
+  private disconnectWithError(client: Socket, message: string): void {
+    client.emit('error', { message });
+    setTimeout(() => client.disconnect(true), 100);
+  }
+
+  private cleanupStaleConnections(): void {
+    try {
+      const sockets = this.server?.sockets?.sockets;
+      if (!sockets) return;
+
+      let cleanedCount = 0;
+      sockets.forEach((socket: Socket, socketId: string) => {
+        if (!this.socketMeta.has(socketId)) {
+          this.logger.warn(`Cleaning up stale socket: ${socketId}`);
+          socket.disconnect(true);
+          cleanedCount++;
+        }
+      });
+
+      if (cleanedCount > 0) {
+        this.logger.log(`Cleaned up ${cleanedCount} stale connections`);
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.debug(`Cleanup routine: ${errorMessage}`);
+    }
+  }
+
+  private async sendPushNotification(
+    senderId: string,
+    receiverId: string,
+    content?: string,
+    type: string = 'text',
+    messageId?: string,
+  ): Promise<void> {
+    try {
+      const senderUser = await this.chatService.getUserById(senderId);
+      const senderName = senderUser?.name || 'Someone';
+
+      const notificationBody =
+        type === 'image'
+          ? '📷 Photo'
+          : content?.substring(0, 100) || 'New message';
+
+      const deviceTokens =
+        await this.chatService.getUserDeviceTokens(receiverId);
+
+      if (deviceTokens.length > 0) {
+        await this.firebaseService.sendMulticastNotification(
+          deviceTokens,
+          senderName,
+          notificationBody,
+          {
+            type: 'new_message',
+            senderId,
+            receiverId,
+            messageId: messageId || '',
+          },
+        );
+        this.logger.log(`📱 Push notification sent to ${receiverId}`);
+      } else {
+        this.logger.log(`ℹ️ No device tokens for ${receiverId}, skipping push`);
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Push notification failed: ${errorMessage}`);
+    }
+  }
+
+  private async createInAppNotification(
+    senderId: string,
+    receiverId: string,
+    content?: string,
+    type: string = 'text',
+  ): Promise<void> {
+    try {
+      const senderUser = await this.chatService.getUserById(senderId);
+      const senderName = senderUser?.name || 'Someone';
+
+      const notificationBody =
+        type === 'image'
+          ? '📷 Photo'
+          : content?.substring(0, 100) || 'New message';
+
+      const notificationDto: CreateNotificationDto = {
+        userId: receiverId,
+        type: NotificationType.MESSAGE,
+        title: `New message from ${senderName}`,
+        message: notificationBody,
+        actionText: 'View',
+        actionLink: `/chat/${senderId}`,
+      };
+
+      const notification =
+        await this.notificationsService.create(notificationDto);
+
+      this.server.to(`user:${receiverId}`).emit('new_notification', {
+        id: notification.id,
+        type: 'message',
+        title: `New message from ${senderName}`,
+        message: notificationBody,
+        actionText: 'View',
+        actionLink: `/chat/${senderId}`,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`In-app notification failed: ${errorMessage}`);
+    }
   }
 }

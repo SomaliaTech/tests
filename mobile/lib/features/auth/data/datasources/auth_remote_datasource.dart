@@ -11,9 +11,11 @@ abstract class AuthRemoteDataSource {
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-    String? email,
+    String email,
+    String marketId,
     String? profileImageUrl,
   );
+
   Future<Map<String, dynamic>> getCurrentUser(String token);
   Future<Map<String, dynamic>> uploadProfileImage(
     String token,
@@ -65,7 +67,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-    String? email,
+    String email, // ✅ Now required
+    String marketId, // ✅ Added
     String? profileImageUrl,
   ) async {
     final response = await client.post(
@@ -76,14 +79,16 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       },
       body: json.encode({
         'name': name,
-        if (email != null) 'email': email,
+        'email': email, // ✅ Always send email
+        'marketId': marketId, // ✅ Always send marketId
         if (profileImageUrl != null) 'profileImage': profileImageUrl,
       }),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
       return json.decode(response.body);
     } else {
-      throw ServerException('Failed to complete profile');
+      final error = json.decode(response.body);
+      throw ServerException(error['message'] ?? 'Failed to complete profile');
     }
   }
 

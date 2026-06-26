@@ -9,38 +9,36 @@ class ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(color: Colors.white),
+      color: Colors.white,
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               GestureDetector(
                 onTap: onBackPressed,
                 child: Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Iconsax.arrow_left,
-                    color: Color(0xFF2ED573),
-                    size: 24,
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Icon(Iconsax.arrow_left, color: Color(0xFF333333)),
                 ),
               ),
-              const Expanded(
-                child: Text(
-                  'Profile',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2ED573),
-                  ),
+              const Text(
+                'My Profile',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
+                  letterSpacing: 0.3,
                 ),
               ),
-              const SizedBox(width: 40), // Placeholder for symmetry
+              const SizedBox(width: 44), // Balance the back button
             ],
           ),
         ),

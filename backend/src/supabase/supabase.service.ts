@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { configureSupabase } from './supabase.config';
-import WebSocket from 'ws'; // ✅ Import ws
+import WebSocket from 'ws';
 
 @Injectable()
 export class SupabaseService {
@@ -12,7 +12,6 @@ export class SupabaseService {
     const config = configureSupabase();
     this.bucketName = config.bucketName;
 
-    // ✅ Create a custom WebSocket constructor wrapper
     const wsConstructor = (url: string) => {
       return new WebSocket(url);
     };
@@ -22,42 +21,39 @@ export class SupabaseService {
         autoRefreshToken: false,
         persistSession: false,
       },
-      // ✅ Use the wrapper
       realtime: {
         params: {
           eventsPerSecond: 2,
         },
-        transport: wsConstructor as any, // Type assertion to bypass strict typing
+        transport: wsConstructor as any,
       },
     });
   }
+
+  // ✅ UNIFIED: All upload methods return { secure_url, public_id }
   async uploadBase64(
     base64String: string,
-    folder: string = 'products',
+    folder: string,
   ): Promise<{ secure_url: string; public_id: string }> {
     try {
-      // Extract base64 data
-      const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-      if (!matches || matches.length !== 3) {
+      let base64Data = base64String;
+      if (base64String.includes('data:')) {
+        base64Data = base64String.split(',')[1];
+      }
+
+      if (!base64Data || base64Data.length === 0) {
         throw new Error('Invalid base64 string');
       }
 
-      const contentType = matches[1];
-      const base64Data = matches[2];
-      const fileBuffer = Buffer.from(base64Data, 'base64');
-
-      // Generate unique filename
+      const buffer = Buffer.from(base64Data, 'base64');
       const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(7);
-      const extension = contentType.split('/')[1] || 'jpg';
-      const filePath = `${folder}/${timestamp}-${random}.${extension}`;
+      const randomString = Math.random().toString(36).substring(2, 15);
+      const fileName = `${folder}/${timestamp}-${randomString}.jpg`;
 
-      // Upload to Supabase Storage
       const { data, error } = await this.supabase.storage
         .from(this.bucketName)
-        .upload(filePath, fileBuffer, {
-          contentType: contentType,
-          cacheControl: '3600',
+        .upload(fileName, buffer, {
+          contentType: 'image/jpeg',
           upsert: false,
         });
 
@@ -65,14 +61,13 @@ export class SupabaseService {
         throw new Error(`Supabase upload failed: ${error.message}`);
       }
 
-      // Get public URL
       const { data: urlData } = this.supabase.storage
         .from(this.bucketName)
-        .getPublicUrl(filePath);
+        .getPublicUrl(data.path);
 
       return {
-        secure_url: urlData.publicUrl,
-        public_id: filePath,
+        secure_url: urlData.publicUrl, // ✅ Matches expected type
+        public_id: data.path, // ✅ Matches expected type
       };
     } catch (error: any) {
       console.error('Supabase upload error:', error.message);
@@ -87,7 +82,6 @@ export class SupabaseService {
     try {
       console.log('Uploading image from URL:', imageUrl);
 
-      // Fetch the image from URL
       const response = await fetch(imageUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.statusText}`);
@@ -103,7 +97,6 @@ export class SupabaseService {
       const random = Math.random().toString(36).substring(7);
       const filePath = `${folder}/${timestamp}-${random}.${extension}`;
 
-      // Upload to Supabase Storage
       const { data, error } = await this.supabase.storage
         .from(this.bucketName)
         .upload(filePath, fileBuffer, {
@@ -116,7 +109,6 @@ export class SupabaseService {
         throw new Error(`Supabase upload failed: ${error.message}`);
       }
 
-      // Get public URL
       const { data: urlData } = this.supabase.storage
         .from(this.bucketName)
         .getPublicUrl(filePath);
@@ -189,7 +181,6 @@ export class SupabaseService {
     return data.publicUrl;
   }
 
-  // ✅ Helper to generate signed URL for private files
   async getSignedUrl(
     publicId: string,
     expiresIn: number = 3600,

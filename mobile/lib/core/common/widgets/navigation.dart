@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mobile/core/theme/theme.dart';
-import 'package:mobile/features/chat/presentation/screens/chat_view.dart';
 import 'package:mobile/features/chat/presentation/screens/conversations_screen.dart';
 import 'package:mobile/features/product/presentation/screens/home_screen.dart';
 import 'package:mobile/features/profile/presentation/screens/settings_screen.dart';

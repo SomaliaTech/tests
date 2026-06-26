@@ -1,71 +1,101 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
 import 'admin_service.dart';
 
 class ChatAdminService {
+  // ✅ Start chat with admin - handles everything
   static Future<void> startChatWithAdmin(BuildContext context) async {
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(color: Color(0xFF2ED573)),
-        ),
-      );
+    // Show loading indicator
+    if (!context.mounted) return;
+    final socketService = GetIt.instance<ChatSocketService>();
+    if (!socketService.isConnected) {
+      await socketService.connect();
+    }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+      ),
+    );
 
+    try {
       // Fetch admin user
       final admin = await AdminService.getFirstAdmin();
 
       // Close loading indicator
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
+      if (context.mounted) {
+        Navigator.of(context).pop();
       }
 
+      // Check if context is still valid
+      if (!context.mounted) return;
+
       if (admin == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No support admin available. Please try again later.',
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No support admin available. Please try again later.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
             ),
-            backgroundColor: Colors.orange,
-          ),
-        );
+          );
+        }
         return;
       }
 
       // Navigate to chat room
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatRoomScreen(
-            partnerId: admin.id,
-            partnerName: admin.displayName,
-            partnerImage: admin.profileImage,
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatRoomScreen(
+              partnerId: admin.id,
+              partnerName: admin.displayName,
+              partnerImage: admin.profileImage,
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      if (Navigator.canPop(context)) {
-        Navigator.pop(context);
+      // Close loading indicator if still showing
+      if (context.mounted) {
+        Navigator.of(context).pop();
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error starting chat: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // Show error message
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error starting chat: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
-  // Helper method to check if admin is available
+  // ✅ Check if admin is available
   static Future<bool> isAdminAvailable() async {
     try {
       final admin = await AdminService.getFirstAdmin();
       return admin != null;
     } catch (e) {
       return false;
+    }
+  }
+
+  // ✅ Get first available admin
+  static Future<AdminUser?> getFirstAdmin() async {
+    try {
+      return await AdminService.getFirstAdmin();
+    } catch (e) {
+      return null;
     }
   }
 }

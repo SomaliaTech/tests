@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/profile/domain/entities/market.dart';
+import 'package:mobile/features/profile/domain/entities/profile.dart';
 import 'package:mobile/features/profile/domain/usecases/get_markets.dart';
 import 'package:toastification/toastification.dart';
 import '../bloc/profile_bloc.dart';
@@ -11,7 +12,7 @@ import '../widgets/profile_header.dart';
 import '../widgets/profile_image_picker.dart';
 import '../widgets/warning_section.dart';
 import '../widgets/market_dropdown.dart';
-
+import 'package:iconsax/iconsax.dart';
 import '../../../../core/services/injection_container.dart';
 
 class ProfileView extends StatefulWidget {
@@ -26,6 +27,10 @@ class _ProfileViewState extends State<ProfileView> {
   List<Market> _markets = [];
   Market? _selectedMarket;
   String _name = '';
+  String _email = '';
+  String? _currentMarketId;
+  bool _marketsLoaded = false;
+  bool _profileLoaded = false;
 
   @override
   void initState() {
@@ -35,19 +40,44 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Future<void> _loadMarkets() async {
-    print('🔄 Loading markets...');
     final result = await sl<GetMarkets>()();
     result.fold(
       (failure) {
-        print('❌ Failed to load markets: ${failure.message}');
-        setState(() => _markets = []);
+        if (mounted)
+          setState(() {
+            _markets = [];
+            _marketsLoaded = true;
+          });
       },
       (markets) {
-        print('✅ Markets loaded: ${markets.length}');
-        print('📊 Markets: ${markets.map((m) => m.name).join(', ')}');
-        setState(() => _markets = markets);
+        if (mounted) {
+          setState(() {
+            _markets = markets;
+            _marketsLoaded = true;
+          });
+          _tryPreSelectMarket();
+        }
       },
     );
+  }
+
+  void _tryPreSelectMarket() {
+    if (_marketsLoaded &&
+        _profileLoaded &&
+        _currentMarketId != null &&
+        _selectedMarket == null &&
+        _markets.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedMarket = _markets.firstWhere(
+              (m) => m.id == _currentMarketId,
+              orElse: () => _markets.first,
+            );
+          });
+        }
+      });
+    }
   }
 
   void _showConfirmationDialog(
@@ -58,20 +88,54 @@ class _ProfileViewState extends State<ProfileView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Iconsax.warning_2,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Color(0xFF6B7280)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF6B7280)),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               onConfirm();
             },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Confirm'),
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: const Text(
+              'Delete',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -104,30 +168,39 @@ class _ProfileViewState extends State<ProfileView> {
               description: const Text('Profile image updated!'),
               type: ToastificationType.success,
             );
+          } else if (state is ProfileLoaded) {
+            final profile = state.profile;
+            if (_name.isEmpty) _name = profile.name;
+            if (_email.isEmpty) _email = profile.email ?? '';
+
+            if (_currentMarketId == null && profile.marketId != null) {
+              _currentMarketId = profile.marketId;
+              _profileLoaded = true;
+              _tryPreSelectMarket();
+            }
           }
         },
         builder: (context, state) {
-          // Don't show loading for ProfileUpdated state
-          if (state is ProfileLoading ||
-              (state is ProfileUpdated && state is! ProfileLoaded)) {
-            return const Center(child: CircularProgressIndicator());
+          if (state is ProfileLoading) {
+            return const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+            );
           }
 
           if (state is ProfileLoaded || state is ProfileUpdated) {
-            // Get profile from either state
             final profile = state is ProfileLoaded
                 ? state.profile
                 : (state as ProfileUpdated).profile;
 
-            if (_name.isEmpty) _name = profile.name;
-
             return Stack(
               children: [
-                Column(
-                  children: [
-                    ProfileHeader(onBackPressed: () => Navigator.pop(context)),
-                    Expanded(
-                      child: SingleChildScrollView(
+                SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      ProfileHeader(
+                        onBackPressed: () => Navigator.pop(context),
+                      ),
+                      Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
@@ -143,28 +216,57 @@ class _ProfileViewState extends State<ProfileView> {
                               profile: profile,
                               selectedMarket: _selectedMarket,
                               onNameChanged: (name) => _name = name,
+                              onEmailChanged: (email) => _email = email,
                               onMarketTap: () {
                                 setState(() => _isMarketDropdownOpen = true);
                               },
                               onUpdatePressed: () {
+                                if (_email.isNotEmpty) {
+                                  final emailRegex = RegExp(
+                                    r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                                  );
+                                  if (!emailRegex.hasMatch(_email)) {
+                                    toastification.show(
+                                      title: const Text('Error'),
+                                      description: const Text(
+                                        'Please enter a valid email address',
+                                      ),
+                                      type: ToastificationType.error,
+                                    );
+                                    return;
+                                  }
+                                }
+
+                                final marketId =
+                                    _selectedMarket?.id ?? _currentMarketId;
+
+                                if (marketId == null) {
+                                  toastification.show(
+                                    title: const Text('Error'),
+                                    description: const Text(
+                                      'Please select a market',
+                                    ),
+                                    type: ToastificationType.error,
+                                  );
+                                  return;
+                                }
+
                                 context.read<ProfileBloc>().add(
                                   UpdateProfileEvent(
                                     name: _name,
-                                    email: profile.email,
-                                    marketId: _selectedMarket?.id,
+                                    email: _email.isEmpty ? null : _email,
+                                    marketId: marketId,
                                   ),
                                 );
                               },
                               isUpdating: state is ProfileLoading,
                             ),
                             WarningSection(
-                              onWhatsAppPressed: () {
-                                // Open WhatsApp
-                              },
+                              onWhatsAppPressed: () {},
                               onDeletePressed: () {
                                 _showConfirmationDialog(
                                   'Delete Account',
-                                  'Are you sure? This action cannot be undone.',
+                                  'Are you sure? This action cannot be undone and all your data will be permanently lost.',
                                   () {
                                     context.read<ProfileBloc>().add(
                                       DeleteAccountEvent(),
@@ -176,8 +278,8 @@ class _ProfileViewState extends State<ProfileView> {
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 MarketDropdown(
                   isOpen: _isMarketDropdownOpen,
@@ -186,6 +288,7 @@ class _ProfileViewState extends State<ProfileView> {
                   onMarketSelected: (market) {
                     setState(() {
                       _selectedMarket = market;
+                      _currentMarketId = market.id;
                       _isMarketDropdownOpen = false;
                     });
                   },

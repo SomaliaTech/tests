@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/features/product/presentation/screens/search_results_screen.dart';
 import '../blocs/product_bloc.dart';
 import '../blocs/product_event.dart';
 import '../widgets/home/header.dart';
@@ -18,7 +19,19 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          const Header(), // Remove onSearch if not needed or add it
+          Header(
+            onSearch: (query) {
+              if (query.trim().isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        SearchResultsScreen(initialQuery: query),
+                  ),
+                );
+              }
+            },
+          ),
           Expanded(
             child: ListView(
               physics: const BouncingScrollPhysics(),

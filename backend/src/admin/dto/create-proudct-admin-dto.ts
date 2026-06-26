@@ -1,5 +1,5 @@
-// src/admin/dto/create-product-admin.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
+// src/admin/dto/create-proudct-admin-dto.ts
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsNumber,
@@ -12,121 +12,120 @@ import {
 export class CreateVariantDto {
   @IsUUID()
   @ApiProperty({ description: 'Color ID' })
-  colorId: string;
+  colorId!: string;
 
   @IsUUID()
   @ApiProperty({ description: 'Size ID' })
-  sizeId: string;
+  sizeId!: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'SKU' })
+  @ApiPropertyOptional({ description: 'SKU' })
   sku?: string;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Stock quantity' })
+  @ApiPropertyOptional({ description: 'Stock quantity' })
   stock?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Variant price' })
+  @ApiPropertyOptional({ description: 'Variant price' })
   price?: number;
 }
 
 export class CreateProductAdminDto {
   @IsString()
   @ApiProperty({ description: 'Product name' })
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Product slug' })
+  @ApiPropertyOptional({ description: 'Product slug' })
   slug?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Product description' })
+  @ApiPropertyOptional({ description: 'Product description' })
   description?: string;
 
   @IsNumber()
   @Min(0)
   @ApiProperty({ description: 'Product price' })
-  price: number;
+  price!: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Compare at price' })
+  @ApiPropertyOptional({ description: 'Compare at price' })
   compareAtPrice?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Cost per item' })
+  @ApiPropertyOptional({ description: 'Cost per item' })
   costPerItem?: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Stock quantity' })
+  @ApiPropertyOptional({ description: 'Stock quantity' })
   stock?: number;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'SKU' })
+  @ApiPropertyOptional({ description: 'SKU' })
   sku?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Barcode' })
+  @ApiPropertyOptional({ description: 'Barcode' })
   barcode?: string;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  @ApiProperty({ required: false, description: 'Weight' })
+  @ApiPropertyOptional({ description: 'Weight' })
   weight?: number | null;
 
   @IsUUID()
   @ApiProperty({ description: 'Category ID' })
-  categoryId: string;
+  categoryId!: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Brand' })
+  @ApiPropertyOptional({ description: 'Brand' })
   brand?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'Tags' })
+  @ApiPropertyOptional({ description: 'Tags' })
   tags?: string;
 
   @IsOptional()
   @IsBoolean()
-  @ApiProperty({ required: false, description: 'Is active' })
+  @ApiPropertyOptional({ description: 'Is active' })
   isActive?: boolean;
 
   @IsOptional()
   @IsBoolean()
-  @ApiProperty({ required: false, description: 'Is featured' })
+  @ApiPropertyOptional({ description: 'Is featured' })
   isFeatured?: boolean;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'SEO Title' })
+  @ApiPropertyOptional({ description: 'SEO Title' })
   seoTitle?: string;
 
   @IsOptional()
   @IsString()
-  @ApiProperty({ required: false, description: 'SEO Description' })
+  @ApiPropertyOptional({ description: 'SEO Description' })
   seoDescription?: string;
 
   @IsOptional()
-  @ApiProperty({
-    required: false,
+  @ApiPropertyOptional({
     type: [CreateVariantDto],
     description: 'Product variants',
   })

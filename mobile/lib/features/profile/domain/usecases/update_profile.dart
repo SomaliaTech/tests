@@ -1,16 +1,17 @@
-import '../../../../core/utils/typedefs.dart';
-import '../entities/profile.dart';
-import '../repositories/profile_repository.dart';
+import 'package:fpdart/fpdart.dart';
+import '../../../../core/error/failures.dart';
+import '../../domain/entities/profile.dart';
+import '../../domain/repositories/profile_repository.dart';
 
 class UpdateProfile {
   final ProfileRepository repository;
 
-  const UpdateProfile(this.repository);
+  UpdateProfile(this.repository);
 
-  ResultFuture<Profile> call({
+  Future<Either<Failure, Profile>> call({
     required String name,
     String? email,
-    String? marketId,
+    String? marketId, // ✅ Nullable
   }) async {
     return await repository.updateProfile(
       name: name,

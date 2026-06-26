@@ -74,6 +74,7 @@ class AdminProductImageEntity extends Equatable {
   List<Object?> get props => [id, url, publicId, isMain, order];
 }
 
+// ✅ UPDATED: Added colorCode and sizeValue fields
 class AdminProductVariantEntity extends Equatable {
   final String id;
   final String? sku;
@@ -81,8 +82,10 @@ class AdminProductVariantEntity extends Equatable {
   final double? price;
   final String? colorId;
   final String? colorName;
+  final String? colorCode; // ✅ NEW
   final String? sizeId;
   final String? sizeName;
+  final String? sizeValue; // ✅ NEW
 
   const AdminProductVariantEntity({
     required this.id,
@@ -91,8 +94,10 @@ class AdminProductVariantEntity extends Equatable {
     this.price,
     this.colorId,
     this.colorName,
+    this.colorCode, // ✅ NEW
     this.sizeId,
     this.sizeName,
+    this.sizeValue, // ✅ NEW
   });
 
   @override
@@ -103,8 +108,10 @@ class AdminProductVariantEntity extends Equatable {
     price,
     colorId,
     colorName,
+    colorCode,
     sizeId,
     sizeName,
+    sizeValue,
   ];
 }
 
@@ -114,6 +121,7 @@ class AdminCategoryEntity extends Equatable {
   final String slug;
   final String? description;
   final String? parentId;
+  final String? iconUrl; // ✅ NEW
   final List<AdminCategoryEntity> children;
 
   const AdminCategoryEntity({
@@ -122,9 +130,18 @@ class AdminCategoryEntity extends Equatable {
     required this.slug,
     this.description,
     this.parentId,
+    this.iconUrl, // ✅ NEW
     this.children = const [],
   });
 
   @override
-  List<Object?> get props => [id, name, slug, description, parentId, children];
+  List<Object?> get props => [
+    id,
+    name,
+    slug,
+    description,
+    parentId,
+    iconUrl,
+    children,
+  ];
 }

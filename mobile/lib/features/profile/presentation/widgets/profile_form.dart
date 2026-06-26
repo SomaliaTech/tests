@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/profile/domain/entities/market.dart';
 import '../../domain/entities/profile.dart';
+import '../../domain/entities/market.dart';
 
-class ProfileForm extends StatelessWidget {
+class ProfileForm extends StatefulWidget {
   final Profile profile;
   final Market? selectedMarket;
-  final ValueChanged<String> onNameChanged;
+  final Function(String) onNameChanged;
+  final Function(String) onEmailChanged;
   final VoidCallback onMarketTap;
   final VoidCallback onUpdatePressed;
   final bool isUpdating;
@@ -14,138 +15,410 @@ class ProfileForm extends StatelessWidget {
   const ProfileForm({
     super.key,
     required this.profile,
-    this.selectedMarket,
+    required this.selectedMarket,
     required this.onNameChanged,
+    required this.onEmailChanged,
     required this.onMarketTap,
     required this.onUpdatePressed,
     required this.isUpdating,
   });
 
   @override
+  State<ProfileForm> createState() => _ProfileFormState();
+}
+
+class _ProfileFormState extends State<ProfileForm> {
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.profile.name);
+    _emailController = TextEditingController(text: widget.profile.email ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final nameController = TextEditingController(text: profile.name);
-    final phoneController = TextEditingController(text: profile.phoneNumber);
-
     return Container(
-      margin: const EdgeInsets.only(bottom: 25),
+      margin: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Phone (Read-only)
-          Container(
-            margin: const EdgeInsets.only(bottom: 15),
-            child: TextField(
-              controller: phoneController,
-              enabled: false,
-              style: const TextStyle(color: Color(0xFF666666)),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFFF9FAFB),
-                border: OutlineInputBorder(
+          // Section header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                  ),
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 14,
+                child: const Icon(
+                  Iconsax.user_edit,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
-            ),
-          ),
-
-          // Name
-          Container(
-            margin: const EdgeInsets.only(bottom: 15),
-            child: TextField(
-              controller: nameController,
-              onChanged: onNameChanged,
-              decoration: InputDecoration(
-                hintText: 'Full Name',
-                hintStyle: const TextStyle(color: Color(0xFF999999)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFC8F6DC)),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 14,
-                ),
-              ),
-            ),
-          ),
-
-          // Market Selector
-          GestureDetector(
-            onTap: onMarketTap,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 15),
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFFC8F6DC)),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(width: 12),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // In the market selector section, update the displayed text
                   Text(
-                    selectedMarket?.displayName ??
-                        profile.marketName ??
-                        'Select market',
+                    'Personal Information',
                     style: TextStyle(
-                      color:
-                          (selectedMarket != null || profile.marketName != null)
-                          ? const Color(0xFF333333)
-                          : const Color(0xFF999999),
-                      fontSize: 15,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1F2937),
                     ),
                   ),
-                  const Icon(
-                    Iconsax.arrow_down_1,
-                    size: 20,
-                    color: Color(0xFF999999),
+                  SizedBox(height: 2),
+                  Text(
+                    'Update your personal details',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                   ),
                 ],
               ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+          const SizedBox(height: 24),
+
+          // Full Name Field
+          _buildEditableField(
+            controller: _nameController,
+            label: 'Full Name',
+            icon: Iconsax.user,
+            iconColor: const Color(0xFF3B82F6),
+            onChanged: widget.onNameChanged,
+            hint: 'Enter your full name',
+          ),
+          const SizedBox(height: 20),
+
+          // Email Field
+          _buildEditableField(
+            controller: _emailController,
+            label: 'Email Address',
+            icon: Iconsax.message,
+            iconColor: const Color(0xFF8B5CF6),
+            keyboardType: TextInputType.emailAddress,
+            onChanged: widget.onEmailChanged,
+            hint: 'Enter your email',
+          ),
+          const SizedBox(height: 20),
+
+          // Phone Number (Read-only)
+          _buildReadOnlyField(
+            label: 'Phone Number',
+            value: widget.profile.phoneNumber,
+            icon: Iconsax.call,
+            iconColor: const Color(0xFF10B981),
+          ),
+          const SizedBox(height: 20),
+
+          // Market Selector
+          GestureDetector(
+            onTap: widget.onMarketTap,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Market',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF6B7280),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFFE5E7EB),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Iconsax.building,
+                          color: Color(0xFFF59E0B),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          widget.selectedMarket?.name ??
+                              widget.profile.marketName ??
+                              'Select your market',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color:
+                                (widget.selectedMarket != null ||
+                                    widget.profile.marketName != null)
+                                ? const Color(0xFF1F2937)
+                                : const Color(0xFF9CA3AF),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2ED573).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Iconsax.arrow_down_1,
+                          color: Color(0xFF2ED573),
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(height: 28),
 
-          // Update Button
-          GestureDetector(
-            onTap: isUpdating ? null : onUpdatePressed,
-            child: Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 15),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: isUpdating
-                    ? const Color(0xFFA8E6CF)
-                    : const Color(0xFF2ED573),
-                borderRadius: BorderRadius.circular(30),
+          // Update Button with gradient
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: ElevatedButton(
+              onPressed: widget.isUpdating ? null : widget.onUpdatePressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+                elevation: 8,
+                padding: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
-              child: Center(
-                child: Text(
-                  isUpdating ? 'UPDATING...' : 'UPDATE',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
                   ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Center(
+                  child: widget.isUpdating
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Iconsax.tick_circle, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Update Profile',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEditableField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    TextInputType? keyboardType,
+    Function(String)? onChanged,
+    required String hint,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B7280),
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  onChanged: onChanged,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: hint,
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF9CA3AF),
+                      fontSize: 15,
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF1F2937),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReadOnlyField({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B7280),
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF6B7280),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE5E7EB),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Iconsax.lock_1, size: 12, color: Color(0xFF6B7280)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Read-only',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF6B7280),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -6,6 +6,7 @@ class Category extends Equatable {
   final String slug;
   final String? description;
   final String? parentId;
+  final String? iconUrl; // ✅ NEW
 
   const Category({
     required this.id,
@@ -13,10 +14,12 @@ class Category extends Equatable {
     required this.slug,
     this.description,
     this.parentId,
+    this.iconUrl, // ✅ NEW
   });
 
   bool get isParent => parentId == null;
+  bool get hasIcon => iconUrl != null && iconUrl!.isNotEmpty; // ✅ NEW
 
   @override
-  List<Object?> get props => [id, name, slug, description, parentId];
+  List<Object?> get props => [id, name, slug, description, parentId, iconUrl];
 }

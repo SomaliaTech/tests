@@ -3,8 +3,8 @@ export enum NotificationType {
   PROMOTION = 'promotion',
   SYSTEM = 'system',
   PAYMENT = 'payment',
+  MESSAGE = 'message', // ✅ Add this
 }
-
 export class Notification {
   id: string;
   userId: string;

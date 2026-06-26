@@ -1,58 +1,139 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
-import { messages, users, conversations } from '../drizzle/schema';
-import { eq, and, or, desc, sql } from 'drizzle-orm';
+import { eq, and, or, desc, sql, asc, inArray, ilike, SQL } from 'drizzle-orm'; // ✅ Added or, ilike
 import { v4 as uuidv4 } from 'uuid';
+import {
+  messages,
+  users,
+  conversations,
+  deviceTokens,
+} from '../drizzle/schema';
 
 @Injectable()
 export class ChatService {
-  constructor(private drizzle: DrizzleService) {}
+  constructor(private readonly drizzle: DrizzleService) {}
 
-  // ✅ NEW: Get or create a conversation room
+  // ==========================================
+  // USER QUERIES
+  // ==========================================
+
+  async getUserById(userId: string) {
+    const [user] = await this.drizzle.db
+      .select({
+        id: users.id,
+        name: users.name,
+        phoneNumber: users.phoneNumber,
+        profileImage: users.profileImage,
+        isOnline: users.isOnline,
+        lastSeen: users.lastSeen,
+        isAdmin: users.isAdmin,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return user || null;
+  }
+
+  async getAvailableAdmins() {
+    return this.drizzle.db
+      .select({
+        id: users.id,
+        name: users.name,
+        phoneNumber: users.phoneNumber,
+        profileImage: users.profileImage,
+        isOnline: users.isOnline,
+        lastSeen: users.lastSeen,
+      })
+      .from(users)
+      .where(eq(users.isAdmin, true))
+      .orderBy(desc(users.isOnline), asc(users.name))
+      .limit(20);
+  }
+
+  // ==========================================
+  // CONVERSATION MANAGEMENT
+  // ==========================================
+
   async getOrCreateConversation(userId1: string, userId2: string) {
-    // Ensure consistent ordering - smaller ID first
-    const [participant1, participant2] = [userId1, userId2].sort();
+    const [p1, p2] = [userId1, userId2].sort();
 
-    // Check if conversation already exists
-    const existing = await this.drizzle.db
+    const [existing] = await this.drizzle.db
       .select()
       .from(conversations)
       .where(
         and(
-          eq(conversations.participant1, participant1),
-          eq(conversations.participant2, participant2),
+          eq(conversations.participant1, p1),
+          eq(conversations.participant2, p2),
         ),
       )
       .limit(1);
 
-    if (existing.length > 0) {
-      return existing[0];
-    }
+    if (existing) return existing;
 
-    // Create new conversation
-    const [newConversation] = await this.drizzle.db
+    const [conversation] = await this.drizzle.db
       .insert(conversations)
       .values({
         id: uuidv4(),
-        participant1,
-        participant2,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        participant1: p1,
+        participant2: p2,
       })
       .returning();
 
-    return newConversation;
+    return conversation;
   }
 
-  // ✅ UPDATED: Save message with conversation ID
-  async saveMessage(
+  async createConversation(userId1: string, userId2: string) {
+    await this.validateConversationParticipants(userId1, userId2);
+    return this.getOrCreateConversation(userId1, userId2);
+  }
+
+  private async validateConversationParticipants(
+    userId1: string,
+    userId2: string,
+  ) {
+    if (userId1 === userId2) {
+      throw new BadRequestException('Cannot create conversation with yourself');
+    }
+
+    const participants = await this.drizzle.db
+      .select({ id: users.id, isAdmin: users.isAdmin })
+      .from(users)
+      .where(inArray(users.id, [userId1, userId2]));
+
+    if (participants.length !== 2) {
+      throw new NotFoundException('One or both users not found');
+    }
+
+    if (!participants.some((p) => p.isAdmin)) {
+      throw new ForbiddenException(
+        'Conversations require at least one admin participant',
+      );
+    }
+  }
+
+  // ==========================================
+  // MESSAGE MANAGEMENT
+  // ==========================================
+
+  async sendMessage(
     senderId: string,
     receiverId: string,
     content: string,
-    type: string,
+    type: string = 'text',
     mediaUrl?: string,
   ) {
-    // Get or create conversation first
+    await this.validateMessagePermission(senderId, receiverId);
+
+    if (type === 'text' && !content?.trim()) {
+      throw new BadRequestException('Message content cannot be empty');
+    }
+
     const conversation = await this.getOrCreateConversation(
       senderId,
       receiverId,
@@ -65,19 +146,26 @@ export class ChatService {
         conversationId: conversation.id,
         senderId,
         receiverId,
-        content,
+        content: content || null,
         type,
-        mediaUrl,
-        createdAt: new Date(),
+        mediaUrl: mediaUrl || null,
+        isRead: false,
       })
       .returning();
 
-    // Update conversation's last message time
+    const preview =
+      type === 'image'
+        ? '📷 Photo'
+        : type === 'file'
+          ? '📎 File'
+          : content?.substring(0, 100) || '';
+
     await this.drizzle.db
       .update(conversations)
       .set({
+        lastMessage: preview,
+        lastMessageType: type,
         lastMessageAt: new Date(),
-        lastMessage: content?.substring(0, 100) || '📷 Photo',
         updatedAt: new Date(),
       })
       .where(eq(conversations.id, conversation.id));
@@ -85,48 +173,68 @@ export class ChatService {
     return message;
   }
 
-  // ✅ UPDATED: Get chat history using conversation
-  async getChatHistory(userId1: string, userId2: string, limit = 50) {
-    // Get the conversation first
-    const conversation = await this.getOrCreateConversation(userId1, userId2);
+  async validateMessagePermission(senderId: string, receiverId: string) {
+    const usersData = await this.drizzle.db
+      .select({ id: users.id, isAdmin: users.isAdmin })
+      .from(users)
+      .where(inArray(users.id, [senderId, receiverId]));
+
+    const sender = usersData.find((u) => u.id === senderId);
+    const receiver = usersData.find((u) => u.id === receiverId);
+
+    if (!sender) throw new NotFoundException('Sender not found');
+    if (!receiver) throw new NotFoundException('Receiver not found');
+
+    if (sender.isAdmin) return;
+
+    if (!receiver.isAdmin) {
+      throw new ForbiddenException('You can only message administrators');
+    }
+  }
+
+  async getMessages(
+    userId: string,
+    partnerId: string,
+    limit: number = 50,
+    before?: Date,
+  ) {
+    await this.validateMessageAccess(userId, partnerId);
+
+    const conversation = await this.getOrCreateConversation(userId, partnerId);
+
+    const conditions = [eq(messages.conversationId, conversation.id)];
+    if (before) {
+      conditions.push(sql`${messages.createdAt} < ${before.toISOString()}`);
+    }
 
     return this.drizzle.db
       .select()
       .from(messages)
-      .where(eq(messages.conversationId, conversation.id))
+      .where(and(...conditions))
       .orderBy(desc(messages.createdAt))
-      .limit(limit);
+      .limit(Math.min(limit, 100));
   }
 
-  // ... rest of your existing methods remain the same ...
+  private async validateMessageAccess(userId: string, partnerId: string) {
+    const user = await this.getUserById(userId);
+    if (!user) throw new NotFoundException('User not found');
 
-  async validateMessagePermission(
-    senderId: string,
-    receiverId: string,
-    senderIsAdmin: boolean,
-  ) {
-    if (!senderIsAdmin) {
-      const [receiver] = await this.drizzle.db
-        .select({ isAdmin: users.isAdmin })
-        .from(users)
-        .where(eq(users.id, receiverId))
-        .limit(1);
-
-      if (!receiver || !receiver.isAdmin) {
-        throw new ForbiddenException('Users can only send messages to Admins.');
+    if (!user.isAdmin) {
+      const partner = await this.getUserById(partnerId);
+      if (!partner?.isAdmin) {
+        throw new ForbiddenException(
+          'You can only view messages with administrators',
+        );
       }
     }
   }
 
-  async markAsRead(userId: string, chatPartnerId: string) {
-    const conversation = await this.getOrCreateConversation(
-      userId,
-      chatPartnerId,
-    );
+  async markAsRead(userId: string, partnerId: string) {
+    const conversation = await this.getOrCreateConversation(userId, partnerId);
 
     const result = await this.drizzle.db
       .update(messages)
-      .set({ isRead: true })
+      .set({ isRead: true, readAt: new Date() })
       .where(
         and(
           eq(messages.conversationId, conversation.id),
@@ -134,104 +242,345 @@ export class ChatService {
           eq(messages.isRead, false),
         ),
       )
-      .returning();
+      .returning({ id: messages.id });
 
-    return {
-      message: 'Messages marked as read',
-      count: result.length,
-    };
+    return { count: result.length };
   }
+
+  async getUnreadCount(userId: string) {
+    const [result] = await this.drizzle.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(and(eq(messages.receiverId, userId), eq(messages.isRead, false)));
+
+    return { unreadCount: result?.count || 0 };
+  }
+
+  // ==========================================
+  // CONVERSATION LISTING
+  // ==========================================
 
   async getAdminConversations(adminId: string) {
-    try {
-      const result = await this.drizzle.db.execute(sql`
-        SELECT DISTINCT ON (c.id)
-          c.id as conversation_id,
-          u.id as user_id,
-          u.name, 
-          u.phone_number, 
-          u.profile_image, 
-          COALESCE(u.is_online, false) as is_online, 
-          u.last_seen,
-          c.last_message,
-          c.last_message_type,
-          c.last_message_at as last_message_time,
-          (SELECT COUNT(*) FROM messages 
-           WHERE conversation_id = c.id 
-           AND receiver_id = ${adminId} 
-           AND is_read = false) as unread_count
-        FROM conversations c
-        JOIN users u ON (u.id = c.participant1 OR u.id = c.participant2)
-        WHERE (c.participant1 = ${adminId} OR c.participant2 = ${adminId})
-          AND u.id != ${adminId}
-        ORDER BY c.id, c.last_message_at DESC
-      `);
-      return result.rows;
-    } catch (error) {
-      console.error('Error in getAdminConversations:', error);
-      return this.getAdminConversationsFallback(adminId);
-    }
-  }
-
-  private async getAdminConversationsFallback(adminId: string) {
     const result = await this.drizzle.db.execute(sql`
-      SELECT 
-        u.id, u.name, u.phone_number, u.profile_image,
-        m.content as last_message, 
-        m.type as last_message_type, 
-        m.created_at as last_message_time,
-        (SELECT COUNT(*) FROM messages WHERE sender_id = u.id AND receiver_id = ${adminId} AND is_read = false) as unread_count
-      FROM users u
-      JOIN messages m ON (m.sender_id = u.id AND m.receiver_id = ${adminId}) OR (m.sender_id = ${adminId} AND m.receiver_id = u.id)
-      WHERE u.id != ${adminId}
-      GROUP BY u.id, m.content, m.type, m.created_at
-      ORDER BY m.created_at DESC
-    `);
+    SELECT DISTINCT ON (c.id)
+      c.id as "conversationId",
+      u.id as "userId",
+      u.name,
+      u.phone_number as "phoneNumber",
+      u.profile_image as "profileImage",
+      u.is_online as "isOnline",
+      u.last_seen as "lastSeen",
+      c.last_message as "lastMessage",
+      c.last_message_type as "lastMessageType",
+      c.last_message_at as "lastMessageTime",
+      (
+        SELECT COUNT(*)::int 
+        FROM messages 
+        WHERE conversation_id = c.id 
+          AND receiver_id = ${adminId} 
+          AND is_read = false
+      ) as "unreadCount"
+    FROM conversations c
+    JOIN users u ON (
+      (u.id = c.participant1 AND c.participant2 = ${adminId})
+      OR (u.id = c.participant2 AND c.participant1 = ${adminId})
+    )
+    ORDER BY c.id, c.last_message_at DESC NULLS LAST
+  `);
+
     return result.rows;
   }
 
   async getUserConversations(userId: string) {
-    try {
-      const result = await this.drizzle.db.execute(sql`
-        SELECT DISTINCT ON (c.id)
-          c.id as conversation_id,
-          u.id as user_id,
-          u.name, 
-          u.profile_image, 
-          COALESCE(u.is_online, false) as is_online,
-          c.last_message,
-          c.last_message_type,
-          c.last_message_at as last_message_time,
-          (SELECT COUNT(*) FROM messages 
-           WHERE conversation_id = c.id 
-           AND receiver_id = ${userId} 
-           AND is_read = false) as unread_count
-        FROM conversations c
-        JOIN users u ON (u.id = c.participant1 OR u.id = c.participant2)
-        WHERE (c.participant1 = ${userId} OR c.participant2 = ${userId})
-          AND u.id != ${userId} 
-          AND u.is_admin = true
-        ORDER BY c.id, c.last_message_at DESC
-        LIMIT 1
-      `);
-      return result.rows;
-    } catch (error) {
-      console.error('Error in getUserConversations:', error);
-      return [];
-    }
+    const result = await this.drizzle.db.execute(sql`
+      SELECT DISTINCT ON (c.id)
+        c.id as "conversationId",
+        u.id as "userId",
+        u.name,
+        u.profile_image as "profileImage",
+        COALESCE(u.is_online, false) as "isOnline",
+        u.last_seen as "lastSeen",
+        c.last_message as "lastMessage",
+        c.last_message_type as "lastMessageType",
+        c.last_message_at as "lastMessageTime",
+        (
+          SELECT COUNT(*)::int 
+          FROM messages 
+          WHERE conversation_id = c.id 
+            AND receiver_id = ${userId} 
+            AND is_read = false
+        ) as "unreadCount"
+      FROM conversations c
+      JOIN users u ON (
+        (u.id = c.participant1 AND c.participant2 = ${userId})
+        OR (u.id = c.participant2 AND c.participant1 = ${userId})
+      )
+      WHERE u.id != ${userId} AND u.is_admin = true
+      ORDER BY c.id, c.last_message_at DESC NULLS LAST
+    `);
+
+    return result.rows;
   }
 
-  async updateUserStatus(userId: string, isOnline: boolean) {
+  // ==========================================
+  // USER STATUS
+  // ==========================================
+
+  async updateUserStatus(userId: string, isOnline: boolean): Promise<void> {
+    await this.drizzle.withRetry(async (db) => {
+      const updateData: Record<string, unknown> = {
+        isOnline,
+        updatedAt: new Date(),
+      };
+
+      if (isOnline) {
+        updateData.lastSeen = null;
+      } else {
+        updateData.lastSeen = new Date();
+      }
+
+      try {
+        await db.update(users).set(updateData).where(eq(users.id, userId));
+      } catch (error: unknown) {
+        if (
+          error instanceof Error &&
+          error.message?.includes('Connection terminated')
+        ) {
+          console.warn(
+            `⚠️ Could not update status for ${userId}: connection lost`,
+          );
+          return;
+        }
+        throw error;
+      }
+    });
+  }
+
+  async resetAllOnlineStatuses() {
     try {
       await this.drizzle.db
         .update(users)
-        .set({
-          isOnline,
-          lastSeen: isOnline ? null : new Date(),
-        })
-        .where(eq(users.id, userId));
+        .set({ isOnline: false, lastSeen: new Date() })
+        .where(eq(users.isOnline, true));
+      console.log('🔄 Reset all stale online statuses on server startup');
     } catch (error) {
-      console.warn('Could not update user status:', error.message);
+      console.error('Failed to reset online statuses:', error);
     }
+  }
+
+  // ==========================================
+  // DEVICE TOKENS
+  // ==========================================
+
+  async registerDeviceToken(userId: string, token: string, platform: string) {
+    const [existing] = await this.drizzle.db
+      .select()
+      .from(deviceTokens)
+      .where(eq(deviceTokens.token, token))
+      .limit(1);
+
+    if (existing) {
+      await this.drizzle.db
+        .update(deviceTokens)
+        .set({ userId, platform, isActive: true, updatedAt: new Date() })
+        .where(eq(deviceTokens.id, existing.id));
+    } else {
+      await this.drizzle.db.insert(deviceTokens).values({
+        id: uuidv4(),
+        userId,
+        token,
+        platform,
+        isActive: true,
+      });
+    }
+  }
+
+  async unregisterDeviceToken(userId: string, token: string) {
+    await this.drizzle.db
+      .update(deviceTokens)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(
+        and(eq(deviceTokens.userId, userId), eq(deviceTokens.token, token)),
+      );
+  }
+
+  async getUserDeviceTokens(userId: string): Promise<string[]> {
+    const tokens = await this.drizzle.db
+      .select({ token: deviceTokens.token })
+      .from(deviceTokens)
+      .where(
+        and(eq(deviceTokens.userId, userId), eq(deviceTokens.isActive, true)),
+      );
+    return tokens.map((t) => t.token);
+  }
+
+  // ==========================================
+  // SEARCH FUNCTIONALITY
+  // ==========================================
+
+  async searchUsers(
+    query: string,
+    options?: {
+      limit?: number;
+      offset?: number;
+      role?: 'user' | 'admin';
+      excludeIds?: string[];
+      isOnline?: boolean;
+    },
+  ) {
+    const {
+      limit = 20,
+      offset = 0,
+      role,
+      excludeIds = [],
+      isOnline,
+    } = options || {};
+
+    const conditions: SQL[] = []; // ✅ Use SQL[] instead of any[]
+
+    if (query && query.trim()) {
+      const searchPattern = `%${query.trim()}%`;
+      conditions.push(
+        or(
+          ilike(users.name, searchPattern),
+          ilike(users.phoneNumber, searchPattern),
+          ilike(users.email, searchPattern),
+        )!,
+      );
+    }
+
+    if (role === 'admin') {
+      conditions.push(eq(users.isAdmin, true));
+    } else if (role === 'user') {
+      conditions.push(eq(users.isAdmin, false));
+    }
+
+    if (excludeIds.length > 0) {
+      conditions.push(sql`${users.id} NOT IN (${sql.join(excludeIds)})`);
+    }
+
+    if (isOnline !== undefined) {
+      conditions.push(eq(users.isOnline, isOnline));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [usersList, countResult] = await Promise.all([
+      this.drizzle.db
+        .select({
+          id: users.id,
+          name: users.name,
+          phoneNumber: users.phoneNumber,
+          email: users.email,
+          profileImage: users.profileImage,
+          isOnline: users.isOnline,
+          lastSeen: users.lastSeen,
+          isAdmin: users.isAdmin,
+          marketId: users.marketId,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(whereClause)
+        .orderBy(desc(users.isOnline), asc(users.name))
+        .limit(Math.min(limit, 100))
+        .offset(offset),
+
+      this.drizzle.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(whereClause),
+    ]);
+
+    return {
+      data: usersList,
+      total: countResult[0]?.count || 0,
+      limit: Math.min(limit, 100),
+      offset,
+    };
+  }
+
+  async searchChatUsers(
+    currentUserId: string,
+    query: string,
+    limit: number = 20,
+  ) {
+    const currentUser = await this.getUserById(currentUserId);
+    if (!currentUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    const searchPattern = `%${query.trim()}%`;
+    const conditions: SQL[] = []; // ✅ Use SQL[] instead of any[]
+
+    conditions.push(sql`${users.id} != ${currentUserId}`);
+
+    if (!currentUser.isAdmin) {
+      conditions.push(eq(users.isAdmin, true));
+    }
+
+    if (query && query.trim()) {
+      conditions.push(
+        or(
+          ilike(users.name, searchPattern),
+          ilike(users.phoneNumber, searchPattern),
+        )!,
+      );
+    }
+
+    return this.drizzle.db
+      .select({
+        id: users.id,
+        name: users.name,
+        phoneNumber: users.phoneNumber,
+        profileImage: users.profileImage,
+        isOnline: users.isOnline,
+        lastSeen: users.lastSeen,
+        isAdmin: users.isAdmin,
+      })
+      .from(users)
+      .where(and(...conditions))
+      .orderBy(desc(users.isOnline), asc(users.name))
+      .limit(Math.min(limit, 50));
+  }
+
+  async searchConversations(userId: string, query: string, limit: number = 20) {
+    const searchPattern = `%${query.trim()}%`;
+
+    const result = await this.drizzle.db.execute(sql`
+    SELECT DISTINCT ON (c.id)
+      c.id as "conversationId",
+      u.id as "userId",
+      u.name,
+      u.phone_number as "phoneNumber",
+      u.profile_image as "profileImage",
+      u.is_online as "isOnline",
+      u.last_seen as "lastSeen",
+      c.last_message as "lastMessage",
+      c.last_message_type as "lastMessageType",
+      c.last_message_at as "lastMessageTime",
+      (
+        SELECT COUNT(*)::int 
+        FROM messages 
+        WHERE conversation_id = c.id 
+          AND receiver_id = ${userId} 
+          AND is_read = false
+      ) as "unreadCount"
+    FROM conversations c
+    JOIN users u ON (
+      (u.id = c.participant1 AND c.participant2 = ${userId})
+      OR (u.id = c.participant2 AND c.participant1 = ${userId})
+    )
+    WHERE 
+      u.id != ${userId}
+      AND (
+        u.name ILIKE ${searchPattern}
+        OR u.phone_number ILIKE ${searchPattern}
+        OR c.last_message ILIKE ${searchPattern}
+      )
+    ORDER BY c.id, c.last_message_at DESC NULLS LAST
+    LIMIT ${Math.min(limit, 50)}
+  `);
+
+    return result.rows;
   }
 }

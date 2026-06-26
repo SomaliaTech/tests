@@ -96,7 +96,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   ResultFuture<({String token, User user})> completeProfile({
     required String name,
-    String? email,
+    required String email, // ✅ Now required
+    required String marketId, // ✅ Added
     String? profileImageUrl,
   }) async {
     try {
@@ -109,15 +110,17 @@ class AuthRepositoryImpl implements AuthRepository {
         token,
         name,
         email,
+        marketId, // ✅ Pass marketId
         profileImageUrl,
       );
       final user = UserModel.fromJson(data['user']);
       final newToken = data['token'] as String;
 
       await storageService.saveAuthToken(newToken);
-      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
+      await storageService.saveIsAdmin(user.isAdmin);
       await storageService.saveUserName(user.name ?? name);
-      if (email != null) await storageService.saveUserEmail(email);
+      await storageService.saveUserEmail(email); // ✅ Save email
+      await storageService.saveUserMarketId(marketId); // ✅ Save marketId
       if (profileImageUrl != null)
         await storageService.saveUserProfileImage(profileImageUrl);
 

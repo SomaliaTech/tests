@@ -1,0 +1,2 @@
+DROP INDEX "unique_conversation_participants";--> statement-breakpoint
+CREATE UNIQUE INDEX "unique_conversation_participants" ON "conversations" USING btree (LEAST("participant1", "participant2"),GREATEST("participant1", "participant2"));

@@ -11,6 +11,10 @@ class ApiConstants {
   static const String subcategories = '/categories/sub';
   static const String notifications = '/notifications';
 
+  static String get wsUrl => baseUrl
+      .replaceFirst('https://', 'wss://')
+      .replaceFirst('http://', 'ws://');
+
   // Headers
   static const Map<String, String> headers = {
     'Content-Type': 'application/json',

@@ -1,9 +1,10 @@
-// lib/features/auth/presentation/screens/complete_profile_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:toastification/toastification.dart';
+import 'package:http/http.dart' as http;
+import 'package:mobile/core/constants/api_constants.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -19,9 +20,89 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
 
   String? _profileImageUrl;
   bool _uploading = false;
+
+  // Markets data
+  List<Map<String, dynamic>> _markets = [];
+  String? _selectedMarketId;
+  bool _loadingMarkets = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMarkets();
+  }
+
+  Future<void> _fetchMarkets() async {
+    if (!mounted) return; // ✅ Fix: Check mounted before setState
+    setState(() => _loadingMarkets = true);
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/markets'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${widget.token}',
+        },
+      );
+
+      if (!mounted) return; // ✅ Fix: Check mounted after async
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        setState(() {
+          _markets = data.cast<Map<String, dynamic>>();
+          _loadingMarkets = false;
+        });
+      } else {
+        throw Exception('Failed to load markets');
+      }
+    } catch (e) {
+      if (!mounted) return; // ✅ Fix: Check mounted before setState
+      setState(() => _loadingMarkets = false);
+      if (mounted) {
+        toastification.show(
+          context: context,
+          title: const Text('Error'),
+          description: const Text('Failed to load markets'),
+          type: ToastificationType.error,
+        );
+      }
+    }
+  }
+
+  // Future<void> _pickImage() async {
+  //   final picker = ImagePicker();
+  //   final picked = await picker.pickImage(
+  //     source: ImageSource.gallery,
+  //     imageQuality: 80,
+  //     maxWidth: 800,
+  //   );
+
+  //   if (picked != null) {
+  //     if (!mounted) return; // ✅ Fix: Check mounted
+  //     setState(() => _uploading = true);
+
+  //     try {
+  //       final bytes = await picked.readAsBytes();
+  //       final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+
+  //       if (!mounted) return; // ✅ Fix: Check mounted after async
+  //       context.read<AuthBloc>().add(UploadProfileImageEvent(base64Image));
+  //     } catch (e) {
+  //       if (!mounted) return; // ✅ Fix: Check mounted
+  //       setState(() => _uploading = false);
+  //       toastification.show(
+  //         context: context,
+  //         title: const Text('Error'),
+  //         description: const Text('Failed to process image'),
+  //         type: ToastificationType.error,
+  //       );
+  //     }
+  //   }
+  // }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -32,15 +113,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
 
     if (picked != null) {
+      if (!mounted) return;
       setState(() => _uploading = true);
 
       try {
         final bytes = await picked.readAsBytes();
-        // Construct standard Data URI string for backend parsing
-        final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        // ✅ Send raw base64 without data URI prefix
+        final base64Image = base64Encode(bytes);
 
+        if (!mounted) return;
         context.read<AuthBloc>().add(UploadProfileImageEvent(base64Image));
       } catch (e) {
+        if (!mounted) return;
         setState(() => _uploading = false);
         toastification.show(
           context: context,
@@ -64,6 +148,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is ProfileImageUploaded) {
+            if (!mounted) return; // ✅ Fix: Check mounted
             setState(() {
               _profileImageUrl = state.imageUrl;
               _uploading = false;
@@ -76,6 +161,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               autoCloseDuration: const Duration(seconds: 2),
             );
           } else if (state is ProfileCompleted) {
+            if (!mounted) return; // ✅ Fix: Check mounted
             toastification.show(
               context: context,
               title: const Text('✓ Success'),
@@ -87,6 +173,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               context,
             ).pushNamedAndRemoveUntil('/home', (route) => false);
           } else if (state is AuthError) {
+            if (!mounted) return; // ✅ Fix: Check mounted
             toastification.show(
               context: context,
               title: const Text('Error'),
@@ -104,6 +191,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
+                // Profile Image
                 GestureDetector(
                   onTap: _uploading ? null : _pickImage,
                   child: Stack(
@@ -126,7 +214,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                         Positioned.fill(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
+                              color: Colors.black.withValues(
+                                alpha: 0.5,
+                              ), // ✅ Fix: Use withValues
                               shape: BoxShape.circle,
                             ),
                             child: const Center(
@@ -147,36 +237,60 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                 ),
                 const SizedBox(height: 32),
+
+                // Full Name
                 TextFormField(
                   controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Full Name *',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Color(0xFF2ED573),
-                        width: 2,
-                      ),
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey.shade50,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 16,
-                    ),
-                  ),
+                  decoration: _inputDecoration('Full Name *', Icons.person),
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Name is required' : null,
                 ),
+                const SizedBox(height: 20),
 
+                // Email
+                TextFormField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _inputDecoration('Email Address *', Icons.email),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Email is required';
+                    }
+                    final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+                    if (!emailRegex.hasMatch(v)) {
+                      return 'Enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Market Dropdown
+                _loadingMarkets
+                    ? const Center(child: CircularProgressIndicator())
+                    : DropdownButtonFormField<String>(
+                        initialValue:
+                            _selectedMarketId, // ✅ Fix: Use initialValue instead of value
+                        decoration: _inputDecoration(
+                          'Market *',
+                          Icons.location_city,
+                        ),
+                        items: _markets.map<DropdownMenuItem<String>>((market) {
+                          return DropdownMenuItem<String>(
+                            value:
+                                market['id'] as String, // ✅ Fix: Cast to String
+                            child: Text(market['name'] ?? ''),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() => _selectedMarketId = value);
+                        },
+                        validator: (v) =>
+                            v == null ? 'Please select a market' : null,
+                      ),
                 const SizedBox(height: 40),
+
+                // Submit Button
                 BlocBuilder<AuthBloc, AuthState>(
                   builder: (context, state) {
                     final isLoading = state is AuthLoading;
@@ -188,7 +302,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                 context.read<AuthBloc>().add(
                                   CompleteProfileEvent(
                                     name: nameController.text.trim(),
-
+                                    email: emailController.text.trim(),
+                                    marketId:
+                                        _selectedMarketId!, // ✅ Make sure this is not null
                                     profileImageUrl: _profileImageUrl,
                                   ),
                                 );
@@ -230,6 +346,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: Colors.grey),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF2ED573), width: 2),
+      ),
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 }

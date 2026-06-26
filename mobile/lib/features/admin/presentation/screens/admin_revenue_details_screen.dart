@@ -273,7 +273,7 @@ class _AdminRevenueDetailsScreenState extends State<AdminRevenueDetailsScreen> {
                     '#${revenue.orderNumber}',
                     style: const TextStyle(
                       color: Colors.black87,
-                      fontSize: 20,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

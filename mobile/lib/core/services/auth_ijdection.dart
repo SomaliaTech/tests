@@ -54,21 +54,19 @@ void authRegisterDependencies(GetIt sl) {
   }
 
   // BLoC
-  if (!sl.isRegistered<AuthBloc>()) {
-    sl.registerFactory(
-      () => AuthBloc(
-        sendOtp: sl(),
-        verifyOtp: sl(),
-        completeProfile: sl(),
-        uploadProfileImage: sl(),
-        getCurrentUser: sl(),
-        checkAuthStatus: sl(),
-        logout: sl(),
-        storageService: sl(),
-        chatSocketService: sl<ChatSocketService>(), // 🚨 ADD THIS LINE
-      ),
-    );
-  }
+  sl.registerFactory(
+    () => AuthBloc(
+      sendOtp: sl(),
+      verifyOtp: sl(),
+      completeProfile: sl(),
+      uploadProfileImage: sl(),
+      getCurrentUser: sl(),
+      checkAuthStatus: sl(),
+      logout: sl(),
+      storageService: sl(),
+      chatSocketService: sl<ChatSocketService>(), // ✅ pass the singleton
+    ),
+  );
 
   print('✅ Auth Dependencies Registered');
 }

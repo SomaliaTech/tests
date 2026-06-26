@@ -1,25 +1,34 @@
 import '../../domain/entities/category.dart';
 
-class CategoryModel {
-  const CategoryModel._();
+class CategoryModel extends Category {
+  const CategoryModel({
+    required super.id,
+    required super.name,
+    required super.slug,
+    super.description,
+    super.parentId,
+    super.iconUrl, // ✅ NEW
+  });
 
-  static Category fromJson(Map<String, dynamic> json) {
-    return Category(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      slug: json['slug'] as String,
-      description: json['description'] as String?,
-      parentId: json['parentId'] as String?,
+  factory CategoryModel.fromJson(Map<String, dynamic> json) {
+    return CategoryModel(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      slug: json['slug'] ?? '',
+      description: json['description'],
+      parentId: json['parentId'],
+      iconUrl: json['iconUrl'], // ✅ NEW
     );
   }
 
-  static Map<String, dynamic> toJson(Category category) {
+  Map<String, dynamic> toJson() {
     return {
-      'id': category.id,
-      'name': category.name,
-      'slug': category.slug,
-      'description': category.description,
-      'parentId': category.parentId,
+      'id': id,
+      'name': name,
+      'slug': slug,
+      'description': description,
+      'parentId': parentId,
+      'iconUrl': iconUrl, // ✅ NEW
     };
   }
 }

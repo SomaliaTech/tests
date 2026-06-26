@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
@@ -22,20 +25,58 @@ class Header extends StatefulWidget {
 }
 
 class _HeaderState extends State<Header> {
+  StreamSubscription? _notificationSub;
+
+  // ✅ Cache the last known unread count to prevent flickering
+  int _cachedUnreadCount = 0;
+  bool _hasLoadedOnce = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CartBloc>().add(LoadCartEvent());
+      _loadData();
+      _setupRealtimeNotifications();
+    });
+  }
 
-      // ✅ Only load notifications if user is authenticated
-      final authState = context.read<AuthBloc>().state;
-      if (authState is Authenticated ||
-          authState is OtpVerified ||
-          authState is ProfileCompleted) {
+  void _loadData() {
+    if (mounted) {
+      context.read<CartBloc>().add(LoadCartEvent());
+    }
+
+    final authState = context.read<AuthBloc>().state;
+    if (authState is Authenticated ||
+        authState is OtpVerified ||
+        authState is ProfileCompleted) {
+      if (mounted) {
         context.read<NotificationsBloc>().add(LoadNotifications());
       }
-    });
+    }
+  }
+
+  void _setupRealtimeNotifications() {
+    try {
+      final socketService = GetIt.instance<ChatSocketService>();
+      _notificationSub = socketService.onNewNotification.listen((data) {
+        if (mounted) {
+          // ✅ Increment cached count immediately for instant feedback
+          setState(() {
+            _cachedUnreadCount++;
+          });
+          // Then refresh from API in background
+          context.read<NotificationsBloc>().add(LoadNotifications());
+        }
+      });
+    } catch (e) {
+      // Socket service not available
+    }
+  }
+
+  @override
+  void dispose() {
+    _notificationSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -68,11 +109,12 @@ class _HeaderState extends State<Header> {
                   ),
                   Row(
                     children: [
-                      // Notification Icon with Badge
-                      _NotificationIcon(),
+                      _NotificationIcon(
+                        cachedCount: _cachedUnreadCount,
+                        hasLoadedOnce: _hasLoadedOnce,
+                      ),
                       const SizedBox(width: 5),
-                      // Cart Icon with Badge
-                      _CartIcon(),
+                      const _CartIcon(),
                     ],
                   ),
                 ],
@@ -87,8 +129,16 @@ class _HeaderState extends State<Header> {
   }
 }
 
-// ✅ Separate widget for notification icon
+// ✅ Notification Icon - No flickering
 class _NotificationIcon extends StatelessWidget {
+  final int cachedCount;
+  final bool hasLoadedOnce;
+
+  const _NotificationIcon({
+    required this.cachedCount,
+    required this.hasLoadedOnce,
+  });
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
@@ -98,11 +148,9 @@ class _NotificationIcon extends StatelessWidget {
             authState is OtpVerified ||
             authState is ProfileCompleted;
 
-        // Only show notifications if authenticated
         if (!isAuthenticated) {
           return IconButton(
             onPressed: () {
-              // Show login required message
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Please login to view notifications'),
@@ -115,8 +163,20 @@ class _NotificationIcon extends StatelessWidget {
         }
 
         return BlocBuilder<NotificationsBloc, NotificationsState>(
+          // ✅ Only rebuild when count actually changes
+          buildWhen: (previous, current) {
+            if (previous is NotificationsLoaded &&
+                current is NotificationsLoaded) {
+              return previous.unreadCount != current.unreadCount;
+            }
+            if (previous is NotificationsLoading &&
+                current is NotificationsLoaded) {
+              return true;
+            }
+            return false;
+          },
           builder: (context, state) {
-            int unreadCount = 0;
+            int unreadCount = cachedCount;
 
             if (state is NotificationsLoaded) {
               unreadCount = state.unreadCount;
@@ -131,10 +191,17 @@ class _NotificationIcon extends StatelessWidget {
                       MaterialPageRoute(
                         builder: (context) => const NotificationsScreen(),
                       ),
-                    );
+                    ).then((_) {
+                      if (context.mounted) {
+                        context.read<NotificationsBloc>().add(
+                          LoadNotifications(),
+                        );
+                      }
+                    });
                   },
                   icon: const Icon(Iconsax.notification, color: Colors.white),
                 ),
+                // ✅ Show badge if count > 0, regardless of loading state
                 if (unreadCount > 0)
                   Positioned(
                     right: 8,
@@ -169,11 +236,23 @@ class _NotificationIcon extends StatelessWidget {
   }
 }
 
-// ✅ Separate widget for cart icon
+// ✅ Cart Icon - No flickering
 class _CartIcon extends StatelessWidget {
+  const _CartIcon();
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CartBloc, CartState>(
+      // ✅ Only rebuild when count changes
+      buildWhen: (previous, current) {
+        if (previous is CartLoaded && current is CartLoaded) {
+          return previous.itemCount != current.itemCount;
+        }
+        if (current is CartLoaded) {
+          return true;
+        }
+        return false;
+      },
       builder: (context, state) {
         int itemCount = 0;
 
@@ -224,11 +303,39 @@ class _CartIcon extends StatelessWidget {
   }
 }
 
-// ✅ Separate widget for search bar
-class _SearchBar extends StatelessWidget {
+// ✅ Search Bar - Now with search button and clear functionality
+class _SearchBar extends StatefulWidget {
   final Function(String)? onSearch;
 
   const _SearchBar({this.onSearch});
+
+  @override
+  State<_SearchBar> createState() => _SearchBarState();
+}
+
+class _SearchBarState extends State<_SearchBar> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _performSearch() {
+    final query = _controller.text.trim();
+    if (query.isNotEmpty && widget.onSearch != null) {
+      widget.onSearch!(query);
+    }
+  }
+
+  void _clearSearch() {
+    _controller.clear();
+    // Trigger empty search to reset results
+    if (widget.onSearch != null) {
+      widget.onSearch!('');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -238,19 +345,46 @@ class _SearchBar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: TextField(
-        onSubmitted: onSearch,
-        decoration: InputDecoration(
-          hintText: "Search product here",
-          hintStyle: TextStyle(color: Colors.grey[400]),
-          prefixIcon: const Icon(
-            Iconsax.search_normal,
-            color: Colors.grey,
-            size: 20,
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          const Icon(Iconsax.search_normal, color: Colors.grey, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              onSubmitted: (_) => _performSearch(),
+              decoration: InputDecoration(
+                hintText: "Search product here",
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
+          if (_controller.text.isNotEmpty)
+            IconButton(
+              icon: const Icon(
+                Iconsax.close_circle,
+                color: Colors.grey,
+                size: 20,
+              ),
+              onPressed: _clearSearch,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          IconButton(
+            icon: const Icon(
+              Iconsax.search_normal_1,
+              color: Color(0xFF2ED573),
+              size: 20,
+            ),
+            onPressed: _performSearch,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
     );
   }

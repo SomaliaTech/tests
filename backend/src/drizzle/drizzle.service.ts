@@ -1,78 +1,119 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
-
-// 👇 MAGIC FIX: This forces TypeScript to correctly infer the schema with all relations 👇
-const _initDb = () => drizzle({} as any, { schema });
-export type Database = ReturnType<typeof _initDb>;
 
 @Injectable()
 export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private pool!: Pool;
-
-  // 👇 USE THE INFERRED DATABASE TYPE 👇
-  public db!: Database;
+  public db!: NodePgDatabase<typeof schema>;
 
   async onModuleInit() {
-    await this.connectWithRetry();
-  }
-
-  private async connectWithRetry(retries = 5, delayMs = 2000): Promise<void> {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL is not defined in environment variables');
     }
 
-    for (let i = 0; i < retries; i++) {
+    console.log('🔌 Connecting to Supabase PostgreSQL...');
+
+    this.pool = new Pool({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+
+      // ✅ Supabase-optimized settings
+      max: 3, // Supabase free tier: keep low (3-5)
+      min: 1, // Keep 1 connection alive
+      idleTimeoutMillis: 10000, // Close idle after 10s (Supabase kills idle anyway)
+      connectionTimeoutMillis: 15000, // Wait 15s max for connection
+      keepAlive: true, // TCP keepalive
+      keepAliveInitialDelayMillis: 5000,
+
+      // ✅ Critical: These prevent hanging connections
+      statement_timeout: 10000, // 10s query timeout
+      query_timeout: 10000, // 10s query timeout
+      idle_in_transaction_session_timeout: 10000,
+
+      // ✅ Let connections go (don't hold them)
+      allowExitOnIdle: true,
+      maxUses: 100, // Recycle connections after 100 uses
+    });
+
+    // Handle pool events silently (Supabase drops connections frequently)
+    this.pool.on('error', (err) => {
+      // Don't crash - Supabase connections drop often
+      if (!err.message.includes('Connection terminated')) {
+        console.error('❌ Pool error:', err.message);
+      }
+    });
+
+    this.pool.on('connect', () => {
+      // Silent - too noisy otherwise
+    });
+
+    this.pool.on('remove', () => {
+      // Silent - Supabase removes idle connections normally
+    });
+
+    // Test connection
+    try {
+      await this.pool.query('SELECT 1');
+      console.log('✅ Supabase PostgreSQL connected successfully');
+    } catch (error) {
+      console.error(
+        '❌ Failed to connect to Supabase:',
+        (error as Error).message,
+      );
+      throw error;
+    }
+
+    this.db = drizzle(this.pool, { schema });
+  }
+
+  // ✅ Improved retry logic for connection errors only
+  async withRetry<T>(
+    queryFn: (db: NodePgDatabase<typeof schema>) => Promise<T>,
+    maxRetries = 3,
+    delayMs = 500,
+  ): Promise<T> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        this.pool = new Pool({
-          connectionString,
-          ssl: { rejectUnauthorized: false },
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 10000,
-          keepAlive: true,
-        });
+        return await queryFn(this.db);
+      } catch (error: any) {
+        lastError = error;
 
-        // 👇 CRITICAL FIX: Prevents Node.js from crashing when Supabase drops idle connections 👇
-        this.pool.on('error', (err) => {
-          console.error(
-            '⚠️ Unexpected error on idle PostgreSQL client:',
-            err.message,
+        // Only retry on connection errors
+        const isConnectionError =
+          error.message?.includes('Connection terminated') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('Connection terminated unexpectedly');
+
+        if (isConnectionError && attempt < maxRetries - 1) {
+          console.warn(
+            `⚠️ Connection error (attempt ${attempt + 1}/${maxRetries}), retrying...`,
           );
-          // We just log it. Do not throw, or the app will crash.
-        });
-
-        // Test connection immediately
-        await this.pool.query('SELECT 1');
-
-        // Initialize Drizzle with the schema and cast to our inferred type
-        this.db = drizzle(this.pool, { schema }) as Database;
-
-        console.log('✅ PostgreSQL connected successfully');
-        return;
-      } catch (error) {
-        console.error(
-          `❌ Connection attempt ${i + 1} failed:`,
-          (error as Error).message,
-        );
-
-        // Clean up failed pool before retrying
-        if (this.pool) {
-          await this.pool.end().catch(() => {});
+          await new Promise((resolve) =>
+            setTimeout(resolve, delayMs * (attempt + 1)),
+          );
+        } else {
+          // Don't retry - throw immediately
+          throw error;
         }
-
-        if (i === retries - 1) throw error;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
+
+    throw lastError || new Error('Query failed after all retries');
   }
 
   async onModuleDestroy() {
     if (this.pool) {
-      await this.pool.end();
-      console.log('💤 Database pool closed');
+      try {
+        await this.pool.end();
+        console.log('💤 Supabase pool closed');
+      } catch (error) {
+        // Silently close
+      }
     }
   }
 }

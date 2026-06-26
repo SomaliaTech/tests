@@ -1,13 +1,20 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 import 'package:mobile/core/common/widgets/navigation.dart';
 import 'package:mobile/core/common/widgets/no_internet_screen.dart';
 import 'package:mobile/core/services/injection_container.dart';
+import 'package:mobile/core/services/navigation_service.dart';
+import 'package:mobile/core/services/push_notification_service.dart';
+import 'package:mobile/core/services/sound/message_sound_manager.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/core/theme/theme.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_category_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/admin_color_size/admin_color_size_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_market_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/revenue/revenue_bloc.dart';
@@ -30,12 +37,34 @@ import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
 import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
 import 'package:provider/provider.dart';
-import 'package:toastification/toastification.dart'; // 🚨 ADD IMPORT
-// ... (keep all your other bloc imports) ...
+import 'package:toastification/toastification.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase FIRST
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize dependencies
   await initDependencies();
+
+  // Initialize push notifications
+  try {
+    final pushService = PushNotificationService();
+    await pushService.init();
+  } catch (e) {
+    print('⚠️ Push notification init failed (expected on simulator): $e');
+  }
+
+  // Initialize sound manager
+  try {
+    final soundManager = MessageSoundManager();
+    await soundManager.init();
+  } catch (e) {
+    print('⚠️ Sound manager init failed: $e');
+  }
+
   runApp(const MyApp());
 }
 
@@ -45,7 +74,6 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-// 🚨 ADD: with WidgetsBindingObserver
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final InternetConnection _internetConnection = InternetConnection();
   late Future<bool> _initialConnectionCheck;
@@ -53,17 +81,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); // 🚨 ADD THIS
+    WidgetsBinding.instance.addObserver(this);
     _initialConnectionCheck = _internetConnection.hasInternetAccess;
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); // 🚨 ADD THIS
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // 🚨 ADD THIS METHOD: Reconnect socket when app comes to foreground
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -110,25 +137,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<ConversationsBloc>()),
           BlocProvider(create: (context) => sl<ChatRoomBloc>()),
           Provider<StorageService>.value(value: sl<StorageService>()),
+          BlocProvider(create: (context) => sl<AdminCategoryBloc>()),
+          BlocProvider(create: (context) => sl<AdminColorSizeBloc>()),
+          BlocProvider(create: (context) => sl<AdminMarketBloc>()),
         ],
         child: MaterialApp(
           title: 'HALDOOR',
           debugShowCheckedModeBanner: false,
+          navigatorKey: NavigationService.navigatorKey,
           theme: AppTheme.lightTheme,
           home: FutureBuilder<bool>(
             future: _initialConnectionCheck,
             builder: (context, snapshot) {
+              // ✅ Show Splash Screen while checking initial internet connection
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  backgroundColor: Colors.white,
-                  body: Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF2ED573),
-                      ),
-                    ),
-                  ),
-                );
+                return const SplashScreen();
               }
 
               final hasInternet = snapshot.data ?? false;
@@ -147,26 +170,23 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   }
 
                   return BlocBuilder<AuthBloc, AuthState>(
+                    // ✅ Kept buildWhen to prevent unnecessary rebuilds
+                    // when intermediate states (like OtpSent) are emitted.
                     buildWhen: (previous, current) =>
                         current is AuthChecking ||
                         current is Authenticated ||
                         current is Unauthenticated,
                     builder: (context, state) {
                       if (state is AuthChecking) {
-                        return const Scaffold(
-                          backgroundColor: Colors.white,
-                          body: Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF2ED573),
-                              ),
-                            ),
-                          ),
-                        );
+                        return const SplashScreen();
                       } else if (state is Authenticated) {
                         return const MainNavigationScreen();
-                      } else {
+                      } else if (state is Unauthenticated) {
                         return const PhoneInputScreen();
+                      } else {
+                        // ✅ This catches the initial 'AuthInitial' state on app startup,
+                        // preventing the flash to PhoneInputScreen.
+                        return const SplashScreen();
                       }
                     },
                   );
@@ -175,6 +195,42 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             },
           ),
           routes: {'/home': (context) => const MainNavigationScreen()},
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// Splash Screen Widget
+// ==========================================
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 💡 Tip: You can replace this Text with an Image.asset if you have a logo file
+            const Text(
+              'HALDOOR',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2ED573), // Your app's green brand color
+                letterSpacing: 2.0,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2ED573)),
+              strokeWidth: 3.0,
+            ),
+          ],
         ),
       ),
     );

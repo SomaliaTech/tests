@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "759730002001",
+    "project_id": "haldoor-6c091",
+    "storage_bucket": "haldoor-6c091.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:759730002001:android:20a75d1067b529a4a80070",
+        "android_client_info": {
+          "package_name": "com.example.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRb62gy2rf03xZ7rM-C91KjAFeHW13XIA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

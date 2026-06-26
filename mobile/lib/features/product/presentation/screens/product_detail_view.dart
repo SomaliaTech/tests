@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
+import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
+import 'package:mobile/features/product/presentation/blocs/address_event.dart';
+import 'package:mobile/features/product/presentation/blocs/address_state.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_event.dart';
 import 'package:mobile/features/product/presentation/blocs/product_state.dart';
@@ -16,7 +20,12 @@ import 'package:mobile/features/product/presentation/widgets/product/image_carou
 import 'package:mobile/features/product/presentation/widgets/product/payment_options_modal.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_header.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_info.dart';
+import 'package:mobile/features/product/presentation/widgets/product/related_products.dart';
+import 'package:mobile/features/product/presentation/widgets/product/you_may_also_like.dart';
 import 'package:toastification/toastification.dart';
+
+// Order bloc import
+import '../../../order/presentation/bloc/order_bloc.dart';
 
 // Wishlist imports
 import '../../../wishlist/presentation/bloc/wishlist_bloc.dart';
@@ -24,7 +33,7 @@ import '../../../wishlist/presentation/bloc/wishlist_event.dart';
 import '../../../wishlist/presentation/bloc/wishlist_state.dart';
 import '../../../wishlist/domain/entities/wishlist_item.dart';
 
-// 🚨 ADDED: Cart imports
+// Cart imports
 import '../../../cart/presentation/bloc/cart_bloc.dart';
 import '../../../cart/presentation/bloc/cart_event.dart';
 import '../../../cart/domain/entities/cart_item.dart';
@@ -45,12 +54,40 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   int quantity = 1;
   Address? _selectedAddress;
   bool _isInWishlist = false;
+  bool _isAdmin = false;
+  bool _addressesLoaded = false;
+
+  // ✅ NEW: Store product locally so we don't need to read bloc state later
+  Product? _currentProduct;
 
   @override
   void initState() {
     super.initState();
-    context.read<ProductBloc>().add(GetProductByIdEvent(widget.productId));
-    _checkWishlistStatus();
+    _checkAdminStatus();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      context.read<ProductBloc>().add(GetProductByIdEvent(widget.productId));
+      _checkWishlistStatus();
+      _loadAddresses();
+    });
+  }
+
+  void _loadAddresses() {
+    context.read<AddressBloc>().add(LoadAddressesEvent());
+  }
+
+  Future<void> _checkAdminStatus() async {
+    try {
+      final storageService = GetIt.instance<StorageService>();
+      final isAdmin = await storageService.getIsAdmin();
+      if (mounted) {
+        setState(() => _isAdmin = isAdmin);
+      }
+    } catch (e) {
+      _isAdmin = false;
+    }
   }
 
   void _checkWishlistStatus() {
@@ -104,29 +141,25 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     }
   }
 
-  // 🚨 FIXED: Add to Cart Logic now supports products WITHOUT variants
   void _addToCart(Product product) {
     ProductVariant? variant;
 
-    // Only try to find a variant if the product actually has them
     if (product.variants.isNotEmpty) {
       variant = product.variants.firstWhere(
         (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
         orElse: () => product.variants.first,
       );
     }
-    // Add this method in _ProductDetailViewState
 
-    // Construct the CartItem, falling back to the base product if no variant exists
     final cartItem = CartItem(
       id: variant?.id ?? product.id,
       productId: product.id,
-      productVariantId: variant?.id ?? '', // Send empty string if no variant
+      productVariantId: variant?.id ?? '',
       name: product.name,
       imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
-      price: variant?.price ?? product.price, // Fallback to product price
+      price: variant?.price ?? product.price,
       quantity: quantity,
-      maxStock: variant?.stock ?? product.stock, // Fallback to product stock
+      maxStock: variant?.stock ?? product.stock,
       inStock: (variant?.stock ?? product.stock) > 0,
       color: variant?.colorName,
       size: variant?.sizeName,
@@ -143,55 +176,80 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     );
   }
 
+  void _proceedToCheckout() {
+    print('🔍 _proceedToCheckout called');
+    print('📍 _selectedAddress: $_selectedAddress');
+    print('📍 _currentProduct: ${_currentProduct?.name}');
+
+    if (_selectedAddress == null) {
+      print('📍 No address selected, showing address selection');
+      _showAddressSelection();
+    } else {
+      print('📍 Address exists, showing payment options');
+      _showPaymentOptions();
+    }
+  }
+
   void _showAddressSelection() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AddressSelectionModal(
+      builder: (modalContext) => AddressSelectionModal(
         onAddressSelected: (address) {
+          Navigator.pop(modalContext);
+
+          if (!mounted) return;
+
           setState(() {
             _selectedAddress = address;
           });
-          Future.delayed(const Duration(milliseconds: 100), () {
-            _proceedToPayment(address);
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _showPaymentOptions();
           });
         },
       ),
     );
   }
 
-  void _proceedToPayment(Address address) {
-    final state = context.read<ProductBloc>().state;
-    if (state is ProductDetailLoaded) {
-      _showPaymentOptions(address, state.product);
-    }
-  }
+  // ✅ FIXED: Use locally stored product instead of reading bloc state
+  void _showPaymentOptions() {
+    print('🔍 _showPaymentOptions called');
 
-  void _showPaymentOptions(Address address, product) {
+    if (!mounted) {
+      print('❌ Widget not mounted');
+      return;
+    }
+
+    // ✅ Use locally stored product
+    if (_currentProduct == null) {
+      print('❌ No product stored locally');
+      return;
+    }
+
+    if (_selectedAddress == null) {
+      print('❌ No address selected');
+      return;
+    }
+
+    print('✅ Showing payment modal with product: ${_currentProduct!.name}');
+
+    final orderBloc = GetIt.instance<OrderBloc>();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => PaymentOptionsModal(
-        product: product,
-        address: address,
-        selectedColor: selectedColor,
-        selectedSize: selectedSize,
-        quantity: quantity,
-      ),
-    );
-  }
-
-  void _startChatWithAdmin() {
-    // You can show a loading indicator or directly navigate
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatRoomScreen(
-          partnerId: 'admin-id-here', // Replace with actual admin ID
-          partnerName: 'Support Team',
-          partnerImage: 'https://example.com/admin-avatar.png',
+      builder: (modalContext) => BlocProvider.value(
+        value: orderBloc,
+        child: PaymentOptionsModal(
+          product: _currentProduct!, // ✅ Use locally stored product
+          address: _selectedAddress!,
+          selectedColor: selectedColor,
+          selectedSize: selectedSize,
+          quantity: quantity,
         ),
       ),
     );
@@ -203,8 +261,31 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       backgroundColor: Colors.white,
       body: MultiBlocListener(
         listeners: [
+          BlocListener<AddressBloc, AddressState>(
+            listener: (context, state) {
+              if (state is AddressesLoaded && !_addressesLoaded) {
+                _addressesLoaded = true;
+                if (state.addresses.isNotEmpty) {
+                  final defaultAddress = state.addresses.firstWhere(
+                    (addr) => addr.isDefault,
+                    orElse: () => state.addresses.first,
+                  );
+                  setState(() {
+                    _selectedAddress = defaultAddress;
+                  });
+                }
+              }
+            },
+          ),
           BlocListener<ProductBloc, ProductState>(
             listener: (context, state) {
+              // ✅ Only handle ProductDetailLoaded
+              if (state is ProductDetailLoaded) {
+                setState(() {
+                  _currentProduct = state.product;
+                });
+              }
+
               if (state is ProductDetailError) {
                 toastification.show(
                   title: const Text('Error'),
@@ -228,13 +309,56 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           ),
         ],
         child: BlocBuilder<ProductBloc, ProductState>(
-          buildWhen: (previous, current) =>
-              current is ProductDetailLoading ||
-              current is ProductDetailLoaded ||
-              current is ProductDetailError,
           builder: (context, state) {
+            // ✅ Only handle ProductDetailLoaded - ignore other states
+            Product? product;
+
             if (state is ProductDetailLoaded) {
-              final product = state.product;
+              product = state.product;
+              // ✅ Store it locally immediately
+              _currentProduct = product;
+            }
+
+            // ✅ Fallback to locally stored product
+            if (product == null && _currentProduct != null) {
+              product = _currentProduct;
+            }
+
+            // ✅ Check for loading state
+            final isLoading = state is ProductDetailLoading;
+
+            // ✅ Check for error state
+            if (state is ProductDetailError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(state.message, style: const TextStyle(fontSize: 16)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        context.read<ProductBloc>().add(
+                          GetProductByIdEvent(widget.productId),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2ED573),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            // ✅ Render product if available
+            if (product != null) {
               return Stack(
                 children: [
                   Column(
@@ -256,6 +380,8 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                               ),
                               ProductInfo(product: product),
                               const SizedBox(height: 8),
+                              if (_selectedAddress != null)
+                                _buildAddressDisplay(),
                               if (product.colors != null &&
                                   product.colors!.isNotEmpty)
                                 SelectionOptions(
@@ -282,13 +408,20 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                   },
                                   optionType: OptionType.size,
                                 ),
-                              if (_selectedAddress != null)
-                                _buildAddressDisplay(),
                               DescriptionTab(
                                 description: product.description,
                                 features: product.features ?? [],
                               ),
-                              const SizedBox(height: 100),
+                              const SizedBox(height: 20),
+                              YouMayAlsoLike(
+                                categoryId: product.categoryId,
+                                currentProductId: product.id,
+                              ),
+                              RelatedProducts(
+                                categoryId: product.categoryId,
+                                currentProductId: product.id,
+                              ),
+                              const SizedBox(height: 120),
                             ],
                           ),
                         ),
@@ -302,68 +435,21 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                     child: BottomActionBar(
                       productName: product.name,
                       isInWishlist: _isInWishlist,
-                      onFavoriteTap: () => _toggleWishlist(product),
-                      onAddToCartTap: () => _addToCart(product), // 🚨 ADDED
+                      isAdmin: _isAdmin,
+                      onFavoriteTap: () => _toggleWishlist(product!),
+                      onAddToCartTap: () => _addToCart(product!),
                       onBuyNowTap: () {
-                        if (_selectedAddress == null) {
-                          _showAddressSelection();
-                        } else {
-                          _proceedToPayment(_selectedAddress!);
-                        }
+                        _proceedToCheckout();
                       },
-                    ),
-                  ),
-
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: BottomActionBar(
-                      productName: product.name,
-                      isInWishlist: _isInWishlist,
-                      onFavoriteTap: () => _toggleWishlist(product),
-                      onAddToCartTap: () => _addToCart(product),
-                      onBuyNowTap: () {
-                        if (_selectedAddress == null) {
-                          _showAddressSelection();
-                        } else {
-                          _proceedToPayment(_selectedAddress!);
-                        }
-                      },
-                      // No onChatTap needed anymore - it's handled internally
                     ),
                   ),
                 ],
               );
-            } else if (state is ProductDetailLoading) {
+            } else if (isLoading) {
               return const LoadingProductDetail();
-            } else if (state is ProductDetailError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(state.message, style: const TextStyle(fontSize: 16)),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () {
-                        context.read<ProductBloc>()
-                          ..add(GetProductByIdEvent(widget.productId));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2ED573),
-                      ),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              );
             }
+
+            // Default: show loading
             return const LoadingProductDetail();
           },
         ),
@@ -373,38 +459,69 @@ class _ProductDetailViewState extends State<ProductDetailView> {
 
   Widget _buildAddressDisplay() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2ED573)),
+        border: Border.all(color: const Color(0xFF2ED573), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(Iconsax.location, color: Color(0xFF2ED573), size: 20),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Iconsax.location,
+              color: Color(0xFF2ED573),
+              size: 20,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Delivery Address',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF2ED573)),
+                Text(
+                  _selectedAddress!.label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF333333),
+                  ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   _selectedAddress!.fullAddress,
                   style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 12,
+                    color: Color(0xFF666666),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Iconsax.edit, size: 18),
+          TextButton(
             onPressed: _showAddressSelection,
+            child: const Text(
+              'Change',
+              style: TextStyle(
+                color: Color(0xFF2ED573),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

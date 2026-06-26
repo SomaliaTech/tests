@@ -2,24 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:get_it/get_it.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_bloc.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_event.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_state.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../../../core/services/storage/storage_service.dart';
+import '../../../../core/services/chat_socket_service.dart';
+import '../../../../core/services/injection_container.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String partnerId;
   final String partnerName;
   final String? partnerImage;
+  final bool isOnline;
 
   const ChatRoomScreen({
     super.key,
     required this.partnerId,
     required this.partnerName,
     this.partnerImage,
+    this.isOnline = false,
   });
 
   @override
@@ -30,15 +33,37 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String? _currentUserId;
+  late final ChatRoomBloc _chatRoomBloc;
 
   @override
   void initState() {
     super.initState();
-    _getCurrentUserId();
-    // ✅ Delay slightly to ensure Bloc is ready
-    Future.microtask(() {
-      context.read<ChatRoomBloc>().add(LoadChatHistoryEvent(widget.partnerId));
-    });
+
+    _chatRoomBloc = ChatRoomBloc(
+      getChatHistory: sl(),
+      markAsRead: sl(),
+      socketService: sl(),
+    );
+
+    _initScreen();
+  }
+
+  Future<void> _initScreen() async {
+    await _getCurrentUserId();
+    if (!mounted) return;
+
+    if (widget.partnerId.isEmpty) return;
+
+    final socketService = sl<ChatSocketService>();
+    if (!socketService.isConnected) {
+      await socketService.connect();
+    }
+
+    socketService.checkPartnerStatus(widget.partnerId);
+
+    _chatRoomBloc.add(
+      LoadChatHistoryEvent(widget.partnerId, isOnline: widget.isOnline),
+    );
   }
 
   Future<void> _getCurrentUserId() async {
@@ -51,152 +76,190 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
 
-    context.read<ChatRoomBloc>().add(
-      SendMessageEvent(
-        widget.partnerId,
-        _messageController.text.trim(),
-        'text',
-        null,
-      ),
+    _chatRoomBloc.add(
+      SendMessageEvent(widget.partnerId, content, 'text', null),
     );
     _messageController.clear();
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    _chatRoomBloc.close();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left, color: Color(0xFF333333)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundImage: widget.partnerImage != null
-                  ? CachedNetworkImageProvider(widget.partnerImage!)
-                  : null,
-              child: widget.partnerImage == null
-                  ? const Icon(Iconsax.user, color: Colors.grey)
-                  : null,
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _chatRoomBloc.close();
+        }
+      },
+      child: BlocProvider.value(
+        value: _chatRoomBloc,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Iconsax.arrow_left, color: Color(0xFF333333)),
+              onPressed: () => Navigator.pop(context),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            title: Row(
               children: [
-                Text(
-                  widget.partnerName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
+                CircleAvatar(
+                  radius: 20,
+                  backgroundImage: widget.partnerImage != null
+                      ? CachedNetworkImageProvider(widget.partnerImage!)
+                      : null,
+                  child: widget.partnerImage == null
+                      ? const Icon(Iconsax.user, color: Colors.grey)
+                      : null,
                 ),
-                BlocBuilder<ChatRoomBloc, ChatRoomState>(
-                  buildWhen: (previous, current) =>
-                      current is ChatRoomLoaded &&
-                      previous is ChatRoomLoaded &&
-                      (previous as ChatRoomLoaded).isPartnerOnline !=
-                          (current as ChatRoomLoaded).isPartnerOnline,
-                  builder: (context, state) {
-                    final isOnline =
-                        state is ChatRoomLoaded && state.isPartnerOnline;
-                    return Text(
-                      isOnline ? 'Online' : 'Offline',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isOnline ? const Color(0xFF2ED573) : Colors.grey,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.partnerName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF333333),
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    );
-                  },
+                      BlocBuilder<ChatRoomBloc, ChatRoomState>(
+                        builder: (context, state) {
+                          final isOnline = state is ChatRoomLoaded
+                              ? state.isPartnerOnline
+                              : widget.isOnline;
+                          return Text(
+                            isOnline ? 'Online' : 'Offline',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isOnline
+                                  ? const Color(0xFF2ED573)
+                                  : Colors.grey,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: BlocBuilder<ChatRoomBloc, ChatRoomState>(
-              builder: (context, state) {
-                if (state is ChatRoomLoading) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF2ED573)),
-                  );
-                }
-
-                if (state is ChatRoomLoaded) {
-                  if (state.messages.isEmpty) {
-                    return const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Iconsax.message, size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text(
-                            'No messages yet. Say hello!',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    controller: _scrollController,
-                    reverse: true,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: state.messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = state.messages[index];
-                      final isMe = msg.senderId == _currentUserId;
-                      return _MessageBubble(message: msg, isMe: isMe);
-                    },
-                  );
-                }
-
-                if (state is ChatRoomError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Iconsax.warning_2,
-                          size: 64,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          state.message,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<ChatRoomBloc>().add(
-                              LoadChatHistoryEvent(widget.partnerId),
-                            );
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return const SizedBox.shrink();
-              },
-            ),
           ),
-          _buildInputArea(),
-        ],
+          body: Column(
+            children: [
+              Expanded(
+                child: BlocBuilder<ChatRoomBloc, ChatRoomState>(
+                  builder: (context, state) {
+                    if (state is ChatRoomLoading) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF2ED573),
+                        ),
+                      );
+                    }
+
+                    if (state is ChatRoomLoaded) {
+                      if (state.messages.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Iconsax.message,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No messages yet. Say hello!',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        controller: _scrollController,
+                        reverse: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: state.messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = state.messages[index];
+                          final isMe =
+                              msg.senderId == _currentUserId ||
+                              msg.senderId == 'me';
+
+                          return _MessageBubble(message: msg, isMe: isMe);
+                        },
+                      );
+                    }
+
+                    if (state is ChatRoomError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Iconsax.warning_2,
+                              size: 64,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              state.message,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                _chatRoomBloc.add(
+                                  LoadChatHistoryEvent(widget.partnerId),
+                                );
+                              },
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ),
+              _buildInputArea(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -232,6 +295,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                     border: InputBorder.none,
                   ),
                   maxLines: null,
+                  textCapitalization: TextCapitalization.sentences,
                   onSubmitted: (_) => _sendMessage(),
                 ),
               ),
@@ -280,8 +344,8 @@ class _MessageBubble extends StatelessWidget {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 0),
-            bottomRight: Radius.circular(isMe ? 0 : 16),
+            bottomLeft: Radius.circular(isMe ? 16 : 4),
+            bottomRight: Radius.circular(isMe ? 4 : 16),
           ),
           boxShadow: [
             BoxShadow(
@@ -293,6 +357,7 @@ class _MessageBubble extends StatelessWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (message.type == 'image' && message.mediaUrl != null)
               ClipRRect(
@@ -301,14 +366,34 @@ class _MessageBubble extends StatelessWidget {
                   imageUrl: message.mediaUrl!,
                   width: 200,
                   fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    width: 200,
+                    height: 150,
+                    color: Colors.grey.shade200,
+                    child: const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    width: 200,
+                    height: 150,
+                    color: Colors.grey.shade200,
+                    child: const Icon(
+                      Iconsax.gallery_slash,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
               ),
             if (message.content != null && message.content!.isNotEmpty)
-              Text(
-                message.content!,
-                style: TextStyle(
-                  color: isMe ? Colors.white : const Color(0xFF333333),
-                  fontSize: 15,
+              Padding(
+                padding: EdgeInsets.only(top: message.mediaUrl != null ? 8 : 0),
+                child: Text(
+                  message.content!,
+                  style: TextStyle(
+                    color: isMe ? Colors.white : const Color(0xFF333333),
+                    fontSize: 15,
+                  ),
                 ),
               ),
             const SizedBox(height: 4),

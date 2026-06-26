@@ -13,10 +13,23 @@ import '../bloc/order_details_bloc.dart';
 import '../bloc/order_details_event.dart';
 import '../bloc/order_details_state.dart';
 
-class OrderDetailsView extends StatelessWidget {
+// ✅ Convert to StatefulWidget to use initState
+class OrderDetailsView extends StatefulWidget {
   final String orderId;
 
   const OrderDetailsView({super.key, required this.orderId});
+
+  @override
+  State<OrderDetailsView> createState() => _OrderDetailsViewState();
+}
+
+class _OrderDetailsViewState extends State<OrderDetailsView> {
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Dispatch load event when view initializes
+    context.read<OrderDetailsBloc>().add(LoadOrderDetailsEvent(widget.orderId));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +78,7 @@ class OrderDetailsView extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () {
                       context.read<OrderDetailsBloc>().add(
-                        LoadOrderDetailsEvent(orderId),
+                        LoadOrderDetailsEvent(widget.orderId),
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -86,6 +99,7 @@ class OrderDetailsView extends StatelessWidget {
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(15),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Status Card
                         Container(
@@ -95,7 +109,7 @@ class OrderDetailsView extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -147,7 +161,7 @@ class OrderDetailsView extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
+                                color: Colors.black.withValues(alpha: 0.05),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -222,7 +236,7 @@ class OrderDetailsView extends StatelessWidget {
                           status: order.paymentStatus,
                           method: order.paymentMethod,
                         ),
-                        if (order.notes != null) ...[
+                        if (order.notes != null && order.notes!.isNotEmpty) ...[
                           const SizedBox(height: 20),
                           const Text(
                             'Order Notes',
@@ -246,7 +260,8 @@ class OrderDetailsView extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => TrackingScreen(orderId: orderId),
+                        builder: (context) =>
+                            TrackingScreen(orderId: widget.orderId),
                       ),
                     );
                   },

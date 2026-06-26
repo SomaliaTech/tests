@@ -8,11 +8,7 @@ import 'package:mobile/features/admin/data/models/dashboard_stats_model.dart';
 import 'package:mobile/features/admin/data/models/device_traffic_model.dart';
 import 'package:mobile/features/admin/data/models/location_traffic_model.dart';
 import 'package:mobile/features/admin/data/models/product_traffic_model.dart';
-import 'package:mobile/features/admin/domain/entities/chart_data_entity.dart';
-import 'package:mobile/features/admin/domain/entities/dashboard_stats_entity.dart';
-import 'package:mobile/features/admin/domain/entities/device_traffic_entity.dart';
-import 'package:mobile/features/admin/domain/entities/location_traffic_entity.dart';
-import 'package:mobile/features/admin/domain/entities/product_traffic_entity.dart';
+
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
 
 abstract class DashboardRemoteDataSource {
@@ -44,6 +40,8 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
 
     try {
       final token = await _getToken();
+
+      _debugToken(token);
       final url = '${ApiConstants.baseUrl}/admin/dashboard/all?period=$period';
       print('📍 [Dashboard] URL: $url');
 
@@ -88,6 +86,30 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
       print('❌ [Dashboard] Exception: $e');
       print('📚 [Dashboard] Stack trace: $stackTrace');
       rethrow;
+    }
+  }
+
+  void _debugToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) {
+        print('❌ Invalid JWT format');
+        return;
+      }
+
+      // Decode the payload (middle part)
+      final payload = parts[1];
+      final normalized = base64.normalize(payload);
+      final decoded = utf8.decode(base64.decode(normalized));
+      final jsonPayload = json.decode(decoded);
+
+      print('🔑 [JWT Debug] Token payload: $jsonPayload');
+      print('🔑 [JWT Debug] isAdmin: ${jsonPayload['isAdmin']}');
+      print(
+        '🔑 [JWT Debug] userId: ${jsonPayload['userId'] ?? jsonPayload['sub']}',
+      );
+    } catch (e) {
+      print('❌ Failed to decode JWT: $e');
     }
   }
 }

@@ -1,3 +1,4 @@
+// notification.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
@@ -15,25 +16,25 @@ export class CreateNotificationDto {
   })
   @IsUUID()
   @IsString()
-  userId: string;
+  userId!: string;
 
   @ApiProperty({ description: 'Notification type', enum: NotificationType })
   @IsEnum(NotificationType)
-  type: NotificationType;
+  type!: NotificationType;
 
   @ApiProperty({
     description: 'Notification title',
     example: 'Order Delivered',
   })
   @IsString()
-  title: string;
+  title!: string;
 
   @ApiProperty({
     description: 'Notification message',
     example: 'Your order has been delivered',
   })
   @IsString()
-  message: string;
+  message!: string;
 
   @ApiPropertyOptional({ description: 'Action text', example: 'View Order' })
   @IsOptional()

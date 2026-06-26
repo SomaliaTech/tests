@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StorageService {
   static const String _tokenKey = 'auth_token';
@@ -10,10 +11,11 @@ class StorageService {
   static const String _userProfileImageKey = 'user_profile_image';
   static const String _userMarketIdKey = 'user_market_id';
   static const String _isAdminKey = 'is_admin';
+  static const String _messageSoundKey = 'message_sound_enabled';
 
   final FlutterSecureStorage _secureStorage;
 
-  // 🚨 ADDED: In-memory cache to prevent FlutterSecureStorage read delays
+  // ✅ In-memory cache to prevent read delays
   String? _cachedToken;
 
   StorageService({FlutterSecureStorage? secureStorage})
@@ -23,19 +25,18 @@ class StorageService {
   // Auth related
   // ==========================================
   Future<void> saveAuthToken(String token) async {
-    _cachedToken = token; // 🚨 Cache in memory first
+    _cachedToken = token;
     await _secureStorage.write(key: _tokenKey, value: token);
   }
 
   Future<String?> getAuthToken() async {
-    // 🚨 Return cached token instantly if available
     if (_cachedToken != null && _cachedToken!.isNotEmpty) {
       return _cachedToken;
     }
 
     final token = await _secureStorage.read(key: _tokenKey);
     if (token != null && token.isNotEmpty) {
-      _cachedToken = token; // Update cache if read from storage
+      _cachedToken = token;
     }
     return token;
   }
@@ -108,6 +109,7 @@ class StorageService {
     return await _secureStorage.read(key: _userProfileImageKey);
   }
 
+  // ✅ FIXED: Only one version using _secureStorage
   Future<void> saveUserMarketId(String marketId) async {
     await _secureStorage.write(key: _userMarketIdKey, value: marketId);
   }
@@ -117,10 +119,23 @@ class StorageService {
   }
 
   // ==========================================
+  // Sound Settings (uses SharedPreferences)
+  // ==========================================
+  Future<bool> getMessageSoundEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_messageSoundKey) ?? true;
+  }
+
+  Future<void> setMessageSoundEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_messageSoundKey, enabled);
+  }
+
+  // ==========================================
   // Clear Data (Logout)
   // ==========================================
   Future<void> clearAuthData() async {
-    _cachedToken = null; // 🚨 Clear the in-memory cache
+    _cachedToken = null;
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);

@@ -1,15 +1,16 @@
 import {
+  decimal,
+  integer,
   pgTable,
   uuid,
   varchar,
-  text,
-  decimal,
-  integer,
-  boolean,
   timestamp,
+  boolean,
+  text,
+  uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ==========================================
 // CATEGORY TABLE (Multi-level hierarchy)
@@ -147,6 +148,7 @@ export const productVariants = pgTable(
 // ==========================================
 // USERS TABLE (FIXED)
 // ==========================================
+// schema.ts - Users table (already has isOnline and lastSeen)
 export const users = pgTable(
   'users',
   {
@@ -162,17 +164,46 @@ export const users = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     isAdmin: boolean('is_admin').default(false),
-
-    // 🚨 CRITICAL FIX: These MUST be inside the table definition!
     isOnline: boolean('is_online').default(false),
     lastSeen: timestamp('last_seen'),
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
     marketIdIdx: index('users_market_id_idx').on(table.marketId),
+    isAdminIdx: index('idx_users_admin').on(table.isAdmin),
+    isOnlineIdx: index('idx_users_online').on(table.isOnline),
   }),
 );
 
+// ==========================================
+// DEVICE TOKENS TABLE (for push notifications)
+// ==========================================
+export const deviceTokens = pgTable(
+  'device_tokens',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    token: varchar('token', { length: 500 }).notNull().unique(),
+    platform: varchar('platform', { length: 20 }).notNull(),
+    isActive: boolean('is_active').default(true),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index('device_tokens_user_idx').on(table.userId),
+    tokenIdx: index('device_tokens_token_idx').on(table.token),
+  }),
+);
+
+// Add relations
+export const deviceTokensRelations = relations(deviceTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [deviceTokens.userId],
+    references: [users.id],
+  }),
+}));
 // ==========================================
 // ADDRESSES TABLE
 // ==========================================
@@ -239,36 +270,68 @@ export const orders = pgTable(
 
 // ==========================================
 // MESSAGES TABLE
-export const messages = pgTable('messages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  conversationId: uuid('conversation_id').references(() => conversations.id), // ✅ NEW
-  senderId: uuid('sender_id')
-    .notNull()
-    .references(() => users.id),
-  receiverId: uuid('receiver_id')
-    .notNull()
-    .references(() => users.id),
-  content: text('content'),
-  type: varchar('type', { length: 20 }).notNull().default('text'),
-  mediaUrl: text('media_url'),
-  isRead: boolean('is_read').default(false),
-  createdAt: timestamp('created_at').defaultNow(),
-});
 
-export const conversations = pgTable('conversations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  participant1: uuid('participant1')
-    .notNull()
-    .references(() => users.id),
-  participant2: uuid('participant2')
-    .notNull()
-    .references(() => users.id),
-  lastMessage: text('last_message'),
-  lastMessageType: varchar('last_message_type', { length: 20 }).default('text'),
-  lastMessageAt: timestamp('last_message_at').defaultNow(),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
+// ... your existing users table ...
+
+export const conversations = pgTable(
+  'conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    participant1: uuid('participant1')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    participant2: uuid('participant2')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lastMessage: text('last_message'),
+    lastMessageType: varchar('last_message_type', { length: 20 }).default(
+      'text',
+    ),
+    lastMessageAt: timestamp('last_message_at').defaultNow(),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => ({
+    // ✅ Use a unique index on the sorted pair to prevent duplicates
+    uniqueParticipants: uniqueIndex('unique_conversation_participants').on(
+      sql`LEAST(${table.participant1}, ${table.participant2})`,
+      sql`GREATEST(${table.participant1}, ${table.participant2})`,
+    ),
+    participant1Idx: index('idx_conversation_p1').on(table.participant1),
+    participant2Idx: index('idx_conversation_p2').on(table.participant2),
+  }),
+);
+// ✅ Messages table
+export const messages = pgTable(
+  'messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    senderId: uuid('sender_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    receiverId: uuid('receiver_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    content: text('content'),
+    type: varchar('type', { length: 20 }).notNull().default('text'),
+    mediaUrl: text('media_url'),
+    isRead: boolean('is_read').default(false),
+    readAt: timestamp('read_at'),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  (table) => ({
+    conversationIdx: index('idx_messages_conversation').on(
+      table.conversationId,
+      table.createdAt.desc(),
+    ),
+    senderIdx: index('idx_messages_sender').on(table.senderId),
+    receiverIdx: index('idx_messages_receiver').on(table.receiverId),
+    unreadIdx: index('idx_messages_unread').on(table.receiverId, table.isRead),
+  }),
+);
 
 // ==========================================
 // CART ITEMS TABLE
@@ -435,7 +498,6 @@ export const productVariantsRelations = relations(
     cartItems: many(cartItems),
   }),
 );
-
 export const usersRelations = relations(users, ({ one, many }) => ({
   market: one(markets, {
     fields: [users.marketId],
@@ -445,6 +507,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   orders: many(orders),
   cartItems: many(cartItems),
   notifications: many(notifications),
+  deviceTokens: many(deviceTokens), // ✅ Add this
   sentMessages: many(messages, { relationName: 'sender' }),
   receivedMessages: many(messages, { relationName: 'receiver' }),
 }));

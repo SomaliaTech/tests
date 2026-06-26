@@ -51,7 +51,6 @@ class AdminProductModel extends AdminProductEntity {
     );
   }
 
-  // ✅ Helper: Parse any numeric type to double
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;
@@ -60,7 +59,6 @@ class AdminProductModel extends AdminProductEntity {
     return 0.0;
   }
 
-  // ✅ Helper: Parse any numeric type to int
   static int _parseInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
@@ -90,6 +88,7 @@ class AdminProductImageModel extends AdminProductImageEntity {
   }
 }
 
+// ✅ FIXED: Added colorCode and sizeValue to constructor
 class AdminProductVariantModel extends AdminProductVariantEntity {
   const AdminProductVariantModel({
     required super.id,
@@ -98,8 +97,10 @@ class AdminProductVariantModel extends AdminProductVariantEntity {
     super.price,
     super.colorId,
     super.colorName,
+    super.colorCode, // ✅ NEW
     super.sizeId,
     super.sizeName,
+    super.sizeValue, // ✅ NEW
   });
 
   factory AdminProductVariantModel.fromJson(Map<String, dynamic> json) {
@@ -110,8 +111,10 @@ class AdminProductVariantModel extends AdminProductVariantEntity {
       price: _parseDouble(json['price']),
       colorId: json['colorId'] ?? json['color']?['id'],
       colorName: json['color']?['name'],
+      colorCode: json['color']?['code'], // ✅ NEW
       sizeId: json['sizeId'] ?? json['size']?['id'],
       sizeName: json['size']?['name'],
+      sizeValue: json['size']?['value'], // ✅ NEW
     );
   }
 
@@ -139,6 +142,7 @@ class AdminCategoryModel extends AdminCategoryEntity {
     required super.slug,
     super.description,
     super.parentId,
+    super.iconUrl, // ✅ NEW
     super.children = const [],
   });
 
@@ -149,6 +153,7 @@ class AdminCategoryModel extends AdminCategoryEntity {
       slug: json['slug'] ?? '',
       description: json['description'],
       parentId: json['parentId'],
+      iconUrl: json['iconUrl'], // ✅ NEW
       children:
           (json['children'] as List<dynamic>?)
               ?.map((c) => AdminCategoryModel.fromJson(c))

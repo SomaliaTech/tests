@@ -2,19 +2,32 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/core/theme/theme.dart';
 import 'package:mobile/features/admin/domain/entities/chart_data_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_state.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_categories_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_colors_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_markets_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_orders_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_products_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_revenue_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_sizes_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_users_screen.dart';
 import 'package:mobile/features/admin/presentation/widgets/dashboard_widgets.dart';
 import 'package:mobile/features/admin/presentation/widgets/skeleton_widgets.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_event.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_state.dart';
+import 'package:mobile/features/notifications/presentation/screens/notifications_screen.dart';
+import 'package:toastification/toastification.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -26,6 +39,12 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final ValueNotifier<String> _periodNotifier = ValueNotifier('week');
   StreamSubscription? _dashboardSubscription;
+  StreamSubscription? _notificationSub;
+  StreamSubscription? _newOrderSub;
+
+  // Cache the last known unread count to prevent flickering
+  int _cachedUnreadCount = 0;
+  bool _hasLoadedOnce = false;
 
   @override
   void initState() {
@@ -42,11 +61,94 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _periodNotifier.value = state.period;
       }
     });
+
+    // Load notifications and setup real-time updates
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadNotifications();
+      _setupRealtimeNotifications();
+    });
+  }
+
+  void _loadNotifications() {
+    if (mounted) {
+      context.read<NotificationsBloc>().add(LoadNotifications());
+    }
+  }
+
+  void _setupRealtimeNotifications() {
+    try {
+      final socketService = GetIt.instance<ChatSocketService>();
+
+      // ✅ Listen for new notifications (for badge count)
+      _notificationSub = socketService.onNewNotification.listen((data) {
+        if (mounted) {
+          // Show toast for order notifications
+          if (data['type'] == 'order') {
+            _showOrderNotification(data);
+          }
+
+          // Increment cached count immediately for instant feedback
+          setState(() {
+            _cachedUnreadCount++;
+            _hasLoadedOnce = true;
+          });
+          // Then refresh from API in background
+          context.read<NotificationsBloc>().add(LoadNotifications());
+        }
+      });
+
+      // ✅ Listen for new orders specifically (for real-time updates)
+      _newOrderSub = socketService.onNewOrder.listen((orderData) {
+        if (mounted) {
+          _showNewOrderToast(orderData);
+          // Refresh orders list and dashboard data
+          context.read<AdminBloc>().add(FetchAllOrdersEvent());
+          context.read<DashboardBloc>().add(
+            LoadDashboardDataEvent(period: _periodNotifier.value),
+          );
+        }
+      });
+    } catch (e) {
+      // Socket service not available
+      debugPrint('Socket service not available: $e');
+    }
+  }
+
+  void _showOrderNotification(Map<String, dynamic> notification) {
+    toastification.show(
+      context: context,
+      title: Text(notification['title'] ?? 'New Order'),
+      description: Text(notification['message'] ?? ''),
+      type: ToastificationType.info,
+      style: ToastificationStyle.fillColored,
+      autoCloseDuration: const Duration(seconds: 4),
+      icon: const Icon(Iconsax.shopping_cart, color: Colors.white),
+    );
+  }
+
+  void _showNewOrderToast(Map<String, dynamic> orderData) {
+    final orderNumber = orderData['orderNumber'] ?? 'Unknown';
+    final customerName = orderData['customerName'] ?? 'Customer';
+    final totalAmount = orderData['totalAmount'] ?? '0';
+
+    toastification.show(
+      context: context,
+      title: const Text('🎉 New Order Received!'),
+      description: Text(
+        'Order #$orderNumber from $customerName - \$$totalAmount',
+      ),
+      type: ToastificationType.success,
+      style: ToastificationStyle.fillColored,
+      autoCloseDuration: const Duration(seconds: 5),
+      icon: const Icon(Iconsax.shopping_bag, color: Colors.white),
+    );
   }
 
   @override
   void dispose() {
     _dashboardSubscription?.cancel();
+    _notificationSub?.cancel();
+    _newOrderSub?.cancel();
     _periodNotifier.dispose();
     super.dispose();
   }
@@ -120,18 +222,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   color: Colors.black87,
                 ),
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Iconsax.notification,
-                    color: AppTheme.primaryColor,
-                  ),
-                  onPressed: () {},
-                ),
+              // ✅ Updated notification icon with real-time badge
+              _AdminNotificationIcon(
+                cachedCount: _cachedUnreadCount,
+                hasLoadedOnce: _hasLoadedOnce,
               ),
             ],
           ),
@@ -251,7 +345,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   icon: Iconsax.money_tick,
                   color: AppTheme.primaryColor,
                   onPressed: () {
-                    print("object");
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -379,42 +472,82 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildQuickActions(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _buildActionCard(
-            context,
-            'Products',
-            Iconsax.box_1,
-            Colors.blueAccent,
-            () {
-              Navigator.pushReplacement(
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
                 context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      const AdminMainNavigationScreen(initialIndex: 1),
-                ),
-              );
-            },
-          ),
+                'Markets',
+                Iconsax.box_1,
+                Colors.blueAccent,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminMarketsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Categories',
+                Iconsax.category,
+                Colors.purpleAccent,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminCategoriesScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildActionCard(
-            context,
-            'Orders',
-            Iconsax.shopping_cart,
-            Colors.orangeAccent,
-            () {
-              Navigator.pushReplacement(
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
                 context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      const AdminMainNavigationScreen(initialIndex: 2),
-                ),
-              );
-            },
-          ),
+                'Colors',
+                Iconsax.colorfilter,
+                Colors.pinkAccent,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminColorsScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                'Sizes',
+                Iconsax.ruler,
+                Colors.teal,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminSizesScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -625,6 +758,98 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           fontWeight: FontWeight.bold,
         ),
       ),
+    );
+  }
+}
+
+// ✅ Admin Notification Icon - Same pattern as user Header
+class _AdminNotificationIcon extends StatelessWidget {
+  final int cachedCount;
+  final bool hasLoadedOnce;
+
+  const _AdminNotificationIcon({
+    required this.cachedCount,
+    required this.hasLoadedOnce,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<NotificationsBloc, NotificationsState>(
+      // Only rebuild when count actually changes
+      buildWhen: (previous, current) {
+        if (previous is NotificationsLoaded && current is NotificationsLoaded) {
+          return previous.unreadCount != current.unreadCount;
+        }
+        if (previous is NotificationsLoading &&
+            current is NotificationsLoaded) {
+          return true;
+        }
+        return false;
+      },
+      builder: (context, state) {
+        int unreadCount = cachedCount;
+
+        if (state is NotificationsLoaded) {
+          unreadCount = state.unreadCount;
+        }
+
+        return Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(
+                  Iconsax.notification,
+                  color: AppTheme.primaryColor,
+                ),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsScreen(),
+                    ),
+                  ).then((_) {
+                    if (context.mounted) {
+                      context.read<NotificationsBloc>().add(
+                        LoadNotifications(),
+                      );
+                    }
+                  });
+                },
+              ),
+            ),
+            // Show badge if count > 0, regardless of loading state
+            if (unreadCount > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF4757),
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : unreadCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

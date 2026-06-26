@@ -1,150 +1,5 @@
-// import 'package:flutter/material.dart';
-// import 'package:iconsax/iconsax.dart';
-
-// class BottomActionBar extends StatelessWidget {
-//   final String productName;
-//   final bool isInWishlist;
-//   final VoidCallback onFavoriteTap;
-//   final VoidCallback onBuyNowTap;
-
-//   // 🚨 ADDED: The missing parameter
-//   final VoidCallback? onAddToCartTap;
-
-//   const BottomActionBar({
-//     super.key,
-//     required this.productName,
-//     required this.isInWishlist,
-//     required this.onFavoriteTap,
-//     required this.onBuyNowTap,
-//     this.onAddToCartTap, // 🚨 ADDED
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Container(
-//       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-//       decoration: BoxDecoration(
-//         color: Colors.white,
-//         border: Border(
-//           top: BorderSide(color: Colors.grey.shade200, width: 0.5),
-//         ),
-//         boxShadow: [
-//           BoxShadow(
-//             color: Colors.black.withOpacity(0.04),
-//             blurRadius: 20,
-//             offset: const Offset(0, -4),
-//           ),
-//         ],
-//       ),
-//       child: Row(
-//         crossAxisAlignment: CrossAxisAlignment.center,
-//         children: [
-//           // ==========================================
-//           // LEFT: Wishlist Heart Button (Circular)
-//           // ==========================================
-//           GestureDetector(
-//             onTap: onFavoriteTap,
-//             child: Container(
-//               width: 52,
-//               height: 52,
-//               decoration: BoxDecoration(
-//                 color: isInWishlist ? Colors.red.shade50 : Colors.grey.shade50,
-//                 shape: BoxShape.circle,
-//                 border: Border.all(
-//                   color: isInWishlist
-//                       ? Colors.red.shade200
-//                       : Colors.grey.shade200,
-//                   width: 1.2,
-//                 ),
-//               ),
-//               child: Icon(
-//                 isInWishlist ? Iconsax.heart5 : Iconsax.heart,
-//                 color: isInWishlist ? Colors.red : Colors.grey.shade600,
-//                 size: 22,
-//               ),
-//             ),
-//           ),
-//           const SizedBox(width: 12),
-
-//           // ==========================================
-//           // RIGHT: Two Stacked Action Buttons
-//           // ==========================================
-//           Expanded(
-//             child: Column(
-//               mainAxisSize: MainAxisSize.min,
-//               children: [
-//                 // Top Button: Add to Cart (Outlined)
-//                 SizedBox(
-//                   width: double.infinity,
-//                   height: 46,
-//                   child: ElevatedButton(
-//                     // 🚨 WIRED UP HERE
-//                     onPressed: onAddToCartTap,
-//                     style: ElevatedButton.styleFrom(
-//                       backgroundColor: Colors.white,
-//                       foregroundColor: const Color(0xFF2ED573),
-//                       side: const BorderSide(
-//                         color: Color(0xFF2ED573),
-//                         width: 1.5,
-//                       ),
-//                       padding: EdgeInsets.zero,
-//                       shape: RoundedRectangleBorder(
-//                         borderRadius: BorderRadius.circular(12),
-//                       ),
-//                       elevation: 0,
-//                     ),
-//                     child: const Row(
-//                       mainAxisAlignment: MainAxisAlignment.center,
-//                       children: [
-//                         Icon(Iconsax.shopping_cart, size: 18),
-//                         SizedBox(width: 8),
-//                         Text(
-//                           'Add to Cart',
-//                           style: TextStyle(
-//                             fontSize: 14,
-//                             fontWeight: FontWeight.w600,
-//                           ),
-//                         ),
-//                       ],
-//                     ),
-//                   ),
-//                 ),
-//                 const SizedBox(height: 8),
-
-//                 // Bottom Button: Buy Now (Filled - Primary CTA)
-//                 SizedBox(
-//                   width: double.infinity,
-//                   height: 46,
-//                   child: ElevatedButton(
-//                     onPressed: onBuyNowTap,
-//                     style: ElevatedButton.styleFrom(
-//                       backgroundColor: const Color(0xFF2ED573),
-//                       foregroundColor: Colors.white,
-//                       padding: EdgeInsets.zero,
-//                       shape: RoundedRectangleBorder(
-//                         borderRadius: BorderRadius.circular(12),
-//                       ),
-//                       elevation: 0,
-//                       shadowColor: const Color(0xFF2ED573).withOpacity(0.3),
-//                     ),
-//                     child: const Text(
-//                       'Buy Now',
-//                       style: TextStyle(
-//                         fontSize: 14,
-//                         fontWeight: FontWeight.w700,
-//                       ),
-//                     ),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'chat_button.dart';
 
@@ -154,6 +9,7 @@ class BottomActionBar extends StatelessWidget {
   final VoidCallback onFavoriteTap;
   final VoidCallback onAddToCartTap;
   final VoidCallback onBuyNowTap;
+  final bool isAdmin;
 
   const BottomActionBar({
     super.key,
@@ -162,6 +18,7 @@ class BottomActionBar extends StatelessWidget {
     required this.onFavoriteTap,
     required this.onAddToCartTap,
     required this.onBuyNowTap,
+    this.isAdmin = false,
   });
 
   @override
@@ -172,7 +29,7 @@ class BottomActionBar extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -182,20 +39,26 @@ class BottomActionBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            // Chat with Admin Button
-            const ChatWithAdminButton(),
-            const SizedBox(width: 8),
+            // Chat with Admin Button - Only show for non-admin users
+            if (!isAdmin) ...[
+              const ChatWithAdminButton(),
+              const SizedBox(width: 8),
+            ],
 
-            // Favorite Button
+            // Favorite Button with haptic feedback
             GestureDetector(
-              onTap: onFavoriteTap,
+              onTap: () {
+                // Light haptic for toggle actions
+                HapticFeedback.lightImpact();
+                onFavoriteTap();
+              },
               child: Container(
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
                   color: isInWishlist
-                      ? const Color(0xFFFF4757).withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
+                      ? const Color(0xFFFF4757).withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isInWishlist
@@ -214,10 +77,14 @@ class BottomActionBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // Add to Cart Button
+            // Add to Cart Button with haptic feedback
             Expanded(
               child: GestureDetector(
-                onTap: onAddToCartTap,
+                onTap: () {
+                  // Medium haptic for primary action
+                  HapticFeedback.mediumImpact();
+                  onAddToCartTap();
+                },
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
@@ -230,14 +97,14 @@ class BottomActionBar extends StatelessWidget {
                       Icon(
                         Iconsax.shopping_cart,
                         color: Colors.white,
-                        size: 20,
+                        size: 15,
                       ),
                       SizedBox(width: 8),
                       Text(
                         'Add to Cart',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -248,30 +115,36 @@ class BottomActionBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // Buy Now Button
+            // Buy Now Button with haptic feedback
+            // Buy Now Button - Use gradient or different color
             Expanded(
               child: GestureDetector(
                 onTap: onBuyNowTap,
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ED573),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                    ),
                     borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Iconsax.dollar_circle,
-                        color: Colors.white,
-                        size: 20,
-                      ),
+                      Icon(Iconsax.flash, color: Colors.white, size: 15),
                       SizedBox(width: 8),
                       Text(
                         'Buy Now',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

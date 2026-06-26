@@ -28,20 +28,19 @@ export class CategoriesService {
     return category;
   }
 
-  async getAllCategories() {
-    return this.drizzle.db.select().from(categories);
-  }
-
   async getParentCategories() {
-    return (
-      this.drizzle.db
-        .select()
-        .from(categories)
-        // ✅ FIX: Use isNull() instead of eq(..., null)
-        .where(isNull(categories.parentId))
-    );
+    // 🚨 USE THE NEW RETRY WRAPPER
+    return this.drizzle.withRetry(async (db) => {
+      return db.select().from(categories).where(isNull(categories.parentId));
+    });
   }
 
+  // Example with more complex query
+  async getAllCategories() {
+    return this.drizzle.withRetry(async (db) => {
+      return db.select().from(categories);
+    });
+  }
   async getSubcategories(parentId: string) {
     return this.drizzle.db
       .select()

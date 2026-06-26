@@ -1,4 +1,3 @@
-// File: lib/features/chat/presentation/bloc/chat_room_state.dart
 import '../../domain/entities/chat_message.dart';
 
 abstract class ChatRoomState {}
@@ -11,6 +10,7 @@ class ChatRoomLoaded extends ChatRoomState {
   final List<ChatMessage> messages;
   final bool isPartnerOnline;
 
+  // 🚨 CRITICAL FIX: Added {} and 'required' to make them named parameters
   ChatRoomLoaded({required this.messages, required this.isPartnerOnline});
 }
 
