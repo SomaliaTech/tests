@@ -105,7 +105,6 @@ export class OrdersService {
   // ==========================================
   // ORDER MANAGEMENT
   // ==========================================
-
   async createOrder(userId: string, orderData: CreateOrderDto) {
     return this.drizzle.db.transaction(async (tx) => {
       const [user] = await tx.select().from(users).where(eq(users.id, userId));
@@ -113,6 +112,7 @@ export class OrdersService {
 
       const variantIds = orderData.items.map((item) => item.productVariantId);
 
+      // ✅ Fetch variants WITH their parent product stock as fallback
       const variants = await tx
         .select({
           id: productVariants.id,
@@ -121,6 +121,8 @@ export class OrdersService {
           stock: productVariants.stock,
           productId: productVariants.productId,
           productName: products.name,
+          productStock: products.stock, // ✅ Get base product stock as fallback
+          productPrice: products.price, // ✅ Get base product price as fallback
           colorName: colors.name,
           sizeName: sizes.name,
         })
@@ -142,13 +144,23 @@ export class OrdersService {
             `Product variant ${item.productVariantId} not found`,
           );
         }
-        if (variant.stock < item.quantity) {
+
+        // ✅ Use variant stock if > 0, otherwise fall back to product stock
+        const availableStock =
+          variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
+
+        if (availableStock < item.quantity) {
           throw new BadRequestException(
-            `Insufficient stock for ${variant.productName}`,
+            `Insufficient stock for ${variant.productName}. Available: ${availableStock}, Requested: ${item.quantity}`,
           );
         }
 
-        const itemTotal = Number(variant.price || 0) * item.quantity;
+        // ✅ Use variant price if set, otherwise fall back to product price
+        const unitPrice = variant.price
+          ? Number(variant.price)
+          : Number(variant.productPrice ?? 0);
+
+        const itemTotal = unitPrice * item.quantity;
         totalAmount += itemTotal;
 
         orderItemsData.push({
@@ -160,7 +172,7 @@ export class OrdersService {
           colorName: variant.colorName,
           sizeName: variant.sizeName,
           quantity: item.quantity,
-          unitPrice: variant.price || '0',
+          unitPrice: unitPrice.toString(),
           totalPrice: itemTotal.toString(),
         });
       }
@@ -192,16 +204,27 @@ export class OrdersService {
         await tx.insert(orderItems).values(orderItemsData);
       }
 
+      // ✅ Deduct stock from variant if it has stock, otherwise from product
       for (const item of orderData.items) {
-        await tx
-          .update(productVariants)
-          .set({ stock: sql`${productVariants.stock} - ${item.quantity}` })
-          .where(eq(productVariants.id, item.productVariantId));
+        const variant = variantMap.get(item.productVariantId);
+
+        if (variant && variant.stock > 0) {
+          // Deduct from variant stock
+          await tx
+            .update(productVariants)
+            .set({ stock: sql`${productVariants.stock} - ${item.quantity}` })
+            .where(eq(productVariants.id, item.productVariantId));
+        } else if (variant?.productId) {
+          // ✅ Only deduct from product if productId exists
+          await tx
+            .update(products)
+            .set({ stock: sql`${products.stock} - ${item.quantity}` })
+            .where(eq(products.id, variant.productId));
+        }
       }
 
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
-      // ✅ Notify the customer
       await tx.insert(notifications).values({
         id: uuidv4(),
         userId,
@@ -212,13 +235,11 @@ export class OrdersService {
         actionLink: `/orders/${order.id}`,
       });
 
-      // ✅ Notify all admins (real-time + database)
       await this.notifyAdminsNewOrder(tx, order, user.name || 'Customer');
 
       return { order, totalAmount, items: orderItemsData };
     });
   }
-
   // Line 241 - In getOrders method
   async getOrders(userId: string, status?: string) {
     const conditions = [eq(orders.userId, userId)];
