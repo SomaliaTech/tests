@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/profile/domain/entities/market.dart';
-import 'package:mobile/features/profile/domain/entities/profile.dart';
 import 'package:mobile/features/profile/domain/usecases/get_markets.dart';
 import 'package:toastification/toastification.dart';
 import '../bloc/profile_bloc.dart';
