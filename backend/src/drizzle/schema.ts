@@ -13,7 +13,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 
 // ==========================================
-// CATEGORY TABLE (Multi-level hierarchy)
+// CATEGORY TABLE
 // ==========================================
 export const categories = pgTable(
   'categories',
@@ -72,7 +72,7 @@ export const products = pgTable(
 );
 
 // ==========================================
-// MEDIA ASSETS TABLE (Images)
+// MEDIA ASSETS TABLE
 // ==========================================
 export const mediaAssets = pgTable(
   'media_assets',
@@ -115,40 +115,43 @@ export const sizes = pgTable('sizes', {
 });
 
 // ==========================================
-// PRODUCT VARIANTS TABLE (Color & Size combinations)
+// PRODUCT VARIANTS TABLE ✅ FIXED
 // ==========================================
 export const productVariants = pgTable(
   'product_variants',
   {
-    id: uuid('id').defaultRandom().primaryKey(),
-    productId: uuid('product_id').notNull(),
-    colorId: uuid('color_id'),
-    sizeId: uuid('size_id'),
-    sku: varchar('sku', { length: 255 }).notNull().unique(),
+    id: uuid('id').primaryKey().defaultRandom(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    colorId: uuid('color_id')
+      .notNull()
+      .references(() => colors.id),
+    sizeId: uuid('size_id')
+      .notNull()
+      .references(() => sizes.id),
+    sku: varchar('sku', { length: 100 }),
     stock: integer('stock').notNull().default(0),
-    price: decimal('price', { precision: 10, scale: 2 }),
-    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }),
-    imageId: uuid('image_id'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    price: decimal('price', { precision: 10, scale: 2 }), // ✅ Nullable
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
   },
   (table) => ({
-    productColorSizeUnique: index('variant_product_color_size_idx').on(
+    productIdx: index('variant_product_idx').on(table.productId),
+    colorIdx: index('variant_color_idx').on(table.colorId),
+    sizeIdx: index('variant_size_idx').on(table.sizeId),
+    // ✅ Prevent duplicate color+size combinations per product
+    uniqueVariant: uniqueIndex('unique_product_variant').on(
       table.productId,
       table.colorId,
       table.sizeId,
     ),
-    productIdx: index('variant_product_idx').on(table.productId),
-    colorIdx: index('variant_color_idx').on(table.colorId),
-    sizeIdx: index('variant_size_idx').on(table.sizeId),
-    skuIdx: index('variant_sku_idx').on(table.sku),
   }),
 );
 
 // ==========================================
-// USERS TABLE (FIXED)
+// USERS TABLE
 // ==========================================
-// schema.ts - Users table (already has isOnline and lastSeen)
 export const users = pgTable(
   'users',
   {
@@ -176,7 +179,7 @@ export const users = pgTable(
 );
 
 // ==========================================
-// DEVICE TOKENS TABLE (for push notifications)
+// DEVICE TOKENS TABLE
 // ==========================================
 export const deviceTokens = pgTable(
   'device_tokens',
@@ -197,13 +200,6 @@ export const deviceTokens = pgTable(
   }),
 );
 
-// Add relations
-export const deviceTokensRelations = relations(deviceTokens, ({ one }) => ({
-  user: one(users, {
-    fields: [deviceTokens.userId],
-    references: [users.id],
-  }),
-}));
 // ==========================================
 // ADDRESSES TABLE
 // ==========================================
@@ -269,10 +265,8 @@ export const orders = pgTable(
 );
 
 // ==========================================
-// MESSAGES TABLE
-
-// ... your existing users table ...
-
+// CONVERSATIONS TABLE
+// ==========================================
 export const conversations = pgTable(
   'conversations',
   {
@@ -292,7 +286,6 @@ export const conversations = pgTable(
     updatedAt: timestamp('updated_at').defaultNow(),
   },
   (table) => ({
-    // ✅ Use a unique index on the sorted pair to prevent duplicates
     uniqueParticipants: uniqueIndex('unique_conversation_participants').on(
       sql`LEAST(${table.participant1}, ${table.participant2})`,
       sql`GREATEST(${table.participant1}, ${table.participant2})`,
@@ -301,7 +294,10 @@ export const conversations = pgTable(
     participant2Idx: index('idx_conversation_p2').on(table.participant2),
   }),
 );
-// ✅ Messages table
+
+// ==========================================
+// MESSAGES TABLE
+// ==========================================
 export const messages = pgTable(
   'messages',
   {
@@ -334,7 +330,7 @@ export const messages = pgTable(
 );
 
 // ==========================================
-// CART ITEMS TABLE
+// CART ITEMS TABLE ✅ FIXED
 // ==========================================
 export const cartItems = pgTable(
   'cart_items',
@@ -343,9 +339,12 @@ export const cartItems = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    productId: uuid('product_id'),
+    productId: uuid('product_id')
+      .notNull() // ✅ Now required
+      .references(() => products.id, { onDelete: 'cascade' }),
     productVariantId: uuid('product_variant_id').references(
       () => productVariants.id,
+      { onDelete: 'cascade' },
     ),
     quantity: integer('quantity').notNull().default(1),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -370,7 +369,7 @@ export const orderItems = pgTable(
     orderId: uuid('order_id')
       .notNull()
       .references(() => orders.id, { onDelete: 'cascade' }),
-    productId: uuid('product_id'),
+    productId: uuid('product_id').references(() => products.id),
     productVariantId: uuid('product_variant_id').references(
       () => productVariants.id,
     ),
@@ -443,15 +442,16 @@ export const notifications = pgTable(
 );
 
 // ==========================================
-// 🚀 RELATIONS
+// 🚀 RELATIONS ✅ FIXED
 // ==========================================
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
     fields: [categories.parentId],
     references: [categories.id],
+    relationName: 'parentChild',
   }),
-  children: many(categories),
+  children: many(categories, { relationName: 'parentChild' }),
   products: many(products),
   icon: one(mediaAssets, {
     fields: [categories.iconId],
@@ -466,6 +466,8 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   images: many(mediaAssets),
   variants: many(productVariants),
+  cartItems: many(cartItems), // ✅ Added
+  orderItems: many(orderItems), // ✅ Added
 }));
 
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
@@ -475,6 +477,7 @@ export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   }),
 }));
 
+// ✅ FIXED: Removed non-existent imageId reference
 export const productVariantsRelations = relations(
   productVariants,
   ({ one, many }) => ({
@@ -490,14 +493,11 @@ export const productVariantsRelations = relations(
       fields: [productVariants.sizeId],
       references: [sizes.id],
     }),
-    image: one(mediaAssets, {
-      fields: [productVariants.imageId],
-      references: [mediaAssets.id],
-    }),
     orderItems: many(orderItems),
     cartItems: many(cartItems),
   }),
 );
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   market: one(markets, {
     fields: [users.marketId],
@@ -507,9 +507,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   orders: many(orders),
   cartItems: many(cartItems),
   notifications: many(notifications),
-  deviceTokens: many(deviceTokens), // ✅ Add this
+  deviceTokens: many(deviceTokens),
   sentMessages: many(messages, { relationName: 'sender' }),
   receivedMessages: many(messages, { relationName: 'receiver' }),
+  conversationsAsP1: many(conversations, { relationName: 'participant1' }),
+  conversationsAsP2: many(conversations, { relationName: 'participant2' }),
 }));
 
 export const addressesRelations = relations(addresses, ({ one }) => ({
@@ -519,6 +521,18 @@ export const addressesRelations = relations(addresses, ({ one }) => ({
   }),
 }));
 
+export const deviceTokensRelations = relations(deviceTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [deviceTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export const marketsRelations = relations(markets, ({ many }) => ({
+  users: many(users),
+}));
+
+// ✅ FIXED: Removed invalid relationName
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   user: one(users, {
     fields: [cartItems.userId],
@@ -578,7 +592,28 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+export const conversationsRelations = relations(
+  conversations,
+  ({ one, many }) => ({
+    participant1User: one(users, {
+      fields: [conversations.participant1],
+      references: [users.id],
+      relationName: 'participant1',
+    }),
+    participant2User: one(users, {
+      fields: [conversations.participant2],
+      references: [users.id],
+      relationName: 'participant2',
+    }),
+    messages: many(messages),
+  }),
+);
+
 export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
   sender: one(users, {
     fields: [messages.senderId],
     references: [users.id],

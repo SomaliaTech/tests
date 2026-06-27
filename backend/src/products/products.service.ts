@@ -45,7 +45,8 @@ export class ProductsService {
   ) {}
 
   async create(createProductDto: CreateProductDto) {
-    const { categoryId, imageUrls, ...productData } = createProductDto;
+    const { categoryId, imageUrls, variants, ...productData } =
+      createProductDto;
 
     const category = await this.drizzle.db
       .select({ id: categories.id })
@@ -82,19 +83,54 @@ export class ProductsService {
       slug = finalSlug;
     }
 
+    // ✅ Convert decimal fields to strings
+    const insertData: any = {
+      ...productData,
+      slug,
+      price: productData.price.toString(),
+      categoryId,
+      isActive: productData.isActive ?? true,
+    };
+
+    // ✅ Convert optional decimal fields to strings
+    if (productData.compareAtPrice !== undefined) {
+      insertData.compareAtPrice = productData.compareAtPrice.toString();
+    }
+    if (productData.costPerItem !== undefined) {
+      insertData.costPerItem = productData.costPerItem.toString();
+    }
+    if (productData.weight !== undefined) {
+      insertData.weight = productData.weight.toString();
+    }
+
     const [product] = await this.drizzle.db
       .insert(products)
-      .values({
-        ...productData,
-        slug,
-        price: productData.price.toString(),
-        categoryId,
-        isActive: productData.isActive ?? true,
-      })
+      .values(insertData)
       .returning();
 
     if (imageUrls && imageUrls.length > 0) {
       await this.uploadImagesFromUrls(product.id, imageUrls);
+    }
+
+    // ✅ Handle variants if provided
+    if (variants && variants.length > 0) {
+      for (const variant of variants) {
+        const variantData: any = {
+          id: uuidv4(),
+          productId: product.id,
+          colorId: variant.colorId,
+          sizeId: variant.sizeId,
+          stock: variant.stock ?? 0,
+        };
+
+        // ✅ Convert optional fields
+        if (variant.sku) variantData.sku = variant.sku;
+        if (variant.price !== undefined) {
+          variantData.price = variant.price.toString();
+        }
+
+        await this.drizzle.db.insert(productVariants).values(variantData);
+      }
     }
 
     return this.findOne(product.id);
@@ -163,34 +199,47 @@ export class ProductsService {
     productId: string,
     createVariantDto: CreateProductVariantDto,
   ) {
+    console.log('🔍 [Products] Adding variant to product:', productId);
+    console.log('📥 [Products] Variant DTO received:', createVariantDto);
+
     const [product] = await this.drizzle.db
       .select({ id: products.id })
       .from(products)
       .where(eq(products.id, productId))
       .limit(1);
-    if (!product)
+
+    if (!product) {
+      console.error('❌ [Products] Product not found:', productId);
       throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
 
     const [color] = await this.drizzle.db
       .select({ id: colors.id })
       .from(colors)
       .where(eq(colors.id, createVariantDto.colorId))
       .limit(1);
-    if (!color)
+
+    if (!color) {
+      console.error('❌ [Products] Color not found:', createVariantDto.colorId);
       throw new NotFoundException(
         `Color with ID ${createVariantDto.colorId} not found`,
       );
+    }
 
     const [size] = await this.drizzle.db
       .select({ id: sizes.id })
       .from(sizes)
       .where(eq(sizes.id, createVariantDto.sizeId))
       .limit(1);
-    if (!size)
+
+    if (!size) {
+      console.error('❌ [Products] Size not found:', createVariantDto.sizeId);
       throw new NotFoundException(
         `Size with ID ${createVariantDto.sizeId} not found`,
       );
+    }
 
+    // Check for duplicate variant
     const existingVariant = await this.drizzle.db
       .select({ id: productVariants.id })
       .from(productVariants)
@@ -204,26 +253,38 @@ export class ProductsService {
       .limit(1);
 
     if (existingVariant.length) {
+      console.error('❌ [Products] Duplicate variant detected');
       throw new BadRequestException(
         'Variant with this color and size already exists',
       );
     }
 
+    // Generate SKU if not provided
+    const sku =
+      createVariantDto.sku ||
+      `${product.id.slice(0, 8)}-${color.id.slice(0, 4)}-${size.id.slice(0, 4)}`.toUpperCase();
+
+    console.log('✅ [Products] All validations passed, inserting variant');
+    console.log('✅ [Products] Generated SKU:', sku);
+
+    // Insert variant with optional fields
     const [variant] = await this.drizzle.db
       .insert(productVariants)
       .values({
+        id: uuidv4(),
         productId,
         colorId: createVariantDto.colorId,
         sizeId: createVariantDto.sizeId,
-        sku: createVariantDto.sku,
-        stock: createVariantDto.stock,
-        price: createVariantDto.price?.toString(),
+        sku: sku,
+        stock: createVariantDto.stock ?? 0,
+        price: createVariantDto.price?.toString() ?? null,
       })
       .returning();
 
+    console.log('✅ [Products] Variant created successfully:', variant.id);
+
     return this.findVariantWithRelations(variant.id);
   }
-
   // ==========================================
   // CART METHODS
   // ==========================================
@@ -235,11 +296,18 @@ export class ProductsService {
     let stock: number;
     let productName: string;
     let actualVariantId: string | null = null;
+    let colorName: string | null = null;
+    let sizeName: string | null = null;
 
     if (productVariantId) {
+      // ✅ User selected a specific variant (color + size)
       const variant = await this.drizzle.db.query.productVariants.findFirst({
         where: eq(productVariants.id, productVariantId),
-        with: { product: true },
+        with: {
+          product: { with: { images: true } },
+          color: true,
+          size: true,
+        },
       });
 
       if (!variant) throw new NotFoundException('Product variant not found');
@@ -252,9 +320,13 @@ export class ProductsService {
       stock = variant.stock;
       productName = variant.product?.name || 'Product';
       actualVariantId = variant.id;
+      colorName = variant.color?.name || null;
+      sizeName = variant.size?.name || null;
     } else {
+      // ✅ User is buying the base product (no variant)
       const product = await this.drizzle.db.query.products.findFirst({
         where: eq(products.id, productId),
+        with: { images: true },
       });
 
       if (!product) throw new NotFoundException('Product not found');
@@ -266,6 +338,7 @@ export class ProductsService {
       productName = product.name;
     }
 
+    // Check if item already exists in cart
     const [existingItem] = await this.drizzle.db
       .select()
       .from(cartItems)
@@ -302,7 +375,7 @@ export class ProductsService {
           id: uuidv4(),
           userId,
           productId,
-          productVariantId: actualVariantId,
+          productVariantId: actualVariantId, // ✅ null if no variant
           quantity,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -311,37 +384,34 @@ export class ProductsService {
       cartItemId = newItem.id;
     }
 
-    const [cartItem] = await this.drizzle.db.query.cartItems.findMany({
-      where: eq(cartItems.id, cartItemId),
-      with: {
-        variant: {
-          with: {
-            product: { with: { images: true } },
-            color: true,
-            size: true,
-          },
-        },
-      },
-    });
-
-    const productVariant = cartItem?.variant;
-    const product = productVariant?.product;
-    const unitPrice = productVariant?.price
-      ? Number(productVariant.price)
-      : price;
+    // Return formatted cart item
+    const imageUrl = productVariantId
+      ? (
+          await this.drizzle.db.query.productVariants.findFirst({
+            where: eq(productVariants.id, productVariantId),
+            with: { product: { with: { images: true } } },
+          })
+        )?.product?.images?.[0]?.url || ''
+      : (
+          await this.drizzle.db.query.products.findFirst({
+            where: eq(products.id, productId),
+            with: { images: true },
+          })
+        )?.images?.[0]?.url || '';
 
     return {
-      id: cartItem.id,
-      productVariantId: cartItem.productVariantId,
-      productId: cartItem.productId || product?.id || '',
-      name: product?.name || productName,
-      price: unitPrice,
-      quantity: cartItem.quantity,
-      totalPrice: unitPrice * cartItem.quantity,
-      inStock: (productVariant?.stock || stock) > 0,
-      imageUrl: product?.images?.[0]?.url || '',
-      color: productVariant?.color?.name || null,
-      size: productVariant?.size?.name || null,
+      id: cartItemId,
+      productVariantId: actualVariantId,
+      productId: productId,
+      name: productName,
+      price: price,
+      quantity: quantity,
+      totalPrice: price * quantity,
+      inStock: stock > 0,
+      maxStock: stock,
+      imageUrl: imageUrl,
+      color: colorName,
+      size: sizeName,
     };
   }
   async updateCartItem(userId: string, itemId: string, quantity: number) {
@@ -455,11 +525,11 @@ export class ProductsService {
 
     return { message: 'Cart item removed successfully' };
   }
-
   async getCartItems(userId: string) {
     const userCartItems = await this.drizzle.db.query.cartItems.findMany({
       where: eq(cartItems.userId, userId),
       with: {
+        product: { with: { images: true } }, // ✅ Always load product
         variant: {
           with: {
             product: { with: { images: true } },
@@ -471,28 +541,51 @@ export class ProductsService {
     });
 
     return userCartItems.map((cartItem) => {
-      const variant = cartItem.variant;
-      const product = variant?.product;
-      const unitPrice = variant?.price
-        ? Number(variant.price)
-        : Number(product?.price || 0);
+      // If variant exists, use variant data; otherwise use product data
+      if (cartItem.variant) {
+        const variant = cartItem.variant;
+        const unitPrice = variant.price
+          ? Number(variant.price)
+          : Number(variant.product?.price || 0);
 
-      return {
-        id: cartItem.id,
-        productVariantId: cartItem.productVariantId,
-        productId: product?.id || '',
-        name: product?.name || 'Unknown Product',
-        price: unitPrice,
-        quantity: cartItem.quantity,
-        totalPrice: unitPrice * cartItem.quantity,
-        inStock: (variant?.stock || 0) > 0,
-        imageUrl: product?.images?.[0]?.url || '',
-        color: variant?.color?.name || null,
-        size: variant?.size?.name || null,
-      };
+        return {
+          id: cartItem.id,
+          productVariantId: cartItem.productVariantId,
+          productId: variant.product?.id || cartItem.productId || '',
+          name: variant.product?.name || 'Unknown Product',
+          price: unitPrice,
+          quantity: cartItem.quantity,
+          totalPrice: unitPrice * cartItem.quantity,
+          inStock: variant.stock > 0,
+          maxStock: variant.stock,
+          imageUrl: variant.product?.images?.[0]?.url || '',
+          color: variant.color?.name || null,
+          size: variant.size?.name || null,
+          hasVariant: true,
+        };
+      } else {
+        // ✅ No variant - use product directly
+        const product = cartItem.product;
+        const unitPrice = product ? Number(product.price) : 0;
+
+        return {
+          id: cartItem.id,
+          productVariantId: null,
+          productId: cartItem.productId || '',
+          name: product?.name || 'Unknown Product',
+          price: unitPrice,
+          quantity: cartItem.quantity,
+          totalPrice: unitPrice * cartItem.quantity,
+          inStock: (product?.stock || 0) > 0,
+          maxStock: product?.stock || 0,
+          imageUrl: product?.images?.[0]?.url || '',
+          color: null,
+          size: null,
+          hasVariant: false,
+        };
+      }
     });
   }
-
   async clearCart(userId: string) {
     await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
     return { message: 'Cart cleared successfully' };

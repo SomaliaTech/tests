@@ -285,6 +285,8 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
     Map<String, dynamic> variantData,
   ) async {
     print('🔍 [AdminProducts] Adding variant to product: $productId');
+    print('📤 [AdminProducts] Variant data being sent: $variantData');
+
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/products/$productId/variants';
@@ -299,9 +301,23 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
       );
 
       print('📡 [AdminProducts] Variant response: ${response.statusCode}');
+      print('📦 [AdminProducts] Variant response body: ${response.body}');
 
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw ServerException('Failed to add variant: ${response.statusCode}');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return;
+      } else {
+        // Parse error response
+        try {
+          final errorData = json.decode(response.body);
+          print('❌ [AdminProducts] Error details: $errorData');
+          throw ServerException(
+            'Failed to add variant: ${errorData['message'] ?? response.statusCode}',
+          );
+        } catch (e) {
+          throw ServerException(
+            'Failed to add variant: ${response.statusCode}',
+          );
+        }
       }
     } catch (e) {
       print('❌ [AdminProducts] Variant error: $e');

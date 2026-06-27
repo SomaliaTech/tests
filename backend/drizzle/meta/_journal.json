@@ -92,6 +92,13 @@
       "when": 1782360992944,
       "tag": "0012_brave_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782583730551,
+      "tag": "0013_furry_shatterstar",
+      "breakpoints": true
     }
   ]
 }

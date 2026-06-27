@@ -970,17 +970,19 @@ export class AdminService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
+    // ✅ Convert all decimal fields to strings
     const insertData: Record<string, unknown> = {
       id: productId,
       name: createProductDto.name,
       slug: slug,
-      price: createProductDto.price.toString(),
+      price: createProductDto.price.toString(), // ✅ Convert to string
       stock: createProductDto.stock ?? 0,
       isActive: createProductDto.isActive ?? true,
       isFeatured: createProductDto.isFeatured ?? false,
       categoryId: createProductDto.categoryId,
     };
 
+    // ✅ Convert optional decimal fields to strings
     if (createProductDto.description)
       insertData.description = createProductDto.description;
     if (createProductDto.sku) insertData.sku = createProductDto.sku;
@@ -996,19 +998,19 @@ export class AdminService {
       createProductDto.compareAtPrice !== undefined &&
       createProductDto.compareAtPrice !== null
     ) {
-      insertData.compareAtPrice = createProductDto.compareAtPrice.toString();
+      insertData.compareAtPrice = createProductDto.compareAtPrice.toString(); // ✅ Convert
     }
     if (
       createProductDto.costPerItem !== undefined &&
       createProductDto.costPerItem !== null
     ) {
-      insertData.costPerItem = createProductDto.costPerItem.toString();
+      insertData.costPerItem = createProductDto.costPerItem.toString(); // ✅ Convert
     }
     if (
       createProductDto.weight !== undefined &&
       createProductDto.weight !== null
     ) {
-      insertData.weight = createProductDto.weight.toString();
+      insertData.weight = createProductDto.weight.toString(); // ✅ Convert
     }
 
     try {
@@ -1016,18 +1018,22 @@ export class AdminService {
         .insert(products)
         .values(insertData as typeof products.$inferInsert)
         .returning();
+
+      // Handle variants
       if (createProductDto.variants && createProductDto.variants.length > 0) {
         for (const variant of createProductDto.variants) {
+          const variantSku =
+            variant.sku ||
+            `${slug}-${variant.colorId.slice(0, 4)}-${variant.sizeId.slice(0, 4)}`.toUpperCase();
+
           await this.drizzle.db.insert(productVariants).values({
             id: uuidv4(),
             productId,
             colorId: variant.colorId,
             sizeId: variant.sizeId,
-            sku:
-              variant.sku ||
-              `${slug}-${variant.colorId}-${variant.sizeId}`.toUpperCase(),
+            sku: variantSku,
             stock: variant.stock ?? 0,
-            price: variant.price?.toString(),
+            price: variant.price?.toString() ?? null, // ✅ Convert to string
           });
         }
       }

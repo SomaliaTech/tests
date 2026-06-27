@@ -219,6 +219,7 @@ export class OrdersService {
     });
   }
 
+  // Line 241 - In getOrders method
   async getOrders(userId: string, status?: string) {
     const conditions = [eq(orders.userId, userId)];
     if (status) conditions.push(eq(orders.status, status));
@@ -238,7 +239,7 @@ export class OrdersService {
                 },
                 color: true,
                 size: true,
-                image: true,
+                // ❌ REMOVE THIS: image: true,
               },
             },
           },
@@ -247,6 +248,7 @@ export class OrdersService {
     });
   }
 
+  // Line 271 - In getOrderById method
   async getOrderById(orderId: string, userId: string) {
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -268,7 +270,7 @@ export class OrdersService {
                 },
                 color: true,
                 size: true,
-                image: true,
+                // ❌ REMOVE THIS: image: true,
               },
             },
           },

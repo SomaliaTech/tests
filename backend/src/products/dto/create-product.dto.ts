@@ -2,52 +2,13 @@ import {
   IsString,
   IsOptional,
   IsNumber,
-  IsInt,
   IsBoolean,
-  IsUUID,
   IsArray,
-  IsUrl,
+  ValidateNested,
   Min,
-  MaxLength,
-  IsDecimal,
+  IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export class CreateProductDto {
-  @IsString()
-  @MaxLength(255)
-  name: string;
-
-  @IsString()
-  @MaxLength(255)
-  @IsOptional()
-  slug?: string;
-
-  @IsString()
-  @IsOptional()
-  description?: string;
-
-  @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  price: number;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  stock: number;
-
-  @IsBoolean()
-  @IsOptional()
-  isActive?: boolean;
-
-  @IsUUID()
-  categoryId: string;
-
-  @IsArray()
-  @IsOptional()
-  @IsUrl({}, { each: true })
-  imageUrls?: string[];
-}
 
 export class CreateProductVariantDto {
   @IsUUID()
@@ -57,17 +18,98 @@ export class CreateProductVariantDto {
   sizeId: string;
 
   @IsString()
-  sku: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  stock: number;
-
-  @Type(() => Number)
   @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
+  sku?: string;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  stock?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
   price?: number;
+}
+
+export class CreateProductDto {
+  @IsString()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  slug?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsNumber()
+  @Min(0)
+  price: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  stock?: number;
+
+  @IsString()
+  categoryId: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean;
+
+  @IsString()
+  @IsOptional()
+  sku?: string;
+
+  @IsString()
+  @IsOptional()
+  barcode?: string;
+
+  @IsString()
+  @IsOptional()
+  brand?: string;
+
+  @IsString()
+  @IsOptional()
+  tags?: string;
+
+  @IsString()
+  @IsOptional()
+  seoTitle?: string;
+
+  @IsString()
+  @IsOptional()
+  seoDescription?: string;
+
+  @IsNumber()
+  @IsOptional()
+  compareAtPrice?: number;
+
+  @IsNumber()
+  @IsOptional()
+  costPerItem?: number;
+
+  @IsNumber()
+  @IsOptional()
+  weight?: number;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateProductVariantDto)
+  @IsOptional()
+  variants?: CreateProductVariantDto[];
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  imageUrls?: string[];
 }
 
 export class UploadBase64ImageDto {
