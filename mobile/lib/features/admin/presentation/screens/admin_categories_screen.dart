@@ -134,8 +134,9 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
               );
             }
 
+            // ✅ Added 100px bottom padding
             return ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               itemCount: state.categories.length,
               itemBuilder: (context, index) {
                 final category = state.categories[index];
