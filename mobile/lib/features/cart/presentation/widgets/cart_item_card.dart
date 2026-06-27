@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 
@@ -26,7 +27,7 @@ class CartItemCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -35,7 +36,7 @@ class CartItemCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🚀 FIXED: Robust Image Loading
+          // Product Image
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: item.imageUrl.isNotEmpty
@@ -78,6 +79,7 @@ class CartItemCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Quantity Controls
                     Container(
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
@@ -85,8 +87,14 @@ class CartItemCard extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
+                          // Minus Button
                           GestureDetector(
-                            onTap: onDecrement,
+                            onTap: item.canDecrease
+                                ? () {
+                                    HapticFeedback.lightImpact();
+                                    onDecrement();
+                                  }
+                                : null,
                             child: Container(
                               width: 32,
                               height: 32,
@@ -94,12 +102,13 @@ class CartItemCard extends StatelessWidget {
                               child: Icon(
                                 Iconsax.minus,
                                 size: 16,
-                                color: item.quantity == 1
-                                    ? Colors.grey[400]
-                                    : const Color(0xFF33),
+                                color: item.canDecrease
+                                    ? const Color(0xFF333333)
+                                    : Colors.grey[400],
                               ),
                             ),
                           ),
+                          // Quantity Display
                           Container(
                             width: 40,
                             alignment: Alignment.center,
@@ -112,8 +121,33 @@ class CartItemCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          // Plus Button - FIXED
                           GestureDetector(
-                            onTap: onIncrement,
+                            onTap: () {
+                              print('🔵 Plus button tapped!');
+                              print('🔵 canIncrease: ${item.canIncrease}');
+                              print('🔵 quantity: ${item.quantity}');
+                              print('🔵 maxStock: ${item.maxStock}');
+                              print('🔵 inStock: ${item.inStock}');
+
+                              if (item.canIncrease) {
+                                HapticFeedback.lightImpact();
+                                onIncrement();
+                              } else {
+                                HapticFeedback.heavyImpact();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      item.maxStock >= 999
+                                          ? 'Cannot increase quantity'
+                                          : 'Maximum stock reached (${item.maxStock})',
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
                             child: Container(
                               width: 32,
                               height: 32,
@@ -121,17 +155,21 @@ class CartItemCard extends StatelessWidget {
                               child: Icon(
                                 Iconsax.add,
                                 size: 16,
-                                color: !item.inStock
-                                    ? Colors.grey[400]
-                                    : const Color(0xFF3333),
+                                color: item.canIncrease
+                                    ? const Color(0xFF333333)
+                                    : Colors.grey[400],
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
+                    // Remove Button
                     GestureDetector(
-                      onTap: onRemove,
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        onRemove();
+                      },
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         child: const Icon(
@@ -151,7 +189,6 @@ class CartItemCard extends StatelessWidget {
     );
   }
 
-  // Helper widget for missing images
   Widget _buildPlaceholder() {
     return Container(
       width: 90,

@@ -29,8 +29,43 @@ class CartItem extends Equatable {
 
   double get totalPrice => price * quantity;
 
-  bool get canIncrease => quantity < maxStock && inStock;
+  // ✅ FIXED: More lenient check - allow increase if stock > 0 or maxStock is very high (999)
+  bool get canIncrease {
+    // If maxStock is 999 (default from wishlist), always allow increase
+    if (maxStock >= 999) return true;
+    // Otherwise check actual stock
+    return inStock && quantity < maxStock;
+  }
+
   bool get canDecrease => quantity > 1;
+
+  CartItem copyWith({
+    String? id,
+    String? productId,
+    String? productVariantId,
+    String? name,
+    String? imageUrl,
+    double? price,
+    int? quantity,
+    int? maxStock,
+    bool? inStock,
+    String? color,
+    String? size,
+  }) {
+    return CartItem(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      productVariantId: productVariantId ?? this.productVariantId,
+      name: name ?? this.name,
+      imageUrl: imageUrl ?? this.imageUrl,
+      price: price ?? this.price,
+      quantity: quantity ?? this.quantity,
+      maxStock: maxStock ?? this.maxStock,
+      inStock: inStock ?? this.inStock,
+      color: color ?? this.color,
+      size: size ?? this.size,
+    );
+  }
 
   @override
   List<Object?> get props => [
