@@ -54,6 +54,7 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
       'items': widget.cartItems
           .map(
             (item) => {
+              'productId': item.productId, // ✅ ADD THIS
               'productVariantId': item.productVariantId,
               'quantity': item.quantity,
             },

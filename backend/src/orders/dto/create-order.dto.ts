@@ -8,16 +8,25 @@ import {
   IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class OrderItemDto {
-  @ApiProperty({
-    description: 'Product variant UUID',
+  @ApiPropertyOptional({
+    description:
+      'Product variant UUID (optional - leave empty for base product)',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsString()
+  @IsOptional() // ✅ Make optional
+  productVariantId?: string;
+
+  @ApiProperty({
+    description: 'Product ID (required for base products without variants)',
+    example: '550e8400-e29b-41d4-a716-446655440001',
+  })
+  @IsString()
   @IsNotEmpty()
-  productVariantId: string;
+  productId: string; // ✅ Add productId
 
   @ApiProperty({
     description: 'Quantity of the product',

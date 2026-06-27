@@ -110,71 +110,104 @@ export class OrdersService {
       const [user] = await tx.select().from(users).where(eq(users.id, userId));
       if (!user) throw new NotFoundException('User not found');
 
-      const variantIds = orderData.items.map((item) => item.productVariantId);
-
-      // ✅ Fetch variants WITH their parent product stock as fallback
-      const variants = await tx
-        .select({
-          id: productVariants.id,
-          price: productVariants.price,
-          sku: productVariants.sku,
-          stock: productVariants.stock,
-          productId: productVariants.productId,
-          productName: products.name,
-          productStock: products.stock, // ✅ Get base product stock as fallback
-          productPrice: products.price, // ✅ Get base product price as fallback
-          colorName: colors.name,
-          sizeName: sizes.name,
-        })
-        .from(productVariants)
-        .leftJoin(products, eq(products.id, productVariants.productId))
-        .leftJoin(colors, eq(colors.id, productVariants.colorId))
-        .leftJoin(sizes, eq(sizes.id, productVariants.sizeId))
-        .where(inArray(productVariants.id, variantIds));
-
-      const variantMap = new Map(variants.map((v) => [v.id, v]));
-
       let totalAmount = 0;
       const orderItemsData: any[] = [];
 
+      // ✅ Process each item (variant OR base product)
       for (const item of orderData.items) {
-        const variant = variantMap.get(item.productVariantId);
-        if (!variant) {
-          throw new BadRequestException(
-            `Product variant ${item.productVariantId} not found`,
-          );
+        if (item.productVariantId) {
+          // ✅ Item has a variant
+          const [variant] = await tx
+            .select({
+              id: productVariants.id,
+              price: productVariants.price,
+              sku: productVariants.sku,
+              stock: productVariants.stock,
+              productId: productVariants.productId,
+              productName: products.name,
+              productStock: products.stock,
+              productPrice: products.price,
+              colorName: colors.name,
+              sizeName: sizes.name,
+            })
+            .from(productVariants)
+            .leftJoin(products, eq(products.id, productVariants.productId))
+            .leftJoin(colors, eq(colors.id, productVariants.colorId))
+            .leftJoin(sizes, eq(sizes.id, productVariants.sizeId))
+            .where(eq(productVariants.id, item.productVariantId))
+            .limit(1);
+
+          if (!variant) {
+            throw new BadRequestException(
+              `Product variant ${item.productVariantId} not found`,
+            );
+          }
+
+          const availableStock =
+            variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
+          if (availableStock < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for ${variant.productName}. Available: ${availableStock}, Requested: ${item.quantity}`,
+            );
+          }
+
+          const unitPrice = variant.price
+            ? Number(variant.price)
+            : Number(variant.productPrice ?? 0);
+          const itemTotal = unitPrice * item.quantity;
+          totalAmount += itemTotal;
+
+          orderItemsData.push({
+            id: uuidv4(),
+            orderId: '',
+            productId: variant.productId,
+            productVariantId: variant.id,
+            productName: variant.productName || 'Product',
+            variantSku: variant.sku,
+            colorName: variant.colorName,
+            sizeName: variant.sizeName,
+            quantity: item.quantity,
+            unitPrice: unitPrice.toString(),
+            totalPrice: itemTotal.toString(),
+          });
+        } else {
+          // ✅ Item is a base product (no variant)
+          const [product] = await tx
+            .select()
+            .from(products)
+            .where(eq(products.id, item.productId))
+            .limit(1);
+
+          if (!product) {
+            throw new BadRequestException(
+              `Product ${item.productId} not found`,
+            );
+          }
+
+          if (product.stock < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`,
+            );
+          }
+
+          const unitPrice = Number(product.price);
+          const itemTotal = unitPrice * item.quantity;
+          totalAmount += itemTotal;
+
+          orderItemsData.push({
+            id: uuidv4(),
+            orderId: '',
+            productId: product.id,
+            productVariantId: null, // ✅ No variant
+            productName: product.name,
+            variantSku: product.sku,
+            colorName: null,
+            sizeName: null,
+            quantity: item.quantity,
+            unitPrice: unitPrice.toString(),
+            totalPrice: itemTotal.toString(),
+          });
         }
-
-        // ✅ Use variant stock if > 0, otherwise fall back to product stock
-        const availableStock =
-          variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
-
-        if (availableStock < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for ${variant.productName}. Available: ${availableStock}, Requested: ${item.quantity}`,
-          );
-        }
-
-        // ✅ Use variant price if set, otherwise fall back to product price
-        const unitPrice = variant.price
-          ? Number(variant.price)
-          : Number(variant.productPrice ?? 0);
-
-        const itemTotal = unitPrice * item.quantity;
-        totalAmount += itemTotal;
-
-        orderItemsData.push({
-          id: uuidv4(),
-          orderId: '',
-          productVariantId: variant.id,
-          productName: variant.productName || 'Product',
-          variantSku: variant.sku,
-          colorName: variant.colorName,
-          sizeName: variant.sizeName,
-          quantity: item.quantity,
-          unitPrice: unitPrice.toString(),
-          totalPrice: itemTotal.toString(),
-        });
       }
 
       const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -204,22 +237,35 @@ export class OrdersService {
         await tx.insert(orderItems).values(orderItemsData);
       }
 
-      // ✅ Deduct stock from variant if it has stock, otherwise from product
-      for (const item of orderData.items) {
-        const variant = variantMap.get(item.productVariantId);
+      // ✅ Deduct stock appropriately
+      for (const orderItem of orderItemsData) {
+        if (orderItem.productVariantId) {
+          // Check if variant has its own stock
+          const [variant] = await tx
+            .select({ stock: productVariants.stock })
+            .from(productVariants)
+            .where(eq(productVariants.id, orderItem.productVariantId))
+            .limit(1);
 
-        if (variant && variant.stock > 0) {
-          // Deduct from variant stock
-          await tx
-            .update(productVariants)
-            .set({ stock: sql`${productVariants.stock} - ${item.quantity}` })
-            .where(eq(productVariants.id, item.productVariantId));
-        } else if (variant?.productId) {
-          // ✅ Only deduct from product if productId exists
+          if (variant && variant.stock > 0) {
+            await tx
+              .update(productVariants)
+              .set({
+                stock: sql`${productVariants.stock} - ${orderItem.quantity}`,
+              })
+              .where(eq(productVariants.id, orderItem.productVariantId));
+          } else if (orderItem.productId) {
+            await tx
+              .update(products)
+              .set({ stock: sql`${products.stock} - ${orderItem.quantity}` })
+              .where(eq(products.id, orderItem.productId));
+          }
+        } else if (orderItem.productId) {
+          // Base product - deduct from product stock
           await tx
             .update(products)
-            .set({ stock: sql`${products.stock} - ${item.quantity}` })
-            .where(eq(products.id, variant.productId));
+            .set({ stock: sql`${products.stock} - ${orderItem.quantity}` })
+            .where(eq(products.id, orderItem.productId));
         }
       }
 
