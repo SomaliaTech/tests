@@ -98,9 +98,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   void _submitForm() {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      print('❌ [AddProduct] Form validation failed');
+      ToastHelper.showError(context, 'Please fill all required fields');
+      return;
+    }
 
     if (_selectedCategory == null) {
+      print('❌ [AddProduct] No category selected');
       ToastHelper.showWarning(context, 'Please select a category');
       return;
     }
@@ -118,12 +123,44 @@ class _AddProductScreenState extends State<AddProductScreen> {
       'isActive': _isActive,
     };
 
-    print('📤 [AddProduct] Product data: $productData');
-    print('📤 [AddProduct] Variants count: ${_variants.length}');
-
-    for (int i = 0; i < _variants.length; i++) {
-      print('📤 [AddProduct] Variant $i: ${_variants[i]}');
+    // ✅ EXTENSIVE DEBUG LOGGING
+    print('═══════════════════════════════════════════════════');
+    print('📤 [AddProduct] SUBMITTING PRODUCT');
+    print('═══════════════════════════════════════════════════');
+    print('📦 Product Data:');
+    print('   - Name: ${productData['name']}');
+    print('   - Description: ${productData['description']}');
+    print(
+      '   - Price: ${productData['price']} (type: ${productData['price'].runtimeType})',
+    );
+    print(
+      '   - Stock: ${productData['stock']} (type: ${productData['stock'].runtimeType})',
+    );
+    print('   - Category ID: ${productData['categoryId']}');
+    print(
+      '   - Category Name: ${_selectedSubcategory?.name ?? _selectedCategory?.name}',
+    );
+    print('   - Brand: ${productData['brand']}');
+    print('   - Tags: ${productData['tags']}');
+    print('   - Is Active: ${productData['isActive']}');
+    print('');
+    print('🖼️ Images: ${_selectedImages.length} selected');
+    for (int i = 0; i < _selectedImages.length; i++) {
+      print('   - Image $i: ${_selectedImages[i].path}');
     }
+    print('');
+    print('🎨 Variants: ${_variants.length} total');
+    for (int i = 0; i < _variants.length; i++) {
+      final v = _variants[i];
+      print('   Variant $i:');
+      print('     - Color: ${v['colorName']} (${v['colorId']})');
+      print('     - Size: ${v['sizeValue']} (${v['sizeId']})');
+      print('     - SKU: ${v['sku']}');
+      print('     - Stock: ${v['stock']}');
+      print('     - Price: ${v['price']}');
+    }
+    print('═══════════════════════════════════════════════════');
+
     context.read<AdminProductBloc>().add(
       CreateAdminProductEvent(
         productData: productData,
@@ -137,219 +174,289 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      body: BlocListener<AdminProductBloc, AdminProductState>(
+      body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
           if (state is AdminProductOperationSuccess) {
+            print('✅ [AddProduct] Product created successfully!');
             ToastHelper.showSuccess(context, state.message);
             Navigator.pop(context);
           } else if (state is AdminProductsError) {
+            print('❌ [AddProduct] Error: ${state.message}');
             ToastHelper.showError(context, state.message);
+            // ✅ Error state is handled by the bloc - no need to reset manually
           }
         },
-        child: CustomScrollView(
-          slivers: [
-            _buildHeader(),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Images
-                      _buildSectionCard(
-                        title: 'Product Images',
-                        icon: Iconsax.image,
-                        child: _buildImageUploadSection(),
-                      ),
-                      const SizedBox(height: 16),
+        builder: (context, state) {
+          final isCreating = state is AdminProductCreating;
 
-                      // Basic Info
-                      _buildSectionCard(
-                        title: 'Basic Information',
-                        icon: Iconsax.info_circle,
+          return Stack(
+            children: [
+              CustomScrollView(
+                slivers: [
+                  _buildHeader(),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Form(
+                        key: _formKey,
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildTextField(
-                              controller: _nameController,
-                              label: 'Product Name',
-                              hint: 'Enter product name',
-                              icon: Iconsax.box_1,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Product name is required';
-                                }
-                                return null;
-                              },
+                            // Images
+                            _buildSectionCard(
+                              title: 'Product Images',
+                              icon: Iconsax.image,
+                              child: _buildImageUploadSection(),
                             ),
                             const SizedBox(height: 16),
-                            _buildTextField(
-                              controller: _descriptionController,
-                              label: 'Description',
-                              hint: 'Enter product description',
-                              icon: Iconsax.document_text,
-                              maxLines: 4,
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: _priceController,
-                                    label: 'Base Price',
-                                    hint: '0.00',
-                                    icon: Iconsax.money_tick,
-                                    keyboardType: TextInputType.number,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Price is required';
-                                      }
-                                      if (double.tryParse(value) == null) {
-                                        return 'Invalid price';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: _buildTextField(
-                                    controller: _stockController,
-                                    label: 'Base Stock',
-                                    hint: '0',
-                                    icon: Iconsax.box,
-                                    keyboardType: TextInputType.number,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Stock is required';
-                                      }
-                                      if (int.tryParse(value) == null) {
-                                        return 'Invalid stock';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
 
-                      // Category
-                      _buildSectionCard(
-                        title: 'Category',
-                        icon: Iconsax.category,
-                        child: BlocBuilder<AdminProductBloc, AdminProductState>(
-                          buildWhen: (prev, current) =>
-                              current is AdminCategoriesLoading ||
-                              current is AdminCategoriesLoaded,
-                          builder: (context, state) {
-                            if (state is AdminCategoriesLoading) {
-                              return const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(20),
-                                  child: CircularProgressIndicator(
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                ),
-                              );
-                            }
-                            if (state is AdminCategoriesLoaded) {
-                              if (state.categories.isEmpty) {
-                                return _buildWarningBox(
-                                  'No categories available. Please add categories first.',
-                                );
-                              }
-                              return Column(
+                            // Basic Info
+                            _buildSectionCard(
+                              title: 'Basic Information',
+                              icon: Iconsax.info_circle,
+                              child: Column(
                                 children: [
-                                  _buildCategoryDropdown(
-                                    label: 'Parent Category',
-                                    categories: state.categories,
-                                    selectedCategory: _selectedCategory,
-                                    onChanged: (category) {
-                                      setState(() {
-                                        _selectedCategory = category;
-                                        _selectedSubcategory = null;
-                                      });
+                                  _buildTextField(
+                                    controller: _nameController,
+                                    label: 'Product Name',
+                                    hint: 'Enter product name',
+                                    icon: Iconsax.box_1,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Product name is required';
+                                      }
+                                      return null;
                                     },
                                   ),
-                                  if (_selectedCategory != null &&
-                                      _selectedCategory!
-                                          .children
-                                          .isNotEmpty) ...[
-                                    const SizedBox(height: 16),
-                                    _buildCategoryDropdown(
-                                      label: 'Subcategory',
-                                      categories: _selectedCategory!.children,
-                                      selectedCategory: _selectedSubcategory,
-                                      onChanged: (category) {
-                                        setState(() {
-                                          _selectedSubcategory = category;
-                                        });
-                                      },
-                                    ),
-                                  ],
+                                  const SizedBox(height: 16),
+                                  _buildTextField(
+                                    controller: _descriptionController,
+                                    label: 'Description',
+                                    hint: 'Enter product description',
+                                    icon: Iconsax.document_text,
+                                    maxLines: 4,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildTextField(
+                                          controller: _priceController,
+                                          label: 'Base Price',
+                                          hint: '0.00',
+                                          icon: Iconsax.money_tick,
+                                          keyboardType: TextInputType.number,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Price is required';
+                                            }
+                                            if (double.tryParse(value) ==
+                                                null) {
+                                              return 'Invalid price';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: _buildTextField(
+                                          controller: _stockController,
+                                          label: 'Base Stock',
+                                          hint: '0',
+                                          icon: Iconsax.box,
+                                          keyboardType: TextInputType.number,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Stock is required';
+                                            }
+                                            if (int.tryParse(value) == null) {
+                                              return 'Invalid stock';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
-                              );
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Variants Section
-                      _buildSectionCard(
-                        title: 'Variants',
-                        subtitle:
-                            '${_variants.length} variant${_variants.length == 1 ? '' : 's'} added',
-                        icon: Iconsax.box_1,
-                        child: _buildVariantsSection(),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Additional Info
-                      _buildSectionCard(
-                        title: 'Additional Information',
-                        icon: Iconsax.setting_2,
-                        child: Column(
-                          children: [
-                            _buildTextField(
-                              controller: _brandController,
-                              label: 'Brand',
-                              hint: 'Enter brand name',
-                              icon: Iconsax.tag,
+                              ),
                             ),
                             const SizedBox(height: 16),
-                            _buildTextField(
-                              controller: _tagsController,
-                              label: 'Tags',
-                              hint: 'Enter tags (comma-separated)',
-                              icon: Iconsax.hashtag,
+
+                            // Category
+                            _buildSectionCard(
+                              title: 'Category',
+                              icon: Iconsax.category,
+                              child:
+                                  BlocBuilder<
+                                    AdminProductBloc,
+                                    AdminProductState
+                                  >(
+                                    buildWhen: (prev, current) =>
+                                        current is AdminCategoriesLoading ||
+                                        current is AdminCategoriesLoaded,
+                                    builder: (context, state) {
+                                      if (state is AdminCategoriesLoading) {
+                                        return const Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(20),
+                                            child: CircularProgressIndicator(
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      if (state is AdminCategoriesLoaded) {
+                                        if (state.categories.isEmpty) {
+                                          return _buildWarningBox(
+                                            'No categories available. Please add categories first.',
+                                          );
+                                        }
+                                        return Column(
+                                          children: [
+                                            _buildCategoryDropdown(
+                                              label: 'Parent Category',
+                                              categories: state.categories,
+                                              selectedCategory:
+                                                  _selectedCategory,
+                                              onChanged: (category) {
+                                                setState(() {
+                                                  _selectedCategory = category;
+                                                  _selectedSubcategory = null;
+                                                });
+                                              },
+                                            ),
+                                            if (_selectedCategory != null &&
+                                                _selectedCategory!
+                                                    .children
+                                                    .isNotEmpty) ...[
+                                              const SizedBox(height: 16),
+                                              _buildCategoryDropdown(
+                                                label: 'Subcategory',
+                                                categories:
+                                                    _selectedCategory!.children,
+                                                selectedCategory:
+                                                    _selectedSubcategory,
+                                                onChanged: (category) {
+                                                  setState(() {
+                                                    _selectedSubcategory =
+                                                        category;
+                                                  });
+                                                },
+                                              ),
+                                            ],
+                                          ],
+                                        );
+                                      }
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
                             ),
                             const SizedBox(height: 16),
-                            _buildSwitchTile(
-                              label: 'Active',
-                              value: _isActive,
-                              onChanged: (value) =>
-                                  setState(() => _isActive = value),
+
+                            // Variants Section
+                            _buildSectionCard(
+                              title: 'Variants',
+                              subtitle:
+                                  '${_variants.length} variant${_variants.length == 1 ? '' : 's'} added',
+                              icon: Iconsax.box_1,
+                              child: _buildVariantsSection(),
                             ),
+                            const SizedBox(height: 16),
+
+                            // Additional Info
+                            _buildSectionCard(
+                              title: 'Additional Information',
+                              icon: Iconsax.setting_2,
+                              child: Column(
+                                children: [
+                                  _buildTextField(
+                                    controller: _brandController,
+                                    label: 'Brand',
+                                    hint: 'Enter brand name',
+                                    icon: Iconsax.tag,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildTextField(
+                                    controller: _tagsController,
+                                    label: 'Tags',
+                                    hint: 'Enter tags (comma-separated)',
+                                    icon: Iconsax.hashtag,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildSwitchTile(
+                                    label: 'Active',
+                                    value: _isActive,
+                                    onChanged: (value) =>
+                                        setState(() => _isActive = value),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+
+                            _buildSubmitButton(isCreating: isCreating),
+                            const SizedBox(height: 32),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                    ),
+                  ),
+                ],
+              ),
 
-                      _buildSubmitButton(),
-                    ],
+              // ✅ Loading overlay
+              if (isCreating)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(
+                            color: AppTheme.primaryColor,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Creating Product...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Uploading images and variants',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -531,8 +638,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
             );
           }),
         const SizedBox(height: 16),
-
-        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           height: 52,
@@ -706,64 +811,57 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  Widget _buildSubmitButton() {
-    return BlocBuilder<AdminProductBloc, AdminProductState>(
-      buildWhen: (prev, current) => current is AdminProductCreating,
-      builder: (context, state) {
-        final isCreating = state is AdminProductCreating;
-
-        return SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: isCreating ? null : _submitForm,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              elevation: 8,
-              shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
-            ),
-            child: Ink(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: isCreating
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Iconsax.box_add, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'Create Product',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
+  Widget _buildSubmitButton({required bool isCreating}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: isCreating ? null : _submitForm,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-        );
-      },
+          elevation: 8,
+          shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+        ),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: isCreating
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Iconsax.box_add, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Create Product',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -980,7 +1078,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 }
 
-/// ✅ Redesigned Modern Variant Card
+// Keep the rest of the classes (_ModernVariantCard, _AddVariantDialog) the same
+// I'll include them below for completeness
+
 class _ModernVariantCard extends StatelessWidget {
   final Map<String, dynamic> variant;
   final int index;
@@ -1027,7 +1127,6 @@ class _ModernVariantCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Color swatch
               Container(
                 width: 50,
                 height: 50,
@@ -1045,7 +1144,6 @@ class _ModernVariantCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1098,7 +1196,6 @@ class _ModernVariantCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Delete button
               GestureDetector(
                 onTap: onDelete,
                 child: Container(
@@ -1121,7 +1218,6 @@ class _ModernVariantCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              // Stock
               Expanded(
                 child: _buildInfoChip(
                   icon: Iconsax.box_1,
@@ -1131,7 +1227,6 @@ class _ModernVariantCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // Price
               Expanded(
                 child: _buildInfoChip(
                   icon: Iconsax.money_tick,

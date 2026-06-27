@@ -87,12 +87,11 @@ export class ProductsService {
     const insertData: any = {
       ...productData,
       slug,
-      price: productData.price.toString(),
+      price: productData.price.toString(), // ✅ MUST be string
       categoryId,
       isActive: productData.isActive ?? true,
     };
 
-    // ✅ Convert optional decimal fields to strings
     if (productData.compareAtPrice !== undefined) {
       insertData.compareAtPrice = productData.compareAtPrice.toString();
     }

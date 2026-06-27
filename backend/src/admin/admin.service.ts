@@ -959,61 +959,95 @@ export class AdminService {
     if (!product) throw new NotFoundException('Product not found');
     return product;
   }
-
   async createProduct(createProductDto: CreateProductAdminDto) {
     const productId = uuidv4();
 
-    const slug =
+    // ✅ Generate unique slug
+    let slug =
       createProductDto.slug ||
       createProductDto.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-    // ✅ Convert all decimal fields to strings
+    // ✅ Check if slug exists and make it unique
+    const existingProduct = await this.drizzle.db
+      .select({ slug: products.slug })
+      .from(products)
+      .where(eq(products.slug, slug))
+      .limit(1);
+
+    if (existingProduct.length > 0) {
+      // Add timestamp to make it unique
+      slug = `${slug}-${Date.now()}`;
+      console.log(
+        `⚠️ [Admin] Slug "${createProductDto.slug || createProductDto.name}" already exists. Using: ${slug}`,
+      );
+    }
+
+    // ✅ Validate category exists
+    const [category] = await this.drizzle.db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.id, createProductDto.categoryId))
+      .limit(1);
+
+    if (!category) {
+      throw new BadRequestException(
+        `Category with ID ${createProductDto.categoryId} does not exist`,
+      );
+    }
+
+    // ✅ Convert ALL decimal fields to strings
     const insertData: Record<string, unknown> = {
       id: productId,
       name: createProductDto.name,
-      slug: slug,
-      price: createProductDto.price.toString(), // ✅ Convert to string
+      slug: slug, // ✅ Use the unique slug
+      price: createProductDto.price.toString(),
       stock: createProductDto.stock ?? 0,
       isActive: createProductDto.isActive ?? true,
       isFeatured: createProductDto.isFeatured ?? false,
       categoryId: createProductDto.categoryId,
     };
 
-    // ✅ Convert optional decimal fields to strings
-    if (createProductDto.description)
+    // Optional text fields
+    if (createProductDto.description) {
       insertData.description = createProductDto.description;
+    }
     if (createProductDto.sku) insertData.sku = createProductDto.sku;
     if (createProductDto.barcode) insertData.barcode = createProductDto.barcode;
     if (createProductDto.brand) insertData.brand = createProductDto.brand;
     if (createProductDto.tags) insertData.tags = createProductDto.tags;
     if (createProductDto.seoTitle)
       insertData.seoTitle = createProductDto.seoTitle;
-    if (createProductDto.seoDescription)
+    if (createProductDto.seoDescription) {
       insertData.seoDescription = createProductDto.seoDescription;
+    }
 
+    // ✅ Convert optional decimal fields to strings
     if (
       createProductDto.compareAtPrice !== undefined &&
       createProductDto.compareAtPrice !== null
     ) {
-      insertData.compareAtPrice = createProductDto.compareAtPrice.toString(); // ✅ Convert
+      insertData.compareAtPrice = createProductDto.compareAtPrice.toString();
     }
     if (
       createProductDto.costPerItem !== undefined &&
       createProductDto.costPerItem !== null
     ) {
-      insertData.costPerItem = createProductDto.costPerItem.toString(); // ✅ Convert
+      insertData.costPerItem = createProductDto.costPerItem.toString();
     }
     if (
       createProductDto.weight !== undefined &&
       createProductDto.weight !== null
     ) {
-      insertData.weight = createProductDto.weight.toString(); // ✅ Convert
+      insertData.weight = createProductDto.weight.toString();
     }
 
     try {
+      console.log('✅ [Admin] Inserting product with data:', insertData);
+      console.log('✅ [Admin] Price type:', typeof insertData.price);
+
       await this.drizzle.db
         .insert(products)
         .values(insertData as typeof products.$inferInsert)
@@ -1026,23 +1060,46 @@ export class AdminService {
             variant.sku ||
             `${slug}-${variant.colorId.slice(0, 4)}-${variant.sizeId.slice(0, 4)}`.toUpperCase();
 
-          await this.drizzle.db.insert(productVariants).values({
+          const variantData: Record<string, unknown> = {
             id: uuidv4(),
             productId,
             colorId: variant.colorId,
             sizeId: variant.sizeId,
             sku: variantSku,
             stock: variant.stock ?? 0,
-            price: variant.price?.toString() ?? null, // ✅ Convert to string
-          });
+          };
+
+          if (variant.price !== undefined && variant.price !== null) {
+            variantData.price = variant.price.toString();
+          }
+
+          await this.drizzle.db
+            .insert(productVariants)
+            .values(variantData as typeof productVariants.$inferInsert);
         }
       }
 
       return this.getProductById(productId);
     } catch (error: unknown) {
-      const err = error as { message?: string; detail?: string };
+      const err = error as { message?: string; detail?: string; code?: string };
       console.error('❌ Database Insert Error:', err.message);
-      if (err.detail) console.error('🔍 Error Detail:', err.detail);
+      console.error('❌ Error Code:', err.code);
+      console.error('❌ Error Detail:', err.detail);
+
+      // ✅ Better error messages
+      if (err.code === '23505') {
+        if (err.detail?.includes('slug')) {
+          throw new BadRequestException(
+            'A product with this slug already exists. Please use a different name.',
+          );
+        }
+        if (err.detail?.includes('sku')) {
+          throw new BadRequestException(
+            'A product with this SKU already exists.',
+          );
+        }
+      }
+
       throw new BadRequestException(
         `Failed to create product: ${err.detail || err.message}`,
       );

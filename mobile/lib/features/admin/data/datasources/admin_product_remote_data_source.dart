@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
@@ -96,9 +97,29 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
   @override
   Future<String> createProduct(Map<String, dynamic> productData) async {
     print('🔍 [AdminProducts] Creating product');
+
+    // ✅ FILTER: Clean variant data if included
+    if (productData['variants'] != null) {
+      final List<dynamic> variants = productData['variants'];
+      productData['variants'] = variants.map((v) {
+        final variantMap = v as Map<String, dynamic>;
+        final cleanVariant = {
+          'colorId': variantMap['colorId'],
+          'sizeId': variantMap['sizeId'],
+          'sku': variantMap['sku'],
+          'stock': variantMap['stock'],
+          'price': variantMap['price'],
+        };
+        cleanVariant.removeWhere((key, value) => value == null);
+        return cleanVariant;
+      }).toList();
+    }
+
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/products';
+
+      print('📤 [AdminProducts] Clean product data: $productData');
 
       final response = await client.post(
         Uri.parse(url),
@@ -110,12 +131,21 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
       );
 
       print('📡 [AdminProducts] Create Response: ${response.statusCode}');
+      print('📦 [AdminProducts] Response body: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = json.decode(response.body);
         return data['id'] ?? '';
       } else {
-        throw ServerException('Failed: ${response.statusCode}');
+        try {
+          final errorData = json.decode(response.body);
+          print('❌ [AdminProducts] Error details: $errorData');
+          throw ServerException(
+            'Failed: ${errorData['message'] ?? response.statusCode}',
+          );
+        } catch (e) {
+          throw ServerException('Failed: ${response.statusCode}');
+        }
       }
     } catch (e) {
       print('❌ [AdminProducts] Error: $e');
@@ -285,7 +315,20 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
     Map<String, dynamic> variantData,
   ) async {
     print('🔍 [AdminProducts] Adding variant to product: $productId');
-    print('📤 [AdminProducts] Variant data being sent: $variantData');
+
+    // ✅ FILTER: Only send fields the backend expects
+    final cleanVariantData = {
+      'colorId': variantData['colorId'],
+      'sizeId': variantData['sizeId'],
+      'sku': variantData['sku'],
+      'stock': variantData['stock'],
+      'price': variantData['price'],
+    };
+
+    // Remove null values (backend doesn't like null for optional fields)
+    cleanVariantData.removeWhere((key, value) => value == null);
+
+    print('📤 [AdminProducts] Clean variant data: $cleanVariantData');
 
     try {
       final token = await _getToken();
@@ -297,7 +340,7 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: json.encode(variantData),
+        body: json.encode(cleanVariantData),
       );
 
       print('📡 [AdminProducts] Variant response: ${response.statusCode}');
@@ -306,7 +349,6 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return;
       } else {
-        // Parse error response
         try {
           final errorData = json.decode(response.body);
           print('❌ [AdminProducts] Error details: $errorData');
