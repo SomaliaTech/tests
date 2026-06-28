@@ -31,6 +31,7 @@ class CheckoutPaymentModal extends StatefulWidget {
 class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
   String? _selectedPaymentMethod;
   bool _isProcessing = false;
+  String? _createdOrderId; // ✅ Store the order ID when created
 
   final List<PaymentMethod> _paymentMethods = const [
     PaymentMethod(
@@ -54,7 +55,7 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
       'items': widget.cartItems
           .map(
             (item) => {
-              'productId': item.productId, // ✅ ADD THIS
+              'productId': item.productId, // ✅ ADD THIS LINE
               'productVariantId': item.productVariantId,
               'quantity': item.quantity,
             },
@@ -74,6 +75,9 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
     return BlocListener<OrderBloc, OrderState>(
       listener: (context, state) {
         if (state is OrderCreated) {
+          // ✅ Save the order ID
+          _createdOrderId = state.order.id;
+
           if (_selectedPaymentMethod != null) {
             final phoneNumber = _selectedPaymentMethod == 'cash_on_delivery'
                 ? null
@@ -94,11 +98,9 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
           }
         } else if (state is PaymentProcessed) {
           setState(() => _isProcessing = false);
-          final transactionId =
-              state.paymentResult['transactionId'] ??
-              state.paymentResult['orderNumber'] ??
-              'N/A';
-          _navigateToSuccessPage(transactionId);
+
+          // ✅ Use the saved order ID, not transaction ID
+          _navigateToSuccessPage(_createdOrderId ?? 'N/A');
         } else if (state is OrderError) {
           setState(() => _isProcessing = false);
           _navigateToFailedPage(state.message);
@@ -145,12 +147,12 @@ class _CheckoutPaymentModalState extends State<CheckoutPaymentModal> {
     context.read<OrderBloc>().add(CreateOrderEvent(_orderData));
   }
 
-  // ✅ Navigate to reusable success page
-  void _navigateToSuccessPage(String transactionId) {
+  // ✅ Navigate to success page with correct order ID
+  void _navigateToSuccessPage(String orderId) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => PaymentSuccessPage(
-          orderId: transactionId,
+          orderId: orderId, // ✅ Now this is the actual order ID
           totalAmount: widget.totalAmount,
           itemCount: widget.cartItems.length,
         ),

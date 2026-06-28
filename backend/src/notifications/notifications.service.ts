@@ -32,17 +32,13 @@ export class NotificationsService {
     return notification;
   }
 
-  async getUserNotifications(userId: string) {
-    console.log('🔍 Fetching notifications for userId:', userId);
-
-    const result = await this.drizzle.db
+  async getUserNotifications(userId: string, limit: number = 50) {
+    return this.drizzle.db
       .select()
       .from(notifications)
       .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt));
-
-    console.log(`📊 Found ${result.length} notifications for user ${userId}`);
-    return result;
+      .orderBy(desc(notifications.createdAt))
+      .limit(limit); // ✅ Add limit
   }
 
   async getUnreadCount(userId: string) {

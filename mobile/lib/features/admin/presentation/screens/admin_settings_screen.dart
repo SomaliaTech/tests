@@ -176,7 +176,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
       backgroundColor: const Color(0xFFF8F9FA),
       body: CustomScrollView(
         slivers: [
-          // ✅ Modern App Bar with Gradient
+          // ✅ Modern App Bar with Green Gradient (consistent with app theme)
           SliverAppBar(
             expandedHeight: 140,
             floating: false,
@@ -193,7 +193,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                          colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -236,9 +236,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Color(0xFF6366F1),
-                      Color(0xFF8B5CF6),
-                      Color(0xFFA78BFA),
+                      Color(0xFF2ED573),
+                      Color(0xFF1ABC9C),
+                      Color(0xFF16A085),
                     ],
                   ),
                 ),
@@ -288,7 +288,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                   children: [
                     const SizedBox(height: 16),
 
-                    // ✅ Profile Card
+                    // ✅ Profile Card with Green Gradient
                     _buildProfileCard(),
 
                     const SizedBox(height: 24),
@@ -296,7 +296,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                     // ✅ Menu Section
                     _buildMenuSection(),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 224),
 
                     // ✅ Logout Button
                     _buildLogoutButton(),
@@ -325,12 +325,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+          colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),

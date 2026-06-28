@@ -1134,6 +1134,32 @@ export class AdminService {
   }
 
   async deleteProduct(productId: string) {
+    // ✅ Check if product has been ordered
+    const orderItemsCount = await this.drizzle.db
+      .select({ count: sql<number>`count(*)` })
+      .from(orderItems)
+      .where(eq(orderItems.productId, productId));
+
+    if (orderItemsCount[0]?.count > 0) {
+      // ✅ Soft delete: mark as inactive instead of deleting
+      const [updated] = await this.drizzle.db
+        .update(products)
+        .set({
+          isActive: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, productId))
+        .returning();
+
+      if (!updated) throw new NotFoundException('Product not found');
+
+      return {
+        message: 'Product marked as inactive (has order history)',
+        product: updated,
+      };
+    }
+
+    // ✅ No orders - safe to delete
     const product = await this.getProductById(productId);
 
     if (product.images && product.images.length > 0) {

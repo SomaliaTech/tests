@@ -18,7 +18,7 @@ import {
   sizes,
   cartItems,
 } from '../drizzle/schema';
-import { eq, and, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, or, like, sql, desc } from 'drizzle-orm'; // ✅ Added or, like
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderDto, AddressDto } from './dto/create-order.dto';
 import { AddToCartDto } from '../products/dto/cart.dto';
@@ -370,7 +370,51 @@ export class OrdersService {
 
     return order;
   }
+  async getAllOrders(search?: string) {
+    // ✅ Simplified query without deep nesting
+    const ordersList = await this.drizzle.db.query.orders.findMany({
+      where:
+        search && search.trim()
+          ? or(
+              like(orders.orderNumber, `%${search.trim()}%`),
+              like(orders.customerName, `%${search.trim()}%`),
+              like(orders.customerEmail, `%${search.trim()}%`),
+            )
+          : undefined,
+      orderBy: [desc(orders.createdAt)],
+      limit: 100, // ✅ Add limit to prevent timeout
+      with: {
+        user: true,
+        items: true, // ✅ Don't nest variant -> product
+      },
+    });
 
+    // ✅ Fetch additional data separately if needed
+    const enrichedOrders = await Promise.all(
+      ordersList.map(async (order) => {
+        const enrichedItems = await Promise.all(
+          order.items.map(async (item) => {
+            if (item.productVariantId) {
+              const variant =
+                await this.drizzle.db.query.productVariants.findFirst({
+                  where: eq(productVariants.id, item.productVariantId),
+                  with: {
+                    product: true,
+                    color: true,
+                    size: true,
+                  },
+                });
+              return { ...item, variant };
+            }
+            return item;
+          }),
+        );
+        return { ...order, items: enrichedItems };
+      }),
+    );
+
+    return enrichedOrders;
+  }
   // ==========================================
   // NOTIFICATION MANAGEMENT
   // ==========================================

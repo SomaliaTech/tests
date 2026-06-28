@@ -51,7 +51,13 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
           IconButton(
             icon: const Icon(Iconsax.edit, color: AppTheme.primaryColor),
             onPressed: () {
-              // In the Edit button onPressed
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      EditProductScreen(productId: this.widget.productId),
+                ),
+              );
             },
           ),
         ],

@@ -73,7 +73,11 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
   Map<String, dynamic> get _orderData {
     return {
       'items': [
-        {'productVariantId': _variantId, 'quantity': widget.quantity},
+        {
+          'productId': widget.product.id, // ✅ ADD THIS
+          'productVariantId': _variantId,
+          'quantity': widget.quantity,
+        },
       ],
       'shippingAddress': {
         'label': widget.address.label,

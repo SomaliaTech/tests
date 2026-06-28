@@ -26,12 +26,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   );
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
 
-  // ✅ Resend timer
   int _resendCooldown = 60;
   Timer? _timer;
   bool _isResending = false;
 
-  // ✅ Animation controllers
   late AnimationController _shakeController;
   late Animation<double> _shakeAnimation;
 
@@ -88,8 +86,21 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
   String get _otpValue => _otpControllers.map((c) => c.text).join();
 
+  // ✅ Handle key events for proper backspace behavior
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event, int index) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.backspace &&
+        _otpControllers[index].text.isEmpty &&
+        index > 0) {
+      // Clear previous field and move focus back
+      _otpControllers[index - 1].clear();
+      _focusNodes[index - 1].requestFocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _onOtpChanged(int index, String value) {
-    // Handle paste of full OTP
     if (value.length > 1) {
       final digits = value.replaceAll(RegExp(r'\D'), '');
       if (digits.length == 6) {
@@ -97,19 +108,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
           _otpControllers[i].text = digits[i];
         }
         _focusNodes[5].requestFocus();
-        // Auto-verify after paste
         _verifyOtp();
         return;
       }
     }
 
+    // Auto-advance to next field when digit entered
     if (value.length == 1 && index < 5) {
       _focusNodes[index + 1].requestFocus();
-    } else if (value.isEmpty && index > 0) {
-      _focusNodes[index - 1].requestFocus();
     }
 
-    // Auto-verify when all 6 digits entered
+    // Auto-verify when all digits are filled
     if (_otpValue.length == 6) {
       Future.delayed(const Duration(milliseconds: 200), () {
         if (mounted) _verifyOtp();
@@ -138,17 +147,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
 
     setState(() => _isResending = true);
 
-    // Extract raw phone number (remove +252 prefix)
     final rawPhone = widget.phoneNumber.replaceAll(RegExp(r'^\+252'), '');
-
     context.read<AuthBloc>().add(SendOtpEvent(rawPhone));
 
-    // Reset timer after resend
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         setState(() => _isResending = false);
         _startResendTimer();
-        // Clear existing OTP
         for (var c in _otpControllers) {
           c.clear();
         }
@@ -163,118 +168,145 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
+  // ✅ Fixed: Proper back navigation
+  void _handleBackNavigation() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      // If can't pop (screen was pushed as replacement), go to phone input
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const PhoneInputScreen()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AuthBloc, AuthState>(
-      listener: (context, state) {
-        if (state is OtpVerified) {
-          HapticFeedback.mediumImpact();
-          if (state.user.hasProfile) {
-            Navigator.pushReplacementNamed(context, '/home');
-          } else {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CompleteProfileScreen(token: state.token),
-              ),
-            );
-          }
-        } else if (state is OtpSent) {
-          // ✅ Handle resend success
-          toastification.show(
-            context: context,
-            title: const Text('✅ OTP Resent'),
-            description: Text('New code: ${state.debugOtp}'),
-            type: ToastificationType.success,
-            autoCloseDuration: const Duration(seconds: 8),
-            style: ToastificationStyle.fillColored,
-          );
-        } else if (state is AuthError) {
-          _triggerShake();
-          toastification.show(
-            context: context,
-            title: const Text('Verification Failed'),
-            description: Text(state.message),
-            type: ToastificationType.error,
-            autoCloseDuration: const Duration(seconds: 3),
-          );
+    // ✅ Get screen dimensions for responsive sizing
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // ✅ Responsive sizing calculations
+    final iconSize = screenWidth < 360 ? 70.0 : 90.0;
+    final iconInnerSize = screenWidth < 360 ? 34.0 : 44.0;
+    final titleSize = screenWidth < 360 ? 22.0 : 26.0;
+    final phoneTextSize = screenWidth < 360 ? 13.0 : 15.0;
+    final otpBoxSize = (screenWidth - 80) / 7; // 6 boxes + gaps
+    final otpFontSize = otpBoxSize * 0.45;
+    final buttonHeight = screenWidth < 360 ? 48.0 : 56.0;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _handleBackNavigation();
         }
       },
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        body: SafeArea(
-          child: Column(
-            children: [
-              // ✅ Modern Header with Gradient
-              _buildHeader(),
+      child: BlocListener<AuthBloc, AuthState>(
+        listener: (context, state) {
+          if (state is OtpVerified) {
+            HapticFeedback.mediumImpact();
+            if (state.user.hasProfile) {
+              Navigator.pushReplacementNamed(context, '/home');
+            } else {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CompleteProfileScreen(token: state.token),
+                ),
+              );
+            }
+          } else if (state is OtpSent) {
+            toastification.show(
+              context: context,
+              title: const Text('✅ OTP Resent'),
+              description: Text('New code: ${state.debugOtp}'),
+              type: ToastificationType.success,
+              autoCloseDuration: const Duration(seconds: 8),
+              style: ToastificationStyle.fillColored,
+            );
+          } else if (state is AuthError) {
+            _triggerShake();
+            toastification.show(
+              context: context,
+              title: const Text('Verification Failed'),
+              description: Text(state.message),
+              type: ToastificationType.error,
+              autoCloseDuration: const Duration(seconds: 3),
+            );
+          }
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF8F9FA),
+          body: SafeArea(
+            child: Column(
+              children: [
+                _buildHeader(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: screenWidth < 360 ? 16 : 24,
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: screenHeight * 0.03),
 
-              // ✅ Content
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 32),
+                        // ✅ Responsive icon
+                        _buildIcon(iconSize, iconInnerSize),
 
-                      // ✅ Icon with animation
-                      _buildIcon(),
+                        SizedBox(height: screenHeight * 0.025),
 
-                      const SizedBox(height: 24),
-
-                      // ✅ Title
-                      const Text(
-                        'Verification Code',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1F2937),
-                          letterSpacing: -0.5,
+                        Text(
+                          'Verification Code',
+                          style: TextStyle(
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF1F2937),
+                            letterSpacing: -0.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
 
-                      // ✅ Phone number display with change option
-                      _buildPhoneDisplay(),
+                        _buildPhoneDisplay(phoneTextSize),
 
-                      const SizedBox(height: 36),
+                        SizedBox(height: screenHeight * 0.035),
 
-                      // ✅ OTP Input Fields
-                      AnimatedBuilder(
-                        animation: _shakeAnimation,
-                        builder: (context, child) {
-                          final shakeValue = _shakeAnimation.value;
-                          final translateX = shakeValue > 0
-                              ? (shakeValue *
-                                    10 *
-                                    ((shakeValue * 10).toInt() % 2 == 0
-                                        ? 1
-                                        : -1))
-                              : 0.0;
-                          return Transform.translate(
-                            offset: Offset(translateX, 0),
-                            child: child,
-                          );
-                        },
-                        child: _buildOtpInputs(),
-                      ),
+                        AnimatedBuilder(
+                          animation: _shakeAnimation,
+                          builder: (context, child) {
+                            final shakeValue = _shakeAnimation.value;
+                            final translateX = shakeValue > 0
+                                ? (shakeValue *
+                                      10 *
+                                      ((shakeValue * 10).toInt() % 2 == 0
+                                          ? 1
+                                          : -1))
+                                : 0.0;
+                            return Transform.translate(
+                              offset: Offset(translateX, 0),
+                              child: child,
+                            );
+                          },
+                          // ✅ Responsive OTP inputs
+                          child: _buildOtpInputs(otpBoxSize, otpFontSize),
+                        ),
 
-                      const SizedBox(height: 32),
+                        SizedBox(height: screenHeight * 0.03),
 
-                      // ✅ Verify Button
-                      _buildVerifyButton(),
+                        _buildVerifyButton(buttonHeight),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 24),
 
-                      // ✅ Resend Section
-                      _buildResendSection(),
+                        _buildResendSection(),
 
-                      const SizedBox(height: 24),
-                    ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -287,10 +319,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          // Back button
-          // This is already correct in otp_verification_screen.dart:
           GestureDetector(
-            onTap: () => Navigator.pop(context), // ✅ This will now work!
+            onTap: _handleBackNavigation, // ✅ Fixed: Use proper back handler
             child: Container(
               width: 44,
               height: 44,
@@ -313,7 +343,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
             ),
           ),
           const Spacer(),
-          // Progress indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -343,10 +372,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     );
   }
 
-  Widget _buildIcon() {
+  // ✅ Responsive icon
+  Widget _buildIcon(double size, double innerIconSize) {
     return Container(
-      width: 90,
-      height: 90,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
@@ -362,13 +392,14 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
           ),
         ],
       ),
-      child: const Icon(Iconsax.sms, size: 44, color: Colors.white),
+      child: Icon(Iconsax.sms, size: innerIconSize, color: Colors.white),
     );
   }
 
-  Widget _buildPhoneDisplay() {
+  // ✅ Responsive phone display
+  Widget _buildPhoneDisplay(double fontSize) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -382,7 +413,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -393,17 +423,19 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
             child: const Icon(Iconsax.call, color: Color(0xFF2ED573), size: 18),
           ),
           const SizedBox(width: 12),
-          Text(
-            widget.phoneNumber,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1F2937),
-              letterSpacing: 0.5,
+          Expanded(
+            child: Text(
+              widget.phoneNumber,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1F2937),
+                letterSpacing: 0.5,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 12),
-          // ✅ Change number button
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: () {
               Navigator.pushReplacement(
@@ -439,67 +471,73 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     );
   }
 
-  Widget _buildOtpInputs() {
+  // ✅ Fully responsive OTP inputs with proper backspace handling
+  Widget _buildOtpInputs(double boxSize, double fontSize) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(6, (index) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: 48,
-          height: 56,
-          child: TextField(
-            controller: _otpControllers[index],
-            focusNode: _focusNodes[index],
-            keyboardType: TextInputType.number,
-            maxLength: 1,
-            textAlign: TextAlign.center,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1F2937),
+        return Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            height: boxSize * 1.15,
+            child: Focus(
+              onKeyEvent: (node, event) => _handleKeyEvent(node, event, index),
+              child: TextField(
+                controller: _otpControllers[index],
+                focusNode: _focusNodes[index],
+                keyboardType: TextInputType.number,
+                maxLength: 1,
+                textAlign: TextAlign.center,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1F2937),
+                ),
+                decoration: InputDecoration(
+                  counterText: '',
+                  contentPadding: EdgeInsets.zero,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFE5E7EB),
+                      width: 2,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFE5E7EB),
+                      width: 2,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF2ED573),
+                      width: 2.5,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                onChanged: (value) => _onOtpChanged(index, value),
+              ),
             ),
-            decoration: InputDecoration(
-              counterText: '',
-              contentPadding: EdgeInsets.zero,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                  color: Color(0xFFE5E7EB),
-                  width: 2,
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                  color: Color(0xFFE5E7EB),
-                  width: 2,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                  color: Color(0xFF2ED573),
-                  width: 2.5,
-                ),
-              ),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            onChanged: (value) => _onOtpChanged(index, value),
           ),
         );
       }),
     );
   }
 
-  Widget _buildVerifyButton() {
+  // ✅ Responsive button
+  Widget _buildVerifyButton(double height) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         final isLoading = state is AuthLoading;
         return SizedBox(
           width: double.infinity,
-          height: 56,
+          height: height,
           child: ElevatedButton(
             onPressed: isLoading ? null : _verifyOtp,
             style: ElevatedButton.styleFrom(
@@ -561,7 +599,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
         ),
         const SizedBox(height: 12),
         if (_resendCooldown > 0)
-          // ✅ Countdown timer
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -585,7 +622,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
             ),
           )
         else
-          // ✅ Resend button
           GestureDetector(
             onTap: _isResending ? null : _resendOtp,
             child: Container(

@@ -216,6 +216,7 @@ class PaymentSuccessPage extends StatelessWidget {
                     const SizedBox(height: 16),
 
                     // Order Number
+                    // Find this section (Order Number container):
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -237,12 +238,18 @@ class PaymentSuccessPage extends StatelessWidget {
                               color: Color(0xFF6B7280),
                             ),
                           ),
-                          Text(
-                            '#$orderId',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1F2937),
+                          // ❌ OLD: Text('#$orderId', ...) — overflows!
+                          // ✅ NEW: Use Flexible + overflow ellipsis
+                          Flexible(
+                            child: Text(
+                              '#$orderId',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1F2937),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         ],

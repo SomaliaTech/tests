@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/profile/domain/entities/market.dart';
 import 'package:mobile/features/profile/domain/usecases/get_markets.dart';
 import 'package:toastification/toastification.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../bloc/profile_bloc.dart';
 import '../bloc/profile_event.dart';
 import '../bloc/profile_state.dart';
@@ -30,12 +31,42 @@ class _ProfileViewState extends State<ProfileView> {
   String? _currentMarketId;
   bool _marketsLoaded = false;
   bool _profileLoaded = false;
-
+  static const String _whatsappNumber = '+252686330033';
   @override
   void initState() {
     super.initState();
     context.read<ProfileBloc>().add(LoadProfileEvent());
     _loadMarkets();
+  }
+
+  Future<void> _openWhatsApp() async {
+    final Uri whatsappUri = Uri(
+      scheme: 'https',
+      host: 'wa.me',
+      path: _whatsappNumber,
+      queryParameters: {'text': 'Asc! Waxan rabaa cawinaad...'},
+    );
+
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+        debugPrint('✅ WhatsApp opened for: $_whatsappNumber');
+      } else {
+        debugPrint('❌ WhatsApp not available');
+        // Optional: Fallback to web WhatsApp
+        final Uri webWhatsappUri = Uri.parse(
+          'https://web.whatsapp.com/send?phone=$_whatsappNumber&text=Hello!%20I%20need%20help%20with...',
+        );
+        if (await canLaunchUrl(webWhatsappUri)) {
+          await launchUrl(webWhatsappUri, mode: LaunchMode.externalApplication);
+          debugPrint('✅ Opened WhatsApp Web');
+        } else {
+          debugPrint('❌ WhatsApp Web also unavailable');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error launching WhatsApp: $e');
+    }
   }
 
   Future<void> _loadMarkets() async {
@@ -261,7 +292,7 @@ class _ProfileViewState extends State<ProfileView> {
                               isUpdating: state is ProfileLoading,
                             ),
                             WarningSection(
-                              onWhatsAppPressed: () {},
+                              onWhatsAppPressed: _openWhatsApp,
                               onDeletePressed: () {
                                 _showConfirmationDialog(
                                   'Delete Account',

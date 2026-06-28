@@ -8,6 +8,7 @@ import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_prod
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_state.dart';
 import 'package:mobile/features/admin/presentation/screens/add_product_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_product_details_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/edit_product_screen.dart';
 
 class AdminProductsScreen extends StatefulWidget {
   const AdminProductsScreen({super.key});
@@ -50,12 +51,10 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left_2, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
+
         title: const Text(
           'Products',
           style: TextStyle(
@@ -64,7 +63,7 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Iconsax.add, color: AppTheme.primaryColor),
@@ -345,7 +344,13 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                     size: 20,
                   ),
                   onPressed: () {
-                    // Navigate to edit screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            EditProductScreen(productId: product.id),
+                      ),
+                    );
                   },
                 ),
                 IconButton(
