@@ -1,3 +1,4 @@
+// drizzle/schema.ts
 import {
   decimal,
   integer,
@@ -7,10 +8,10 @@ import {
   timestamp,
   boolean,
   text,
-  uniqueIndex,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
-import { relations, sql } from 'drizzle-orm';
+import { relations } from 'drizzle-orm';
 
 // ==========================================
 // CATEGORY TABLE
@@ -24,13 +25,76 @@ export const categories = pgTable(
     description: text('description'),
     iconId: uuid('icon_id').unique(),
     parentId: uuid('parent_id'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     parentIdx: index('category_parent_idx').on(table.parentId),
     slugIdx: index('category_slug_idx').on(table.slug),
     nameIdx: index('category_name_idx').on(table.name),
+    activeIdx: index('category_active_idx').on(table.isActive),
+  }),
+);
+
+// ==========================================
+// BANNERS TABLE
+// ==========================================
+export const banners = pgTable(
+  'banners',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    title: varchar('title', { length: 255 }).notNull(),
+    subtitle: varchar('subtitle', { length: 500 }),
+    imageUrl: varchar('image_url', { length: 500 }).notNull(),
+    buttonText: varchar('button_text', { length: 100 }),
+    actionLink: varchar('action_link', { length: 500 }),
+    backgroundColor: varchar('background_color', { length: 50 }),
+    gradientStart: varchar('gradient_start', { length: 50 }),
+    gradientEnd: varchar('gradient_end', { length: 50 }),
+    isActive: boolean('is_active').default(true),
+    order: integer('order').default(0),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    activeIdx: index('banner_active_idx').on(table.isActive),
+    orderIdx: index('banner_order_idx').on(table.order),
+  }),
+);
+
+// ==========================================
+// FAQ TABLE
+// ==========================================
+export const faqs = pgTable(
+  'faqs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    question: varchar('question', { length: 500 }).notNull(),
+    answer: text('answer').notNull(),
+    category: varchar('category', { length: 100 }),
+    order: integer('order').default(0),
+    isActive: boolean('is_active').default(true),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    activeIdx: index('faq_active_idx').on(table.isActive),
+    orderIdx: index('faq_order_idx').on(table.order),
   }),
 );
 
@@ -58,8 +122,12 @@ export const products = pgTable(
     tags: text('tags'),
     seoTitle: varchar('seo_title', { length: 255 }),
     seoDescription: text('seo_description'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     categoryIdx: index('products_category_idx').on(table.categoryId),
@@ -84,8 +152,12 @@ export const mediaAssets = pgTable(
     isMain: boolean('is_main').default(false),
     altText: varchar('alt_text', { length: 255 }),
     order: integer('order').default(0),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     productIdx: index('media_product_idx').on(table.productId),
@@ -99,8 +171,12 @@ export const colors = pgTable('colors', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 100 }).notNull().unique(),
   code: varchar('code', { length: 50 }).notNull().unique(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 // ==========================================
@@ -110,12 +186,16 @@ export const sizes = pgTable('sizes', {
   id: uuid('id').defaultRandom().primaryKey(),
   name: varchar('name', { length: 100 }).notNull().unique(),
   value: varchar('value', { length: 50 }).notNull().unique(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 // ==========================================
-// PRODUCT VARIANTS TABLE ✅ FIXED
+// PRODUCT VARIANTS TABLE
 // ==========================================
 export const productVariants = pgTable(
   'product_variants',
@@ -124,33 +204,23 @@ export const productVariants = pgTable(
     productId: uuid('product_id')
       .notNull()
       .references(() => products.id, { onDelete: 'cascade' }),
-    colorId: uuid('color_id')
-      .notNull()
-      .references(() => colors.id),
-    sizeId: uuid('size_id')
-      .notNull()
-      .references(() => sizes.id),
+    colorId: uuid('color_id').references(() => colors.id),
+    sizeId: uuid('size_id').references(() => sizes.id),
     sku: varchar('sku', { length: 100 }),
     stock: integer('stock').notNull().default(0),
-    price: decimal('price', { precision: 10, scale: 2 }), // ✅ Nullable
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
+    price: decimal('price', { precision: 10, scale: 2 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     productIdx: index('variant_product_idx').on(table.productId),
     colorIdx: index('variant_color_idx').on(table.colorId),
     sizeIdx: index('variant_size_idx').on(table.sizeId),
-    // ✅ Prevent duplicate color+size combinations per product
-    uniqueVariant: uniqueIndex('unique_product_variant').on(
-      table.productId,
-      table.colorId,
-      table.sizeId,
-    ),
   }),
 );
 
 // ==========================================
-// USERS TABLE
+// USERS TABLE (FIXED - REMOVED GIN INDEXES)
 // ==========================================
 export const users = pgTable(
   'users',
@@ -162,19 +232,30 @@ export const users = pgTable(
     profileImage: varchar('profile_image', { length: 500 }),
     marketId: uuid('market_id'),
     isVerified: boolean('is_verified').default(false),
-    otpCode: varchar('otp_code', { length: 6 }),
-    otpExpiresAt: timestamp('otp_expires_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
     isAdmin: boolean('is_admin').default(false),
+    isSuperAdmin: boolean('is_super_admin').default(false),
+    isActive: boolean('is_active').default(true),
     isOnline: boolean('is_online').default(false),
-    lastSeen: timestamp('last_seen'),
+    lastSeen: timestamp('last_seen', { withTimezone: true }),
+    otpCode: varchar('otp_code', { length: 6 }),
+    otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
     marketIdIdx: index('users_market_id_idx').on(table.marketId),
-    isAdminIdx: index('idx_users_admin').on(table.isAdmin),
-    isOnlineIdx: index('idx_users_online').on(table.isOnline),
+    adminActiveIdx: index('idx_users_admin_active').on(
+      table.isAdmin,
+      table.isSuperAdmin,
+      table.isActive,
+    ),
+    onlineIdx: index('idx_users_online').on(table.isOnline),
+    activeIdx: index('idx_users_active').on(table.isActive),
   }),
 );
 
@@ -191,12 +272,16 @@ export const deviceTokens = pgTable(
     token: varchar('token', { length: 500 }).notNull().unique(),
     platform: varchar('platform', { length: 20 }).notNull(),
     isActive: boolean('is_active').default(true),
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     userIdIdx: index('device_tokens_user_idx').on(table.userId),
     tokenIdx: index('device_tokens_token_idx').on(table.token),
+    activeIdx: index('idx_device_tokens_active').on(
+      table.userId,
+      table.isActive,
+    ),
   }),
 );
 
@@ -214,8 +299,12 @@ export const addresses = pgTable(
     fullAddress: text('full_address').notNull(),
     phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
     isDefault: boolean('is_default').default(false),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     userIdIdx: index('address_user_idx').on(table.userId),
@@ -231,8 +320,12 @@ export const markets = pgTable('markets', {
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   city: varchar('city', { length: 255 }),
   isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 // ==========================================
@@ -253,8 +346,12 @@ export const orders = pgTable(
     paymentMethod: varchar('payment_method', { length: 50 }),
     notes: text('notes'),
     userId: uuid('user_id').references(() => users.id),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     statusIdx: index('order_status_idx').on(table.status),
@@ -281,17 +378,22 @@ export const conversations = pgTable(
     lastMessageType: varchar('last_message_type', { length: 20 }).default(
       'text',
     ),
-    lastMessageAt: timestamp('last_message_at').defaultNow(),
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
+    lastMessageAt: timestamp('last_message_at', {
+      withTimezone: true,
+    }).defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    uniqueParticipants: uniqueIndex('unique_conversation_participants').on(
-      sql`LEAST(${table.participant1}, ${table.participant2})`,
-      sql`GREATEST(${table.participant1}, ${table.participant2})`,
-    ),
     participant1Idx: index('idx_conversation_p1').on(table.participant1),
     participant2Idx: index('idx_conversation_p2').on(table.participant2),
+    lastMessageIdx: index('idx_conversation_last_message').on(
+      table.lastMessageAt.desc(),
+    ),
+    participantsIdx: index('idx_conversation_participants').on(
+      table.participant1,
+      table.participant2,
+    ),
   }),
 );
 
@@ -315,22 +417,35 @@ export const messages = pgTable(
     type: varchar('type', { length: 20 }).notNull().default('text'),
     mediaUrl: text('media_url'),
     isRead: boolean('is_read').default(false),
-    readAt: timestamp('read_at'),
-    createdAt: timestamp('created_at').defaultNow(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
-    conversationIdx: index('idx_messages_conversation').on(
+    conversationCreatedIdx: index('idx_messages_conversation_created').on(
       table.conversationId,
       table.createdAt.desc(),
     ),
     senderIdx: index('idx_messages_sender').on(table.senderId),
     receiverIdx: index('idx_messages_receiver').on(table.receiverId),
-    unreadIdx: index('idx_messages_unread').on(table.receiverId, table.isRead),
+    readStatusIdx: index('idx_messages_read_status').on(
+      table.conversationId,
+      table.receiverId,
+      table.isRead,
+    ),
+    receiverReadIdx: index('idx_messages_receiver_read').on(
+      table.receiverId,
+      table.isRead,
+    ),
   }),
 );
 
 // ==========================================
-// CART ITEMS TABLE ✅ FIXED
+// CART ITEMS TABLE
 // ==========================================
 export const cartItems = pgTable(
   'cart_items',
@@ -340,15 +455,19 @@ export const cartItems = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     productId: uuid('product_id')
-      .notNull() // ✅ Now required
+      .notNull()
       .references(() => products.id, { onDelete: 'cascade' }),
     productVariantId: uuid('product_variant_id').references(
       () => productVariants.id,
       { onDelete: 'cascade' },
     ),
     quantity: integer('quantity').notNull().default(1),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     userIdIdx: index('cart_user_id_idx').on(table.userId),
@@ -380,7 +499,9 @@ export const orderItems = pgTable(
     unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
     quantity: integer('quantity').notNull(),
     totalPrice: decimal('total_price', { precision: 10, scale: 2 }).notNull(),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     orderIdx: index('order_item_order_idx').on(table.orderId),
@@ -404,8 +525,12 @@ export const paymentTransactions = pgTable(
     paymentMethod: varchar('payment_method', { length: 50 }).notNull(),
     status: varchar('status', { length: 50 }).notNull().default('PENDING'),
     paymentDetails: text('payment_details'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     orderIdIdx: index('payment_order_id_idx').on(table.orderId),
@@ -417,7 +542,7 @@ export const paymentTransactions = pgTable(
 );
 
 // ==========================================
-// NOTIFICATIONS TABLE
+// NOTIFICATIONS TABLE (FIXED - REMOVED PARTIAL INDEX)
 // ==========================================
 export const notifications = pgTable(
   'notifications',
@@ -432,7 +557,9 @@ export const notifications = pgTable(
     isRead: boolean('is_read').default(false),
     actionText: varchar('action_text', { length: 100 }),
     actionLink: varchar('action_link', { length: 500 }),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
   },
   (table) => ({
     userIdIdx: index('notification_user_idx').on(table.userId),
@@ -442,7 +569,43 @@ export const notifications = pgTable(
 );
 
 // ==========================================
-// 🚀 RELATIONS ✅ FIXED
+// REVIEWS TABLE
+// ==========================================
+export const reviews = pgTable(
+  'reviews',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id),
+    rating: integer('rating').notNull(),
+    title: varchar('title', { length: 200 }),
+    comment: text('comment'),
+    isVerifiedPurchase: boolean('is_verified_purchase').default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    uniqueUserProduct: uniqueIndex('review_user_product_idx').on(
+      table.userId,
+      table.productId,
+    ),
+    productIdx: index('review_product_idx').on(table.productId),
+  }),
+);
+
+// ==========================================
+// 🚀 RELATIONS
 // ==========================================
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -466,8 +629,9 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   images: many(mediaAssets),
   variants: many(productVariants),
-  cartItems: many(cartItems), // ✅ Added
-  orderItems: many(orderItems), // ✅ Added
+  cartItems: many(cartItems),
+  orderItems: many(orderItems),
+  reviews: many(reviews),
 }));
 
 export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
@@ -477,7 +641,6 @@ export const mediaAssetsRelations = relations(mediaAssets, ({ one }) => ({
   }),
 }));
 
-// ✅ FIXED: Removed non-existent imageId reference
 export const productVariantsRelations = relations(
   productVariants,
   ({ one, many }) => ({
@@ -512,6 +675,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   receivedMessages: many(messages, { relationName: 'receiver' }),
   conversationsAsP1: many(conversations, { relationName: 'participant1' }),
   conversationsAsP2: many(conversations, { relationName: 'participant2' }),
+  reviews: many(reviews),
 }));
 
 export const addressesRelations = relations(addresses, ({ one }) => ({
@@ -532,7 +696,6 @@ export const marketsRelations = relations(markets, ({ many }) => ({
   users: many(users),
 }));
 
-// ✅ FIXED: Removed invalid relationName
 export const cartItemsRelations = relations(cartItems, ({ one }) => ({
   user: one(users, {
     fields: [cartItems.userId],
@@ -623,5 +786,20 @@ export const messagesRelations = relations(messages, ({ one }) => ({
     fields: [messages.receiverId],
     references: [users.id],
     relationName: 'receiver',
+  }),
+}));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  product: one(products, {
+    fields: [reviews.productId],
+    references: [products.id],
+  }),
+  user: one(users, {
+    fields: [reviews.userId],
+    references: [users.id],
+  }),
+  order: one(orders, {
+    fields: [reviews.orderId],
+    references: [orders.id],
   }),
 }));

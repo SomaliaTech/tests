@@ -99,6 +99,20 @@
       "when": 1782583730551,
       "tag": "0013_furry_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783402791151,
+      "tag": "0014_chilly_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783404495055,
+      "tag": "0015_previous_vengeance",
+      "breakpoints": true
     }
   ]
 }

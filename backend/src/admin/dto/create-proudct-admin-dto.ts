@@ -131,3 +131,57 @@ export class CreateProductAdminDto {
   })
   variants?: CreateVariantDto[];
 }
+// src/admin/dto/create-proudct-admin-dto.ts (or update-product.dto.ts)
+
+export class UpdateProductAdminDto {
+  @ApiProperty({ required: false })
+  name?: string;
+
+  @ApiProperty({ required: false })
+  description?: string;
+
+  @ApiProperty({ required: false })
+  price?: number;
+
+  @ApiProperty({ required: false })
+  stock?: number;
+
+  @ApiProperty({ required: false })
+  categoryId?: string;
+
+  @ApiProperty({ required: false })
+  brand?: string;
+
+  @ApiProperty({ required: false })
+  tags?: string;
+
+  @ApiProperty({ required: false })
+  isActive?: boolean;
+
+  // ✅ New fields for variant/image management
+  @ApiProperty({ required: false, type: [String] })
+  deleted_image_ids?: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  deleted_variant_ids?: string[];
+
+  @ApiProperty({ required: false, type: [Object] })
+  existing_variants?: Array<{
+    variantId?: string;
+    id?: string;
+    colorId?: string;
+    sizeId?: string;
+    sku?: string;
+    stock?: number;
+    price?: number;
+  }>;
+
+  @ApiProperty({ required: false, type: [Object] })
+  new_variants?: Array<{
+    colorId: string;
+    sizeId: string;
+    sku?: string;
+    stock?: number;
+    price?: number;
+  }>;
+}

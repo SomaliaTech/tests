@@ -3,13 +3,15 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { CloudflareModule } from '../cloudfare/cloudflare.module';
-import { ChatModule } from '../chat/chat.module'; // ✅ Import ChatModule
+import { ChatModule } from '../chat/chat.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     DrizzleModule,
     CloudflareModule,
-    forwardRef(() => ChatModule), // ✅ Use forwardRef to avoid circular dependency
+    forwardRef(() => ChatModule),
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [AdminController],
   providers: [AdminService],

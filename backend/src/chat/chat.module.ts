@@ -7,7 +7,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { FirebaseModule } from '../firebase/firebase.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { AdminModule } from '../admin/admin.module'; // ✅ Import
+import { AdminModule } from '../admin/admin.module';
+import { SupabaseModule } from 'src/supabase/supabase.module';
 
 @Module({
   imports: [
@@ -20,12 +21,13 @@ import { AdminModule } from '../admin/admin.module'; // ✅ Import
       }),
       inject: [ConfigService],
     }),
+    SupabaseModule,
     FirebaseModule,
-    NotificationsModule,
-    forwardRef(() => AdminModule), // ✅ Use forwardRef
+    forwardRef(() => AdminModule),
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway],
-  exports: [ChatService, ChatGateway, JwtModule], // ✅ Export ChatGateway
+  exports: [ChatService, ChatGateway, JwtModule],
 })
 export class ChatModule {}

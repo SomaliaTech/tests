@@ -1,4 +1,9 @@
-import { Logger } from '@nestjs/common';
+import {
+  Logger,
+  Inject,
+  forwardRef,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
 import {
   WebSocketGateway,
   SubscribeMessage,
@@ -12,10 +17,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ChatService } from './chat.service';
-import { FirebaseService } from '../firebase/firebase.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { CreateNotificationDto } from '../notifications/dto/notification.dto';
-import { NotificationType } from 'src/notifications/notification.entity';
+import { NotificationType } from '../notifications/notification.entity';
 
 interface SocketMeta {
   userId: string;
@@ -56,19 +59,27 @@ interface JwtPayload {
   maxHttpBufferSize: 1e6,
 })
 export class ChatGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+  implements
+    OnGatewayInit,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
+    OnApplicationBootstrap
 {
   @WebSocketServer()
   server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
-  private readonly userSockets = new Map<string, Set<string>>();
+
+  // In-memory storage to replace Redis
   private readonly socketMeta = new Map<string, SocketMeta>();
+  private readonly onlineUsers = new Set<string>();
+  private readonly userSockets = new Map<string, Set<string>>();
+  private readonly socketTTLs = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
-    private readonly firebaseService: FirebaseService,
+    @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
   ) {}
 
@@ -76,15 +87,30 @@ export class ChatGateway
   // LIFECYCLE HOOKS
   // ==========================================
 
-  async afterInit(): Promise<void> {
-    this.logger.log('🚀 Chat Gateway initialized');
+  afterInit(): void {
+    this.logger.log('🚀 Chat Gateway WebSocket initialized (In-Memory Mode)');
+  }
 
-    // Reset all users to offline on server startup
-    await this.chatService.resetAllOnlineStatuses();
+  async onApplicationBootstrap(): Promise<void> {
+    this.logger.log('🚀 Application bootstrap - all modules ready');
 
-    // Cleanup stale connections every 60 seconds
+    try {
+      // Reset all online statuses in the database
+      await this.chatService.resetAllOnlineStatuses();
+      this.logger.log('✅ Reset all online statuses successfully');
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Failed to reset online statuses: ${errorMessage}`);
+    }
+
+    // Cleanup stale connections periodically
     setInterval(() => this.cleanupStaleConnections(), 60000);
   }
+
+  // ==========================================
+  // CONNECTION HANDLERS
+  // ==========================================
 
   async handleConnection(client: Socket): Promise<void> {
     try {
@@ -93,32 +119,33 @@ export class ChatGateway
         this.disconnectWithError(client, 'Authentication required');
         return;
       }
-      const payload: JwtPayload = this.jwtService.verify(token);
 
+      const payload: JwtPayload = this.jwtService.verify(token);
       const userId = String(payload.sub || payload.userId || '');
       const isAdmin = Boolean(payload.isAdmin);
-
-      console.log(
-        `🔑 [WS Auth] userId: ${userId}, isAdmin: ${isAdmin}, payload:`,
-        payload,
-      );
 
       if (!userId) {
         this.disconnectWithError(client, 'Invalid user ID in token');
         return;
       }
 
-      // Store socket metadata
+      // Store socket metadata locally
       this.socketMeta.set(client.id, { userId, isAdmin });
 
-      // Track user sockets
+      // Track socket in memory
       if (!this.userSockets.has(userId)) {
         this.userSockets.set(userId, new Set());
       }
-      const userSocketSet = this.userSockets.get(userId);
-      if (userSocketSet) {
-        userSocketSet.add(client.id);
+      this.userSockets.get(userId)!.add(client.id);
+
+      // Track online user
+      const wasOffline = !this.onlineUsers.has(userId);
+      if (wasOffline) {
+        this.onlineUsers.add(userId);
       }
+
+      // Start TTL timer for this user
+      this.startSocketTTL(userId, client.id);
 
       // Join rooms
       await client.join(`user:${userId}`);
@@ -127,10 +154,8 @@ export class ChatGateway
       }
 
       // Update online status if first connection
-      const connections = this.userSockets.get(userId);
-      if (connections && connections.size === 1) {
+      if (wasOffline) {
         await this.chatService.updateUserStatus(userId, true);
-        // ✅ Use targeted broadcast instead of global emit
         await this.broadcastStatusToConversations(userId, true);
         this.logger.log(`🟢 User ${userId} online`);
       }
@@ -162,17 +187,21 @@ export class ChatGateway
     // Clean up socket metadata
     this.socketMeta.delete(client.id);
 
-    // Clean up user sockets
-    const userConnections = this.userSockets.get(userId);
-    if (userConnections) {
-      userConnections.delete(client.id);
+    // Remove socket from memory
+    const sockets = this.userSockets.get(userId);
+    if (sockets) {
+      sockets.delete(client.id);
 
-      if (userConnections.size === 0) {
-        this.userSockets.delete(userId);
+      // Clear TTL for this socket
+      this.clearSocketTTL(client.id);
 
+      // Check if user has any remaining sockets
+      if (sockets.size === 0) {
         // User is fully offline
+        this.userSockets.delete(userId);
+        this.onlineUsers.delete(userId);
+
         await this.chatService.updateUserStatus(userId, false);
-        // ✅ Use targeted broadcast instead of global emit
         await this.broadcastStatusToConversations(
           userId,
           false,
@@ -187,8 +216,35 @@ export class ChatGateway
   }
 
   // ==========================================
-  // MESSAGE HANDLERS
+  // WEBSOCKET EVENT HANDLERS
   // ==========================================
+
+  @SubscribeMessage('heartbeat')
+  handleHeartbeat(@ConnectedSocket() client: Socket): void {
+    const meta = this.socketMeta.get(client.id);
+    if (meta) {
+      this.refreshSocketTTL(meta.userId, client.id);
+    }
+  }
+
+  @SubscribeMessage('typing')
+  handleTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { receiverId: string; isTyping: boolean },
+  ): void {
+    const sender = this.socketMeta.get(client.id);
+    if (!sender) return;
+
+    try {
+      // Broadcast typing status to the receiver
+      this.server.to(`user:${data.receiverId}`).emit('typing', {
+        senderId: sender.userId,
+        isTyping: data.isTyping,
+      });
+    } catch (error) {
+      this.logger.error(`Typing event error: ${error}`);
+    }
+  }
 
   @SubscribeMessage('send_message')
   async handleMessage(
@@ -205,7 +261,6 @@ export class ChatGateway
     }
 
     try {
-      // Validate
       if (!data.receiverId) {
         throw new Error('Receiver ID is required');
       }
@@ -213,6 +268,8 @@ export class ChatGateway
       if (data.type === 'text' && !data.content?.trim()) {
         throw new Error('Message content is required');
       }
+
+      this.refreshSocketTTL(sender.userId, client.id);
 
       // Send message via service
       const message = await this.chatService.sendMessage(
@@ -226,25 +283,43 @@ export class ChatGateway
       // Confirm to sender
       client.emit('message_sent', message);
 
-      // Send to receiver via WebSocket
-      this.server.to(`user:${data.receiverId}`).emit('new_message', message);
+      // Check if receiver is online using in-memory storage
+      const isReceiverOnline = this.isUserOnline(data.receiverId);
 
-      // Send push notification
-      await this.sendPushNotification(
-        sender.userId,
-        data.receiverId,
-        data.content,
-        data.type || 'text',
-        message.id,
-      );
+      if (isReceiverOnline) {
+        // User is online - send via WebSocket only
+        this.server.to(`user:${data.receiverId}`).emit('new_message', message);
+        this.logger.debug(
+          `📨 Message sent via WebSocket to online user: ${data.receiverId}`,
+        );
+      } else {
+        // User is offline - send push notification
+        const senderUser = await this.chatService.getUserById(sender.userId);
+        const senderName = senderUser?.name || 'Someone';
 
-      // Create in-app notification
-      await this.createInAppNotification(
-        sender.userId,
-        data.receiverId,
-        data.content,
-        data.type || 'text',
-      );
+        const notificationBody = this.getNotificationBody(data);
+
+        try {
+          await this.notificationsService.create({
+            userId: data.receiverId,
+            type: NotificationType.MESSAGE,
+            title: `New message from ${senderName}`,
+            message: notificationBody,
+            actionText: 'Reply',
+            actionLink: `/chat/${sender.userId}`,
+          });
+          this.logger.log(
+            `📨 Push notification sent to offline user: ${data.receiverId}`,
+          );
+        } catch (error) {
+          this.logger.error(
+            `Push notification failed for ${data.receiverId}: ${error}`,
+          );
+        }
+
+        // Still emit WebSocket event for multi-device scenarios
+        this.server.to(`user:${data.receiverId}`).emit('new_message', message);
+      }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -266,9 +341,26 @@ export class ChatGateway
         user.userId,
         data.chatPartnerId,
       );
+
       this.logger.log(
         `✅ Marked ${result.count} messages as read: ${user.userId} → ${data.chatPartnerId}`,
       );
+
+      // Emit to partner for read receipts
+      this.server.to(`user:${data.chatPartnerId}`).emit('message_read', {
+        readerId: user.userId,
+        conversationId: result.conversationId,
+        count: result.count,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Confirm to the reader
+      client.emit('message_read', {
+        readerId: user.userId,
+        conversationId: result.conversationId,
+        count: result.count,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -277,12 +369,11 @@ export class ChatGateway
   }
 
   @SubscribeMessage('check_status')
-  handleStatusCheck(
+  async handleStatusCheck(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: StatusCheckData,
-  ): void {
-    const userConnections = this.userSockets.get(data.partnerId);
-    const isOnline = userConnections ? userConnections.size > 0 : false;
+  ): Promise<void> {
+    const isOnline = this.isUserOnline(data.partnerId);
 
     client.emit('partner_status', {
       userId: data.partnerId,
@@ -295,81 +386,82 @@ export class ChatGateway
   // ==========================================
 
   isUserOnline(userId: string): boolean {
-    const connections = this.userSockets.get(userId);
-    return connections ? connections.size > 0 : false;
+    const sockets = this.userSockets.get(userId);
+    return sockets ? sockets.size > 0 : false;
+  }
+
+  getOnlineUsers(): string[] {
+    return Array.from(this.onlineUsers);
   }
 
   // ==========================================
   // PRIVATE HELPERS
   // ==========================================
 
-  // ✅ NEW: Targeted broadcast to only relevant partners
+  private getNotificationBody(data: SendMessageData): string {
+    switch (data.type) {
+      case 'image':
+        return '📷 Photo';
+      case 'file':
+        return '📎 File';
+      default:
+        return data.content?.substring(0, 100) || 'New message';
+    }
+  }
+
   private async broadcastStatusToConversations(
     userId: string,
     isOnline: boolean,
     lastSeen?: string,
   ): Promise<void> {
     try {
-      const partnerIds: string[] = [];
+      const partnerIds = new Set<string>();
 
-      // Get user conversations (works for both regular users and admins)
-      try {
-        const userConversations =
-          await this.chatService.getUserConversations(userId);
-        userConversations.forEach((c: any) => {
-          if (c.userId) partnerIds.push(c.userId);
+      // Get all conversation partners
+      const [userConversations, user] = await Promise.all([
+        this.chatService.getUserConversations(userId).catch(() => []),
+        this.chatService.getUserById(userId),
+      ]);
+
+      userConversations.forEach((c: any) => {
+        if (c.userId) partnerIds.add(c.userId);
+      });
+
+      // If admin, also get admin conversations
+      if (user?.isAdmin) {
+        const adminConversations = await this.chatService
+          .getAdminConversations(userId)
+          .catch(() => []);
+        adminConversations.forEach((c: any) => {
+          if (c.userId) partnerIds.add(c.userId);
         });
-      } catch (e) {
-        // User might not have regular conversations, that's ok
       }
 
-      // If user is admin, also get admin conversations
-      try {
-        const user = await this.chatService.getUserById(userId);
-        if (user?.isAdmin) {
-          const adminConversations =
-            await this.chatService.getAdminConversations(userId);
-          adminConversations.forEach((c: any) => {
-            if (c.userId) partnerIds.push(c.userId);
-          });
-        }
-      } catch (e) {
-        // Ignore errors here
-      }
+      // Filter out self
+      partnerIds.delete(userId);
 
-      // Remove duplicates and the user themselves
-      const uniquePartnerIds = [
-        ...new Set(partnerIds.filter((id) => id !== userId)),
-      ];
+      if (partnerIds.size > 0) {
+        const statusUpdate = {
+          userId,
+          isOnline,
+          lastSeen: lastSeen || null,
+        };
 
-      if (uniquePartnerIds.length > 0) {
-        // Emit to each partner's room
-        uniquePartnerIds.forEach((partnerId) => {
-          this.server.to(`user:${partnerId}`).emit('partner_status', {
-            userId,
-            isOnline,
-            lastSeen: lastSeen || null,
-          });
+        // Emit to all partners efficiently
+        partnerIds.forEach((partnerId) => {
+          this.server
+            .to(`user:${partnerId}`)
+            .emit('partner_status', statusUpdate);
         });
 
-        this.logger.log(
-          `📡 Broadcasted status to ${uniquePartnerIds.length} partners of user ${userId}`,
-        );
-      } else {
-        this.logger.log(
-          `ℹ️ No conversation partners found for user ${userId}, skipping broadcast`,
+        this.logger.debug(
+          `📡 Broadcasted status to ${partnerIds.size} partners`,
         );
       }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to broadcast status: ${errorMessage}`);
-      // Fallback: broadcast to all connected clients
-      this.server.emit('partner_status', {
-        userId,
-        isOnline,
-        lastSeen: lastSeen || null,
-      });
     }
   }
 
@@ -388,6 +480,32 @@ export class ChatGateway
   private disconnectWithError(client: Socket, message: string): void {
     client.emit('error', { message });
     setTimeout(() => client.disconnect(true), 100);
+  }
+
+  private startSocketTTL(userId: string, socketId: string): void {
+    this.clearSocketTTL(socketId);
+
+    const timeout = setTimeout(() => {
+      this.logger.warn(`Socket TTL expired for ${socketId} (user: ${userId})`);
+      const client = this.server.sockets.sockets.get(socketId);
+      if (client) {
+        client.disconnect(true);
+      }
+    }, 60000); // 60 seconds TTL
+
+    this.socketTTLs.set(socketId, timeout);
+  }
+
+  private refreshSocketTTL(userId: string, socketId: string): void {
+    this.startSocketTTL(userId, socketId);
+  }
+
+  private clearSocketTTL(socketId: string): void {
+    const timeout = this.socketTTLs.get(socketId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.socketTTLs.delete(socketId);
+    }
   }
 
   private cleanupStaleConnections(): void {
@@ -411,92 +529,6 @@ export class ChatGateway
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.debug(`Cleanup routine: ${errorMessage}`);
-    }
-  }
-
-  private async sendPushNotification(
-    senderId: string,
-    receiverId: string,
-    content?: string,
-    type: string = 'text',
-    messageId?: string,
-  ): Promise<void> {
-    try {
-      const senderUser = await this.chatService.getUserById(senderId);
-      const senderName = senderUser?.name || 'Someone';
-
-      const notificationBody =
-        type === 'image'
-          ? '📷 Photo'
-          : content?.substring(0, 100) || 'New message';
-
-      const deviceTokens =
-        await this.chatService.getUserDeviceTokens(receiverId);
-
-      if (deviceTokens.length > 0) {
-        await this.firebaseService.sendMulticastNotification(
-          deviceTokens,
-          senderName,
-          notificationBody,
-          {
-            type: 'new_message',
-            senderId,
-            receiverId,
-            messageId: messageId || '',
-          },
-        );
-        this.logger.log(`📱 Push notification sent to ${receiverId}`);
-      } else {
-        this.logger.log(`ℹ️ No device tokens for ${receiverId}, skipping push`);
-      }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Push notification failed: ${errorMessage}`);
-    }
-  }
-
-  private async createInAppNotification(
-    senderId: string,
-    receiverId: string,
-    content?: string,
-    type: string = 'text',
-  ): Promise<void> {
-    try {
-      const senderUser = await this.chatService.getUserById(senderId);
-      const senderName = senderUser?.name || 'Someone';
-
-      const notificationBody =
-        type === 'image'
-          ? '📷 Photo'
-          : content?.substring(0, 100) || 'New message';
-
-      const notificationDto: CreateNotificationDto = {
-        userId: receiverId,
-        type: NotificationType.MESSAGE,
-        title: `New message from ${senderName}`,
-        message: notificationBody,
-        actionText: 'View',
-        actionLink: `/chat/${senderId}`,
-      };
-
-      const notification =
-        await this.notificationsService.create(notificationDto);
-
-      this.server.to(`user:${receiverId}`).emit('new_notification', {
-        id: notification.id,
-        type: 'message',
-        title: `New message from ${senderName}`,
-        message: notificationBody,
-        actionText: 'View',
-        actionLink: `/chat/${senderId}`,
-        createdAt: new Date().toISOString(),
-        isRead: false,
-      });
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`In-app notification failed: ${errorMessage}`);
     }
   }
 }
