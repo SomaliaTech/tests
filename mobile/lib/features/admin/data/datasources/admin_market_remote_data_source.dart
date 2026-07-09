@@ -27,6 +27,8 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
     return token;
   }
 
+  // admin_market_remote_data_source.dart
+
   @override
   Future<List<MarketModel>> getAllMarkets() async {
     print('🔍 [AdminMarkets] Fetching all markets');
@@ -45,7 +47,21 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
       print('📡 [AdminMarkets] Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonList = json.decode(response.body);
+        final decoded = json.decode(response.body);
+
+        // ✅ Handle both List and Map with 'items' key
+        List<dynamic> jsonList;
+        if (decoded is List) {
+          jsonList = decoded;
+        } else if (decoded is Map && decoded.containsKey('items')) {
+          jsonList = decoded['items'];
+        } else if (decoded is Map && decoded.containsKey('data')) {
+          jsonList = decoded['data'];
+        } else {
+          print('❌ [AdminMarkets] Unexpected response format: $decoded');
+          return [];
+        }
+
         return jsonList.map((json) => MarketModel.fromJson(json)).toList();
       } else {
         throw ServerException('Failed: ${response.statusCode}');
@@ -107,29 +123,41 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
     }
   }
 
+  // In admin_market_remote_data_source_impl.dart
+
   @override
   Future<void> deleteMarket(String marketId) async {
-    print('🔍 [AdminMarkets] Deleting market: $marketId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/markets/$marketId';
 
       final response = await client.delete(
         Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: {'Authorization': 'Bearer $token'},
       );
 
-      if (response.statusCode != 200) {
-        final errorBody = json.decode(response.body);
+      print('📡 [AdminMarkets] Delete Response: ${response.statusCode}');
+      print('📦 [AdminMarkets] Delete Response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        final data = json.decode(response.body);
+        // ✅ Check if market was deactivated instead of deleted
+        if (data['deactivated'] == true) {
+          print('⚠️ [AdminMarkets] Market deactivated instead of deleted');
+          // Don't throw error, just return
+          return;
+        }
+        return;
+      } else {
+        final errorData = json.decode(response.body);
         throw ServerException(
-          errorBody['message'] ?? 'Failed: ${response.statusCode}',
+          errorData['message'] ?? 'Failed to delete market',
         );
       }
     } catch (e) {
-      rethrow;
+      if (e is ServerException) rethrow;
+      print('❌ [AdminMarkets] Delete error: $e');
+      throw ServerException('Failed to delete market: $e');
     }
   }
 }

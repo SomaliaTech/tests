@@ -10,6 +10,7 @@ class AdminUserEntity extends Equatable {
   final bool isVerified;
   final bool isAdmin;
   final DateTime createdAt;
+  final bool? isSuperAdmin; // ✅ ADD THIS
   final DateTime updatedAt;
 
   const AdminUserEntity({
@@ -19,6 +20,7 @@ class AdminUserEntity extends Equatable {
     this.email,
     this.profileImage,
     this.marketId,
+    this.isSuperAdmin, // ✅ ADD THIS
     required this.isVerified,
     required this.isAdmin,
     required this.createdAt,

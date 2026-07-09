@@ -28,23 +28,51 @@ class ProfileSection extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            // Profile Image
+            // Profile Image with error handling
             Container(
               width: 70,
               height: 70,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFFE8F5E9),
-                image: profileImage != null && profileImage!.isNotEmpty
-                    ? DecorationImage(
-                        image: NetworkImage(profileImage!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
               ),
-              child: profileImage == null || profileImage!.isEmpty
-                  ? const Icon(Iconsax.user, size: 35, color: Color(0xFF999999))
-                  : null,
+              child: ClipOval(
+                child: (profileImage != null && profileImage!.isNotEmpty)
+                    ? Image.network(
+                        profileImage!,
+                        fit: BoxFit.cover,
+                        // ✅ Handle loading state
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Container(
+                            color: const Color(0xFFE8F5E9),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF2ED573),
+                              ),
+                            ),
+                          );
+                        },
+                        // ✅ Handle error state - PREVENTS CRASH
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('⚠️ Profile image load error: $error');
+                          return Container(
+                            color: const Color(0xFFE8F5E9),
+                            child: const Icon(
+                              Iconsax.user,
+                              size: 35,
+                              color: Color(0xFF999999),
+                            ),
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Iconsax.user,
+                        size: 35,
+                        color: Color(0xFF999999),
+                      ),
+              ),
             ),
 
             const SizedBox(width: 16),

@@ -1,4 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/core/services/storage/storage_service.dart'; // ✅ Add this
+import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import 'package:mobile/features/profile/domain/entities/profile.dart';
 import 'package:mobile/features/profile/domain/usecases/delete_account.dart';
 import 'package:mobile/features/profile/domain/usecases/get_profile.dart';
@@ -12,12 +14,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final UpdateProfile updateProfile;
   final UploadProfileImage uploadProfileImage;
   final DeleteAccount deleteAccount;
+  final StorageService storageService; // ✅ Add this field
 
   ProfileBloc({
     required this.getProfile,
     required this.updateProfile,
     required this.uploadProfileImage,
     required this.deleteAccount,
+    required this.storageService, // ✅ Add this parameter
   }) : super(ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
     on<UpdateProfileEvent>(_onUpdateProfile);
@@ -25,16 +29,22 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<DeleteAccountEvent>(_onDeleteAccount);
   }
 
+  // In profile_bloc.dart - _onLoadProfile
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
   ) async {
     emit(ProfileLoading());
     final result = await getProfile();
-    result.fold(
-      (failure) => emit(ProfileError(failure.message)),
-      (profile) => emit(ProfileLoaded(profile)),
-    );
+
+    // ✅ Use fold synchronously, not with async callback
+    result.fold((failure) => emit(ProfileError(failure.message)), (profile) {
+      // ✅ Save admin status synchronously (fire and forget)
+      storageService.saveIsAdmin(profile.isAdmin);
+      storageService.saveIsSuperAdmin(profile.isSuperAdmin);
+
+      emit(ProfileLoaded(profile));
+    });
   }
 
   Future<void> _onUpdateProfile(
@@ -52,6 +62,9 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     result.fold((failure) => emit(ProfileError(failure.message)), (
       updatedProfile,
     ) {
+      // ✅ Save admin status when profile is updated
+      storageService.saveIsAdmin(updatedProfile.isAdmin);
+      storageService.saveIsSuperAdmin(updatedProfile.isSuperAdmin);
       emit(ProfileUpdated(updatedProfile));
     });
   }

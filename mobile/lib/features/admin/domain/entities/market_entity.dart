@@ -1,11 +1,11 @@
-import 'package:equatable/equatable.dart';
-
-class MarketEntity extends Equatable {
+// lib/features/admin/domain/entities/market_entity.dart
+class MarketEntity {
   final String id;
   final String name;
   final String slug;
   final String? city;
   final bool isActive;
+  final int? userCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -15,18 +15,8 @@ class MarketEntity extends Equatable {
     required this.slug,
     this.city,
     required this.isActive,
+    this.userCount,
     required this.createdAt,
     required this.updatedAt,
   });
-
-  @override
-  List<Object?> get props => [
-    id,
-    name,
-    slug,
-    city,
-    isActive,
-    createdAt,
-    updatedAt,
-  ];
 }

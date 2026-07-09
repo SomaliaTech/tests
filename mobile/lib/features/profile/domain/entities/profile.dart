@@ -1,3 +1,4 @@
+// lib/features/profile/domain/entities/profile.dart
 import 'package:equatable/equatable.dart';
 
 class Profile extends Equatable {
@@ -7,7 +8,9 @@ class Profile extends Equatable {
   final String? email;
   final String? profileImage;
   final String? marketId;
-  final String? marketName;
+  final bool isVerified;
+  final bool isAdmin; // ✅ Add this
+  final bool isSuperAdmin; // ✅ Add this
 
   const Profile({
     required this.id,
@@ -16,10 +19,10 @@ class Profile extends Equatable {
     this.email,
     this.profileImage,
     this.marketId,
-    this.marketName,
+    required this.isVerified,
+    this.isAdmin = false, // ✅ Default false
+    this.isSuperAdmin = false, // ✅ Default false
   });
-
-  bool get hasProfile => name.isNotEmpty;
 
   @override
   List<Object?> get props => [
@@ -29,6 +32,8 @@ class Profile extends Equatable {
     email,
     profileImage,
     marketId,
-    marketName,
+    isVerified,
+    isAdmin,
+    isSuperAdmin,
   ];
 }

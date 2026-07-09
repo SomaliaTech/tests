@@ -7,6 +7,9 @@ import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_state.dart';
 import 'package:mobile/features/admin/presentation/screens/edit_user_screen.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
+import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:toastification/toastification.dart';
 
 class AdminUserDetailsScreen extends StatefulWidget {
@@ -19,6 +22,26 @@ class AdminUserDetailsScreen extends StatefulWidget {
 }
 
 class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
+  bool _isSuperAdmin = false;
+  late AdminUserEntity _currentUser; // ✅ Track current user
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUser = widget.user; // ✅ Initialize with widget.user
+    _checkSuperAdmin();
+  }
+
+  Future<void> _checkSuperAdmin() async {
+    final storageService = sl<StorageService>();
+    final isSuperAdmin = await storageService.getIsSuperAdmin();
+    if (mounted) {
+      setState(() {
+        _isSuperAdmin = isSuperAdmin;
+      });
+    }
+  }
+
   void _showToast(String message, bool isSuccess) {
     toastification.show(
       title: Text(message),
@@ -63,24 +86,47 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Iconsax.edit, color: Colors.black87),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => EditUserScreen(user: widget.user),
+        actions: _isSuperAdmin
+            ? [
+                IconButton(
+                  icon: const Icon(Iconsax.edit, color: Colors.black87),
+                  onPressed: () async {
+                    // ✅ Wait for result from EditUserScreen
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => EditUserScreen(user: _currentUser),
+                      ),
+                    );
+
+                    // ✅ If edit was successful, refresh this screen
+                    if (result == true && mounted) {
+                      context.read<UserBloc>().add(
+                        FetchUserByIdEvent(_currentUser.id),
+                      );
+                    }
+                  },
                 ),
-              );
-            },
-          ),
-        ],
+              ]
+            : null,
       ),
       body: BlocListener<UserBloc, UserState>(
         listener: (context, state) {
           if (state is UserOperationSuccess) {
             _showToast(state.message, true);
+
+            if (state.message.contains('deleted')) {
+              Navigator.pop(context, true);
+            } else if (state.message.contains('updated')) {
+              // ✅ Refresh user data from server
+              context.read<UserBloc>().add(FetchUserByIdEvent(_currentUser.id));
+            }
+          } else if (state is UserLoaded) {
+            // ✅ Update current user with fresh data
+            setState(() {
+              _currentUser = state.user;
+            });
+            _showToast('User data refreshed', true);
           } else if (state is UserError) {
             _showToast(state.message, false);
           }
@@ -90,7 +136,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Profile Card
+              // ✅ Profile Card - uses _currentUser instead of widget.user
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -111,9 +157,9 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                       radius: 50,
                       backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
                       child: Text(
-                        widget.user.name?.isNotEmpty == true
-                            ? widget.user.name![0].toUpperCase()
-                            : widget.user.phoneNumber.substring(0, 2),
+                        _currentUser.name?.isNotEmpty == true
+                            ? _currentUser.name![0].toUpperCase()
+                            : _currentUser.phoneNumber.substring(0, 2),
                         style: TextStyle(
                           color: AppTheme.primaryColor,
                           fontSize: 32,
@@ -123,7 +169,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      widget.user.name ?? 'No Name',
+                      _currentUser.name ?? 'No Name',
                       style: const TextStyle(
                         color: Colors.black87,
                         fontSize: 24,
@@ -132,74 +178,121 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      widget.user.email ?? widget.user.phoneNumber,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
+                      _currentUser.email ?? _currentUser.phoneNumber,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
                     ),
                     const SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildBadge(
-                          label: widget.user.isVerified
+                          label: _currentUser.isVerified
                               ? 'Verified'
                               : 'Not Verified',
-                          color: widget.user.isVerified
+                          color: _currentUser.isVerified
                               ? Colors.green
                               : Colors.orange,
                         ),
                         const SizedBox(width: 12),
-                        if (widget.user.isAdmin)
+                        if (_currentUser.isAdmin)
                           _buildBadge(label: 'Admin', color: Colors.purple),
+                        if (_currentUser.isSuperAdmin ?? false)
+                          _buildBadge(label: 'Super Admin', color: Colors.red),
+
+                        SizedBox(width: 20),
+
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatRoomScreen(
+                                  partnerId: _currentUser.id,
+                                  partnerName:
+                                      _currentUser.name ?? "no user name",
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2ED573),
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(10),
+                              ),
+                            ),
+                            child: const Icon(
+                              Iconsax.message,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 20),
                       ],
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              // User Information
+              // ✅ User Information - uses _currentUser
               _buildSection('Information', [
-                _buildInfoRow(Iconsax.call, 'Phone', widget.user.phoneNumber),
-                if (widget.user.email != null)
-                  _buildInfoRow(Iconsax.message, 'Email', widget.user.email!),
-                if (widget.user.marketId != null)
+                _buildInfoRow(Iconsax.call, 'Phone', _currentUser.phoneNumber),
+                if (_currentUser.email != null)
+                  _buildInfoRow(Iconsax.message, 'Email', _currentUser.email!),
+                if (_currentUser.marketId != null)
                   _buildInfoRow(
                     Iconsax.shop,
                     'Market ID',
-                    widget.user.marketId!,
+                    _currentUser.marketId!,
                   ),
                 _buildInfoRow(
                   Iconsax.calendar,
                   'Joined',
-                  _formatDate(widget.user.createdAt),
+                  _formatDate(_currentUser.createdAt),
+                ),
+                _buildInfoRow(
+                  Iconsax.shield_tick,
+                  'Role',
+                  _currentUser.isSuperAdmin == true
+                      ? 'Super Admin'
+                      : _currentUser.isAdmin == true
+                      ? 'Admin'
+                      : 'User',
                 ),
               ]),
-              const SizedBox(height: 24),
-              // Actions
-              _buildSection('Actions', [
-                _buildActionButton(
-                  icon: Iconsax.edit,
-                  label: 'Edit User',
-                  color: Colors.blue,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditUserScreen(user: widget.user),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildActionButton(
-                  icon: Iconsax.trash,
-                  label: 'Delete User',
-                  color: Colors.red,
-                  onTap: () => _showDeleteConfirmation(),
-                ),
-              ]),
+              // ✅ Actions section - uses _currentUser
+              if (_isSuperAdmin) ...[
+                const SizedBox(height: 24),
+                _buildSection('Actions', [
+                  _buildActionButton(
+                    icon: Iconsax.edit,
+                    label: 'Edit User',
+                    color: Colors.blue,
+                    onTap: () async {
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => EditUserScreen(user: _currentUser),
+                        ),
+                      );
+
+                      if (result == true && mounted) {
+                        context.read<UserBloc>().add(
+                          FetchUserByIdEvent(_currentUser.id),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildActionButton(
+                    icon: Iconsax.trash,
+                    label: 'Delete User',
+                    color: Colors.red,
+                    onTap: () => _showDeleteConfirmation(),
+                  ),
+                ]),
+              ],
             ],
           ),
         ),
@@ -339,28 +432,56 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
   void _showDeleteConfirmation() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
-        title: const Text('Delete User', style: TextStyle(color: Colors.black87)),
-        content: const Text(
-          'Are you sure you want to delete this user? This action cannot be undone.',
-          style: TextStyle(color: Colors.black54),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Iconsax.warning_2, color: Colors.red, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete User',
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${_currentUser.name ?? _currentUser.phoneNumber}"? This action cannot be undone.',
+          style: const TextStyle(color: Colors.black54),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
-            ),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              context.read<UserBloc>().add(DeleteUserEvent(widget.user.id));
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
+              context.read<UserBloc>().add(DeleteUserEvent(_currentUser.id));
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.withOpacity(0.1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),

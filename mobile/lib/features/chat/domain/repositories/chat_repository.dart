@@ -1,3 +1,5 @@
+import 'package:mobile/features/chat/domain/entities/chat_user.dart';
+
 import '../../../../core/utils/typedefs.dart';
 import '../entities/chat_message.dart';
 import '../entities/conversation.dart';
@@ -17,4 +19,5 @@ abstract class ChatRepository {
   ResultFuture<Map<String, dynamic>> getUnreadCount();
 
   ResultFuture<List<Conversation>> searchConversations(String query);
+  ResultFuture<List<ChatUser>> getAdminUsersForChat();
 }

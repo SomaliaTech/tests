@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/features/chat/presentation/widgets/admin_chat_bottom_sheet.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
 import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
@@ -412,11 +413,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                 description: product.description,
                                 features: product.features ?? [],
                               ),
-                              const SizedBox(height: 20),
-                              YouMayAlsoLike(
-                                categoryId: product.categoryId,
-                                currentProductId: product.id,
-                              ),
+
                               RelatedProducts(
                                 categoryId: product.categoryId,
                                 currentProductId: product.id,
@@ -452,6 +449,21 @@ class _ProductDetailViewState extends State<ProductDetailView> {
             // Default: show loading
             return const LoadingProductDetail();
           },
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: FloatingActionButton(
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (_) => const AdminChatBottomSheet(),
+            );
+          },
+          backgroundColor: const Color(0xFF2ED573),
+          child: const Icon(Iconsax.message, color: Colors.white),
         ),
       ),
     );

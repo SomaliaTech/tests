@@ -34,9 +34,12 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left_2, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
+          icon: Icon(Iconsax.arrow_left, color: Color(0xFF1F2937), size: 20),
+          onPressed: () {
+            Navigator.pop(context);
+          },
         ),
+
         title: Text(
           'Order #${_currentOrder.orderNumber}',
           style: const TextStyle(

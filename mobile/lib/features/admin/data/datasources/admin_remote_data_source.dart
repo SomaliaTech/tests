@@ -39,7 +39,12 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     );
 
     if (response.statusCode == 200) {
-      return AdminStatsModel.fromJson(json.decode(response.body));
+      final decoded = json.decode(response.body);
+      // Handle both wrapped and direct object
+      final data = decoded is Map && decoded.containsKey('stats')
+          ? decoded['stats']
+          : decoded;
+      return AdminStatsModel.fromJson(data);
     } else {
       throw ServerException('Failed to load stats: ${response.statusCode}');
     }
@@ -62,7 +67,31 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     );
 
     if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
+      final decoded = json.decode(response.body);
+
+      // ✅ Handle both List and Map responses
+      List<dynamic> jsonList;
+
+      if (decoded is List) {
+        // Direct array response
+        jsonList = decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        // Object response - check for orders/data/items key
+        if (decoded.containsKey('orders') && decoded['orders'] is List) {
+          jsonList = decoded['orders'];
+        } else if (decoded.containsKey('data') && decoded['data'] is List) {
+          jsonList = decoded['data'];
+        } else if (decoded.containsKey('items') && decoded['items'] is List) {
+          jsonList = decoded['items'];
+        } else {
+          print('⚠️ Unknown response format keys: ${decoded.keys}');
+          return [];
+        }
+      } else {
+        print('⚠️ Unexpected response type: ${decoded.runtimeType}');
+        return [];
+      }
+
       return jsonList.map((json) => AdminOrderModel.fromJson(json)).toList();
     } else {
       throw ServerException('Failed to load orders: ${response.statusCode}');
@@ -74,12 +103,10 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     final token = await _getToken();
     final url = '${ApiConstants.baseUrl}/admin/orders/$orderId/status';
 
-    // 🐛 DEBUG LOGGING
     print('🔄 [ADMIN] Updating order status...');
     print('📍 URL: $url');
     print('📦 Order ID: $orderId');
     print('🎯 New Status: $newStatus');
-    print('🔑 Token: ${token.substring(0, 20)}...');
 
     final response = await client.put(
       Uri.parse(url),
@@ -90,13 +117,11 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
       body: json.encode({'status': newStatus}),
     );
 
-    // 🐛 DEBUG LOGGING
     print('📡 Response Status Code: ${response.statusCode}');
     print('📥 Response Body: ${response.body}');
 
     if (response.statusCode == 200) {
       print('✅ [ADMIN] Order status updated successfully');
-      return;
     } else {
       print('❌ [ADMIN] Failed to update status: ${response.statusCode}');
       print('❌ Error details: ${response.body}');

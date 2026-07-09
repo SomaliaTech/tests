@@ -73,7 +73,7 @@ class _AdminColorsScreenState extends State<AdminColorsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left_2, color: Colors.black87),
+          icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(

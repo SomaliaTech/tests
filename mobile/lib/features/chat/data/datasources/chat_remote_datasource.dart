@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:mobile/features/chat/domain/entities/chat_user.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/services/storage/storage_service.dart';
@@ -10,7 +11,7 @@ import '../models/conversation_model.dart';
 
 abstract class ChatRemoteDataSource {
   Future<List<Conversation>> getConversations();
-
+  Future<List<ChatUser>> getAdminUsersForChat();
   // 🚨 ADD THIS: Search method in abstract interface
   Future<List<Conversation>> searchConversations(String query);
 
@@ -202,6 +203,22 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       throw ServerException(
         'Failed to get unread count: ${response.statusCode}',
       );
+    }
+  }
+
+  @override
+  Future<List<ChatUser>> getAdminUsersForChat() async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse('${ApiConstants.baseUrl}/chat/admins/chat'),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> jsonList = json.decode(response.body);
+      return jsonList.map((json) => ChatUser.fromJson(json)).toList();
+    } else {
+      throw ServerException('Failed to load admins: ${response.statusCode}');
     }
   }
 }

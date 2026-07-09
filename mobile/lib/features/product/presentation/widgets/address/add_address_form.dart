@@ -143,7 +143,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
                           color: Color(0xFF1F2937),
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
                         'Where should we deliver?',
                         style: TextStyle(
@@ -168,382 +168,390 @@ class _AddAddressFormState extends State<AddAddressForm> {
 
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
 
-          // Form
+          // ✅ Form with proper keyboard handling
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Address Label
-                    const Text(
-                      'Address Label',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6B7280),
-                        letterSpacing: 0.3,
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              physics: const BouncingScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Address Label
+                      const Text(
+                        'Address Label',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF6B7280),
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: _labels.map((label) {
-                        final isSelected = _selectedLabel == label;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedLabel = isSelected ? null : label;
-                            });
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: isSelected
-                                  ? const LinearGradient(
-                                      colors: [
-                                        Color(0xFF2ED573),
-                                        Color(0xFF1ABC9C),
-                                      ],
-                                    )
-                                  : null,
-                              color: isSelected ? null : Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isSelected
-                                    ? Colors.transparent
-                                    : const Color(0xFFE5E7EB),
-                                width: 1.5,
-                              ),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: const Color(
-                                          0xFF2ED573,
-                                        ).withValues(alpha: 0.3),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? Colors.white
-                                    : const Color(0xFF374151),
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Full Address
-                    _buildInputField(
-                      controller: _fullAddressController,
-                      label: 'Full Address',
-                      hint: 'Street, building, apartment...',
-                      icon: Iconsax.location,
-                      iconColor: const Color(0xFF3B82F6),
-                      maxLines: 3,
-                      validator: (value) => value?.isEmpty ?? true
-                          ? 'Please enter your full address'
-                          : null,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Phone Number (Auto-filled)
-                    BlocBuilder<AuthBloc, AuthState>(
-                      builder: (context, authState) {
-                        final phoneNumber = _extractPhoneNumber(authState);
-
-                        // Auto-update controller
-                        if (phoneNumber.isNotEmpty &&
-                            _phoneController.text != phoneNumber) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted &&
-                                _phoneController.text != phoneNumber) {
-                              _phoneController.text = phoneNumber;
-                            }
-                          });
-                        }
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Phone Number',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF6B7280),
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _labels.map((label) {
+                          final isSelected = _selectedLabel == label;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedLabel = isSelected ? null : label;
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
-                                vertical: 4,
+                                vertical: 10,
                               ),
                               decoration: BoxDecoration(
-                                color: phoneNumber.isNotEmpty
-                                    ? const Color(
-                                        0xFF2ED573,
-                                      ).withValues(alpha: 0.05)
-                                    : const Color(0xFFF9FAFB),
-                                borderRadius: BorderRadius.circular(14),
+                                gradient: isSelected
+                                    ? const LinearGradient(
+                                        colors: [
+                                          Color(0xFF2ED573),
+                                          Color(0xFF1ABC9C),
+                                        ],
+                                      )
+                                    : null,
+                                color: isSelected ? null : Colors.white,
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: phoneNumber.isNotEmpty
-                                      ? const Color(0xFF2ED573)
+                                  color: isSelected
+                                      ? Colors.transparent
                                       : const Color(0xFFE5E7EB),
                                   width: 1.5,
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF10B981,
-                                      ).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(
-                                      Iconsax.call,
-                                      color: Color(0xFF10B981),
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _phoneController,
-                                      readOnly: true,
-                                      decoration: InputDecoration(
-                                        border: InputBorder.none,
-                                        hintText: phoneNumber.isEmpty
-                                            ? 'Login to auto-fill'
-                                            : 'Auto-filled from profile',
-                                        hintStyle: const TextStyle(
-                                          color: Color(0xFF9CA3AF),
-                                          fontSize: 14,
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF2ED573,
+                                          ).withAlpha(77),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
                                         ),
-                                        isDense: true,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              vertical: 14,
-                                            ),
-                                      ),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: phoneNumber.isNotEmpty
-                                            ? const Color(0xFF1F2937)
-                                            : const Color(0xFF9CA3AF),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      validator: (value) => phoneNumber.isEmpty
-                                          ? 'Phone number not available'
-                                          : null,
-                                    ),
-                                  ),
-                                  if (phoneNumber.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF2ED573,
-                                        ).withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Iconsax.verify,
-                                            size: 12,
-                                            color: Color(0xFF2ED573),
-                                          ),
-                                          SizedBox(width: 3),
-                                          Text(
-                                            'Verified',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: Color(0xFF2ED573),
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
+                                      ]
+                                    : null,
+                              ),
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF374151),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                            if (phoneNumber.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8, left: 4),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Full Address
+                      _buildInputField(
+                        controller: _fullAddressController,
+                        label: 'Full Address',
+                        hint: 'Street, building, apartment...',
+                        icon: Iconsax.location,
+                        iconColor: const Color(0xFF3B82F6),
+                        maxLines: 3,
+                        validator: (value) => value?.isEmpty ?? true
+                            ? 'Please enter your full address'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Phone Number (Auto-filled)
+                      BlocBuilder<AuthBloc, AuthState>(
+                        builder: (context, authState) {
+                          final phoneNumber = _extractPhoneNumber(authState);
+
+                          // Auto-update controller
+                          if (phoneNumber.isNotEmpty &&
+                              _phoneController.text != phoneNumber) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted &&
+                                  _phoneController.text != phoneNumber) {
+                                _phoneController.text = phoneNumber;
+                              }
+                            });
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Phone Number',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF6B7280),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: phoneNumber.isNotEmpty
+                                      ? const Color(0xFF2ED573).withAlpha(13)
+                                      : const Color(0xFFF9FAFB),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: phoneNumber.isNotEmpty
+                                        ? const Color(0xFF2ED573)
+                                        : const Color(0xFFE5E7EB),
+                                    width: 1.5,
+                                  ),
+                                ),
                                 child: Row(
                                   children: [
-                                    Icon(
-                                      Iconsax.info_circle,
-                                      size: 13,
-                                      color: Colors.orange[600],
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF10B981,
+                                        ).withAlpha(26),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Iconsax.call,
+                                        color: Color(0xFF10B981),
+                                        size: 20,
+                                      ),
                                     ),
-                                    const SizedBox(width: 6),
+                                    const SizedBox(width: 14),
                                     Expanded(
-                                      child: Text(
-                                        'Phone number will auto-fill from your profile',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.orange[700],
-                                          fontStyle: FontStyle.italic,
+                                      child: TextFormField(
+                                        controller: _phoneController,
+                                        readOnly: true,
+                                        decoration: InputDecoration(
+                                          border: InputBorder.none,
+                                          hintText: phoneNumber.isEmpty
+                                              ? 'Login to auto-fill'
+                                              : 'Auto-filled from profile',
+                                          hintStyle: const TextStyle(
+                                            color: Color(0xFF9CA3AF),
+                                            fontSize: 14,
+                                          ),
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 14,
+                                              ),
                                         ),
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          color: phoneNumber.isNotEmpty
+                                              ? const Color(0xFF1F2937)
+                                              : const Color(0xFF9CA3AF),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        validator: (value) =>
+                                            phoneNumber.isEmpty
+                                            ? 'Phone number not available'
+                                            : null,
+                                      ),
+                                    ),
+                                    if (phoneNumber.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF2ED573,
+                                          ).withAlpha(38),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Iconsax.verify,
+                                              size: 12,
+                                              color: Color(0xFF2ED573),
+                                            ),
+                                            SizedBox(width: 3),
+                                            Text(
+                                              'Verified',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Color(0xFF2ED573),
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              if (phoneNumber.isEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: 8,
+                                    left: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Iconsax.info_circle,
+                                        size: 13,
+                                        color: Colors.orange[600],
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Phone number will auto-fill from your profile',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.orange[700],
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Set as Default
+                      GestureDetector(
+                        onTap: () => setState(() => _isDefault = !_isDefault),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _isDefault
+                                ? const Color(0xFF2ED573).withAlpha(13)
+                                : const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: _isDefault
+                                  ? const Color(0xFF2ED573)
+                                  : const Color(0xFFE5E7EB),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  color: _isDefault
+                                      ? const Color(0xFF2ED573)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: _isDefault
+                                        ? const Color(0xFF2ED573)
+                                        : const Color(0xFFD1D5DB),
+                                    width: 2,
+                                  ),
+                                ),
+                                child: _isDefault
+                                    ? const Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: Colors.white,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Set as Default Address',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1F2937),
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Use this address for future orders',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF9CA3AF),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Set as Default
-                    GestureDetector(
-                      onTap: () => setState(() => _isDefault = !_isDefault),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: _isDefault
-                              ? const Color(0xFF2ED573).withValues(alpha: 0.05)
-                              : const Color(0xFFF9FAFB),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: _isDefault
-                                ? const Color(0xFF2ED573)
-                                : const Color(0xFFE5E7EB),
-                            width: 1.5,
+                            ],
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: _isDefault
-                                    ? const Color(0xFF2ED573)
-                                    : Colors.white,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: _isDefault
-                                      ? const Color(0xFF2ED573)
-                                      : const Color(0xFFD1D5DB),
-                                  width: 2,
-                                ),
-                              ),
-                              child: _isDefault
-                                  ? const Icon(
-                                      Icons.check,
-                                      size: 14,
-                                      color: Colors.white,
-                                    )
-                                  : null,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ✅ Add Button with gradient - Full width and responsive
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: ElevatedButton(
+                          onPressed: _submitForm,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shadowColor: const Color(0xFF2ED573).withAlpha(102),
+                            elevation: 8,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Center(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  Icon(Iconsax.tick_circle, size: 20),
+                                  SizedBox(width: 8),
                                   Text(
-                                    'Set as Default Address',
+                                    'Add Address',
                                     style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1F2937),
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Use this address for future orders',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Color(0xFF9CA3AF),
+                                      letterSpacing: 0.3,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Add Button with gradient
-                    SizedBox(
-                      width: double.infinity,
-                      height: 54,
-                      child: ElevatedButton(
-                        onPressed: _submitForm,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          shadowColor: const Color(
-                            0xFF2ED573,
-                          ).withValues(alpha: 0.4),
-                          elevation: 8,
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Ink(
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-                            ),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Center(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Iconsax.tick_circle, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Add Address',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
+                      const SizedBox(height: 20),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -593,7 +601,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.1),
+                  color: iconColor.withAlpha(26),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: iconColor, size: 20),

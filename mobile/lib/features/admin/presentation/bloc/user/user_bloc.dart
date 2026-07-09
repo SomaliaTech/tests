@@ -46,8 +46,10 @@ class UserBloc extends Bloc<UserEvent, UserState> {
   ) async {
     try {
       await repository.createUser(event.userData);
-      // Emit success state cleanly without mixing consecutive loading sequences
       emit(const UserOperationSuccess('User created successfully'));
+
+      // ✅ Auto-refresh users list after create
+      add(const FetchAllUsersEvent());
     } catch (e) {
       emit(UserError(e.toString()));
     }
@@ -60,6 +62,9 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     try {
       await repository.updateUser(event.userId, event.updateData);
       emit(const UserOperationSuccess('User updated successfully'));
+
+      // ✅ Auto-refresh users list after update
+      add(const FetchAllUsersEvent());
     } catch (e) {
       emit(UserError(e.toString()));
     }
@@ -72,6 +77,9 @@ class UserBloc extends Bloc<UserEvent, UserState> {
     try {
       await repository.deleteUser(event.userId);
       emit(const UserOperationSuccess('User deleted successfully'));
+
+      // ✅ Auto-refresh users list after delete
+      add(const FetchAllUsersEvent());
     } catch (e) {
       emit(UserError(e.toString()));
     }

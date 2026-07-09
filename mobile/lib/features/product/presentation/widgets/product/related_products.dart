@@ -7,6 +7,8 @@ import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_event.dart';
 import 'package:mobile/features/product/presentation/blocs/product_state.dart';
 import 'package:mobile/features/product/presentation/screens/product_detail_view.dart';
+import 'package:mobile/core/common/widgets/empty_state_widget.dart';
+import 'package:mobile/core/common/widgets/shared/products_grid_skeleton.dart';
 
 class RelatedProducts extends StatefulWidget {
   final String categoryId;
@@ -33,88 +35,96 @@ class _RelatedProductsState extends State<RelatedProducts> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ProductBloc, ProductState>(
-      buildWhen: (previous, current) =>
-          current is ProductsLoaded || current is ProductLoading,
-      builder: (context, state) {
-        if (state is ProductsLoaded) {
-          final relatedProducts = state.products
-              .where((p) => p.id != widget.currentProductId)
-              .take(10)
-              .toList();
-
-          if (relatedProducts.isEmpty) {
-            return const SizedBox.shrink();
-          }
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Related Products',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF333333),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        // TODO: Navigate to category page
-                      },
-                      child: const Text(
-                        'See All',
-                        style: TextStyle(
-                          color: Color(0xFF2ED573),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text(
+                "Related Products",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF333333),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: GridView.builder(
+              // TextButton removed temporarily
+            ],
+          ),
+          const SizedBox(height: 15),
+          BlocBuilder<ProductBloc, ProductState>(
+            buildWhen: (previous, current) =>
+                current is ProductsLoaded ||
+                current is ProductLoading ||
+                current is ProductError,
+            builder: (context, state) {
+              if (state is ProductsLoaded) {
+                final relatedProducts = state.products
+                    .where((p) => p.id != widget.currentProductId)
+                    .take(10)
+                    .toList();
+
+                if (relatedProducts.isEmpty) {
+                  return const EmptyStateWidget(
+                    title: 'No Related Products',
+                    message: 'Check back later for more products!',
+                    icon: Iconsax.shopping_bag,
+                  );
+                }
+
+                return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.65,
+                    mainAxisSpacing: 15,
+                    mainAxisExtent: 250,
                   ),
                   itemCount: relatedProducts.length,
                   itemBuilder: (context, index) {
-                    final product = relatedProducts[index];
-                    return _RelatedProductCard(product: product);
+                    return _RelatedProductCard(product: relatedProducts[index]);
                   },
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          );
-        }
-
-        if (state is ProductLoading) {
-          return const SizedBox(
-            height: 220,
-            child: Center(
-              child: CircularProgressIndicator(color: Color(0xFF2ED573)),
-            ),
-          );
-        }
-
-        return const SizedBox.shrink();
-      },
+                );
+              } else if (state is ProductLoading) {
+                return const ProductsGridSkeleton();
+              } else if (state is ProductError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(state.message),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          context.read<ProductBloc>().add(
+                            GetProductsByCategoryEvent(widget.categoryId),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2ED573),
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -150,6 +160,7 @@ class _RelatedProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Product Image
             Expanded(
               flex: 3,
               child: ClipRRect(
@@ -190,6 +201,7 @@ class _RelatedProductCard extends StatelessWidget {
                       ),
               ),
             ),
+            // Product Info
             Expanded(
               flex: 2,
               child: Padding(

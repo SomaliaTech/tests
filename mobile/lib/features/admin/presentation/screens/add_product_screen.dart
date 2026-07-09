@@ -64,13 +64,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
         maxWidth: 1200,
         maxHeight: 1200,
       );
-      if (pickedFiles.isNotEmpty) {
+      if (mounted && pickedFiles.isNotEmpty) {
         setState(() {
           _selectedImages.addAll(pickedFiles.map((f) => File(f.path)));
         });
       }
     } catch (e) {
-      ToastHelper.showError(context, 'Failed to pick images: $e');
+      if (mounted) {
+        ToastHelper.showError(context, 'Failed to pick images: $e');
+      }
     }
   }
 
@@ -97,15 +99,41 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _variants.removeAt(index));
   }
 
+  // Replace the existing _editVariant method with this:
+  // Update this method in _AddProductScreenState
+  void _editVariant(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => _EditVariantDialog(
+        variant: _variants[index],
+        index: index,
+        existingVariants: _variants, // ✅ Pass the full list to check duplicates
+        onSave: (index, updatedVariant) {
+          setState(() {
+            _variants[index] = updatedVariant;
+          });
+          debugPrint('✅ Variant $index updated:');
+          debugPrint(
+            '   - Color: ${updatedVariant['colorName']} (${updatedVariant['colorId']})',
+          );
+          debugPrint(
+            '   - Size: ${updatedVariant['sizeValue']} (${updatedVariant['sizeId']})',
+          );
+          debugPrint('   - SKU: ${updatedVariant['sku']}');
+          debugPrint('   - Stock: ${updatedVariant['stock']}');
+          debugPrint('   - Price: ${updatedVariant['price']}');
+        },
+      ),
+    );
+  }
+
   void _submitForm() {
     if (!_formKey.currentState!.validate()) {
-      print('❌ [AddProduct] Form validation failed');
       ToastHelper.showError(context, 'Please fill all required fields');
       return;
     }
 
     if (_selectedCategory == null) {
-      print('❌ [AddProduct] No category selected');
       ToastHelper.showWarning(context, 'Please select a category');
       return;
     }
@@ -123,43 +151,32 @@ class _AddProductScreenState extends State<AddProductScreen> {
       'isActive': _isActive,
     };
 
-    // ✅ EXTENSIVE DEBUG LOGGING
-    print('═══════════════════════════════════════════════════');
-    print('📤 [AddProduct] SUBMITTING PRODUCT');
-    print('═══════════════════════════════════════════════════');
-    print('📦 Product Data:');
-    print('   - Name: ${productData['name']}');
-    print('   - Description: ${productData['description']}');
-    print(
-      '   - Price: ${productData['price']} (type: ${productData['price'].runtimeType})',
-    );
-    print(
-      '   - Stock: ${productData['stock']} (type: ${productData['stock'].runtimeType})',
-    );
-    print('   - Category ID: ${productData['categoryId']}');
-    print(
-      '   - Category Name: ${_selectedSubcategory?.name ?? _selectedCategory?.name}',
-    );
-    print('   - Brand: ${productData['brand']}');
-    print('   - Tags: ${productData['tags']}');
-    print('   - Is Active: ${productData['isActive']}');
-    print('');
-    print('🖼️ Images: ${_selectedImages.length} selected');
-    for (int i = 0; i < _selectedImages.length; i++) {
-      print('   - Image $i: ${_selectedImages[i].path}');
-    }
-    print('');
-    print('🎨 Variants: ${_variants.length} total');
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('📤 [AddProduct] SUBMITTING PRODUCT');
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('📦 Product Data:');
+    debugPrint('   - Name: ${productData['name']}');
+    debugPrint('   - Description: ${productData['description']}');
+    debugPrint('   - Price: ${productData['price']}');
+    debugPrint('   - Stock: ${productData['stock']}');
+    debugPrint('   - Category ID: ${productData['categoryId']}');
+    debugPrint('   - Brand: ${productData['brand']}');
+    debugPrint('   - Tags: ${productData['tags']}');
+    debugPrint('   - Is Active: ${productData['isActive']}');
+    debugPrint('');
+    debugPrint('🖼️ Images: ${_selectedImages.length} selected');
+    debugPrint('');
+    debugPrint('🎨 Variants: ${_variants.length} total');
     for (int i = 0; i < _variants.length; i++) {
       final v = _variants[i];
-      print('   Variant $i:');
-      print('     - Color: ${v['colorName']} (${v['colorId']})');
-      print('     - Size: ${v['sizeValue']} (${v['sizeId']})');
-      print('     - SKU: ${v['sku']}');
-      print('     - Stock: ${v['stock']}');
-      print('     - Price: ${v['price']}');
+      debugPrint('   Variant $i:');
+      debugPrint('     - Color: ${v['colorName']} (${v['colorId']})');
+      debugPrint('     - Size: ${v['sizeValue']} (${v['sizeId']})');
+      debugPrint('     - SKU: ${v['sku']}');
+      debugPrint('     - Stock: ${v['stock']}');
+      debugPrint('     - Price: ${v['price']}');
     }
-    print('═══════════════════════════════════════════════════');
+    debugPrint('═══════════════════════════════════════════════════');
 
     context.read<AdminProductBloc>().add(
       CreateAdminProductEvent(
@@ -177,13 +194,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
           if (state is AdminProductOperationSuccess) {
-            print('✅ [AddProduct] Product created successfully!');
+            debugPrint('✅ [AddProduct] Product created successfully!');
             ToastHelper.showSuccess(context, state.message);
             Navigator.pop(context);
           } else if (state is AdminProductsError) {
-            print('❌ [AddProduct] Error: ${state.message}');
+            debugPrint('❌ [AddProduct] Error: ${state.message}');
             ToastHelper.showError(context, state.message);
-            // ✅ Error state is handled by the bloc - no need to reset manually
           }
         },
         builder: (context, state) {
@@ -408,7 +424,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ],
               ),
 
-              // ✅ Loading overlay
+              // Loading overlay
               if (isCreating)
                 Container(
                   color: Colors.black.withValues(alpha: 0.3),
@@ -586,6 +602,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  // ✅ FIXED: Variants section with proper card layout
   Widget _buildVariantsSection() {
     return Column(
       children: [
@@ -635,6 +652,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               variant: variantData,
               index: index,
               onDelete: () => _removeVariant(index),
+              onEdit: () => _editVariant(index),
             );
           }),
         const SizedBox(height: 16),
@@ -1070,7 +1088,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppTheme.primaryColor,
+            activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.3),
+            activeThumbColor: AppTheme.primaryColor,
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: Colors.grey.shade200,
           ),
         ],
       ),
@@ -1078,18 +1099,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 }
 
-// Keep the rest of the classes (_ModernVariantCard, _AddVariantDialog) the same
-// I'll include them below for completeness
-
+// ============================================
+// ✅ FIXED: _ModernVariantCard with correct layout
+// ============================================
 class _ModernVariantCard extends StatelessWidget {
   final Map<String, dynamic> variant;
   final int index;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   const _ModernVariantCard({
     required this.variant,
     required this.index,
     required this.onDelete,
+    required this.onEdit,
   });
 
   Color _hexToColor(String hexString) {
@@ -1125,8 +1148,11 @@ class _ModernVariantCard extends StatelessWidget {
       ),
       child: Column(
         children: [
+          // ✅ TOP ROW: Color circle, Name, Size badge, Edit & Delete buttons
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Color circle
               Container(
                 width: 50,
                 height: 50,
@@ -1144,6 +1170,7 @@ class _ModernVariantCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
+              // Name, Size badge, SKU
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1162,6 +1189,7 @@ class _ModernVariantCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // Size badge
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -1196,6 +1224,24 @@ class _ModernVariantCard extends StatelessWidget {
                   ],
                 ),
               ),
+              // Edit button
+              GestureDetector(
+                onTap: onEdit,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Iconsax.edit,
+                    color: Color(0xFF3B82F6),
+                    size: 18,
+                  ),
+                ),
+              ),
+              // Delete button
               GestureDetector(
                 onTap: onDelete,
                 child: Container(
@@ -1213,26 +1259,34 @@ class _ModernVariantCard extends StatelessWidget {
               ),
             ],
           ),
+
+          // ✅ DIVIDER
           const SizedBox(height: 12),
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
           const SizedBox(height: 12),
+
+          // ✅ BOTTOM ROW: Stock and Price chips
           Row(
             children: [
+              // Stock chip
               Expanded(
                 child: _buildInfoChip(
                   icon: Iconsax.box_1,
                   label: 'Stock',
-                  value: stock?.toString() ?? '0',
+                  value: stock?.toString() ?? 'Default',
                   color: const Color(0xFF3B82F6),
                 ),
               ),
               const SizedBox(width: 8),
+              // Price chip
+              // In _ModernVariantCard, update the price display logic:
+              // Price chip
               Expanded(
                 child: _buildInfoChip(
                   icon: Iconsax.money_tick,
                   label: 'Price',
-                  value: price != null
-                      ? '\$${(price as num).toStringAsFixed(2)}'
+                  value: price != null && price != ''
+                      ? '\$${(double.tryParse(price.toString()) ?? 0).toStringAsFixed(2)}'
                       : 'Default',
                   color: const Color(0xFF2ED573),
                 ),
@@ -1290,7 +1344,9 @@ class _ModernVariantCard extends StatelessWidget {
   }
 }
 
-/// ✅ Redesigned Add Variant Dialog with Multi-Select
+// ============================================
+// _AddVariantDialog Widget (Unchanged)
+// ============================================
 class _AddVariantDialog extends StatefulWidget {
   final List<Map<String, dynamic>> existingVariants;
   final void Function(List<Map<String, dynamic>>) onAdd;
@@ -1309,7 +1365,6 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
   final _stockController = TextEditingController(text: '0');
   final _priceController = TextEditingController();
 
-  // ✅ Multi-select lists
   final Set<ColorEntity> _selectedColors = {};
   final Set<SizeEntity> _selectedSizes = {};
 
@@ -1356,12 +1411,10 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
       return;
     }
 
-    // ✅ Generate all combinations
     final newVariants = <Map<String, dynamic>>[];
 
     for (final color in _selectedColors) {
       for (final size in _selectedSizes) {
-        // Check if combination already exists
         final exists = widget.existingVariants.any(
           (v) => v['colorId'] == color.id && v['sizeId'] == size.id,
         );
@@ -1373,7 +1426,7 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           'colorCode': color.code,
           'sizeId': size.id,
           'sizeValue': size.value,
-          'sku': null, // SKU is now optional
+          'sku': null,
           'stock': stock,
           'price': price,
         });
@@ -1721,53 +1774,29 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Stack(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _hexToColor(color.code),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppTheme.primaryColor
-                            : Colors.grey.withValues(alpha: 0.2),
-                        width: isSelected ? 3 : 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check, color: Colors.white, size: 22)
-                        : null,
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _hexToColor(color.code),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : Colors.grey.withValues(alpha: 0.2),
+                    width: isSelected ? 3 : 2,
                   ),
-                  if (isSelected)
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.primaryColor,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '${_selectedColors.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                ],
+                  ],
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 22)
+                    : null,
               ),
               const SizedBox(height: 4),
               Text(
@@ -1954,6 +1983,713 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
             vertical: 14,
           ),
         ),
+      ),
+    );
+  }
+
+  Color _hexToColor(String hexString) {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  }
+}
+// Add this new class at the bottom of your file, before the _AddVariantDialog
+
+// ============================================
+// _EditVariantDialog Widget (NEW)
+
+// ============================================
+class _EditVariantDialog extends StatefulWidget {
+  final Map<String, dynamic> variant;
+  final int index;
+  final List<Map<String, dynamic>> existingVariants;
+  final void Function(int index, Map<String, dynamic> updatedVariant) onSave;
+
+  const _EditVariantDialog({
+    required this.variant,
+    required this.index,
+    required this.existingVariants,
+    required this.onSave,
+  });
+
+  @override
+  State<_EditVariantDialog> createState() => _EditVariantDialogState();
+}
+
+class _EditVariantDialogState extends State<_EditVariantDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _skuController = TextEditingController();
+  final _stockController = TextEditingController();
+  final _priceController = TextEditingController();
+
+  late ColorEntity _selectedColor;
+  late SizeEntity _selectedSize;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Initialize with current values
+    final sku = widget.variant['sku'];
+    final stock = widget.variant['stock'];
+    final price = widget.variant['price'];
+
+    if (sku != null) _skuController.text = sku.toString();
+    if (stock != null) _stockController.text = stock.toString();
+    if (price != null) _priceController.text = price.toString();
+
+    // ✅ FIXED: Create ColorEntity with all required fields
+    _selectedColor = ColorEntity(
+      id: widget.variant['colorId'] ?? '',
+      name: widget.variant['colorName'] ?? '',
+      code: widget.variant['colorCode'] ?? '#000000',
+    );
+
+    // ✅ FIXED: Create SizeEntity with all required fields
+    // Check your SizeEntity constructor - it might need a 'name' parameter too
+    _selectedSize = SizeEntity(
+      id: widget.variant['sizeId'] ?? '',
+      name: widget.variant['sizeValue'] ?? '', // ✅ Added 'name' parameter
+      value: widget.variant['sizeValue'] ?? '',
+    );
+
+    // Fetch fresh data
+    context.read<AdminProductBloc>().add(FetchColorsEvent());
+    context.read<AdminProductBloc>().add(FetchSizesEvent());
+  }
+
+  @override
+  void dispose() {
+    _skuController.dispose();
+    _stockController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+
+    // Check if this color+size combination already exists (excluding current variant)
+    final isDuplicate = widget.existingVariants.any((v) {
+      if (widget.existingVariants.indexOf(v) == widget.index) return false;
+      return v['colorId'] == _selectedColor.id &&
+          v['sizeId'] == _selectedSize.id;
+    });
+
+    if (isDuplicate) {
+      ToastHelper.showWarning(
+        context,
+        'This color and size combination already exists',
+      );
+      return;
+    }
+
+    final updatedVariant = Map<String, dynamic>.from(widget.variant);
+
+    // Update color
+    updatedVariant['colorId'] = _selectedColor.id;
+    updatedVariant['colorName'] = _selectedColor.name;
+    updatedVariant['colorCode'] = _selectedColor.code;
+
+    // Update size
+    updatedVariant['sizeId'] = _selectedSize.id;
+    updatedVariant['sizeValue'] = _selectedSize.value;
+
+    // Update SKU
+    updatedVariant['sku'] = _skuController.text.isNotEmpty
+        ? _skuController.text.trim()
+        : null;
+
+    // Update Stock
+    if (_stockController.text.isNotEmpty) {
+      final stock = int.tryParse(_stockController.text);
+      if (stock != null) updatedVariant['stock'] = stock;
+    } else {
+      updatedVariant['stock'] = null;
+    }
+
+    // Update Price
+    if (_priceController.text.isNotEmpty) {
+      final price = double.tryParse(_priceController.text);
+      if (price != null) updatedVariant['price'] = price;
+    } else {
+      updatedVariant['price'] = null;
+    }
+
+    HapticFeedback.mediumImpact();
+    widget.onSave(widget.index, updatedVariant);
+    Navigator.pop(context);
+    ToastHelper.showSuccess(context, 'Variant updated successfully');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.all(16),
+      child: Container(
+        width: double.maxFinite,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Iconsax.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Edit Variant',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                          Text(
+                            'Change color, size & details',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Current Selection Preview
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                        const Color(0xFFD97706).withValues(alpha: 0.04),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Color circle
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _hexToColor(_selectedColor.code),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _hexToColor(
+                                _selectedColor.code,
+                              ).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedColor.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1F2937),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFF59E0B),
+                                    Color(0xFFD97706),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Size: ${_selectedSize.value.toUpperCase()}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Colors Section
+                _buildSectionLabel(
+                  'Change Color',
+                  Iconsax.colorfilter,
+                  'Select a color',
+                ),
+                const SizedBox(height: 12),
+                BlocBuilder<AdminProductBloc, AdminProductState>(
+                  buildWhen: (prev, current) =>
+                      current is AdminColorsLoading ||
+                      current is AdminColorsLoaded,
+                  builder: (context, state) {
+                    if (state is AdminColorsLoading) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+                    if (state is AdminColorsLoaded) {
+                      if (state.colors.isEmpty) {
+                        return _buildEmptyState('No colors available');
+                      }
+                      return _buildColorGrid(state.colors);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Sizes Section
+                _buildSectionLabel(
+                  'Change Size',
+                  Iconsax.ruler,
+                  'Select a size',
+                ),
+                const SizedBox(height: 12),
+                BlocBuilder<AdminProductBloc, AdminProductState>(
+                  buildWhen: (prev, current) =>
+                      current is AdminSizesLoading ||
+                      current is AdminSizesLoaded,
+                  builder: (context, state) {
+                    if (state is AdminSizesLoading) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+                    if (state is AdminSizesLoaded) {
+                      if (state.sizes.isEmpty) {
+                        return _buildEmptyState('No sizes available');
+                      }
+                      return _buildSizeGrid(state.sizes);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // SKU Field
+                _buildSectionLabel(
+                  'SKU',
+                  Iconsax.barcode,
+                  'Stock Keeping Unit (optional)',
+                ),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _skuController,
+                  hint: 'Enter SKU',
+                  icon: Iconsax.barcode,
+                ),
+                const SizedBox(height: 20),
+
+                // Stock Field
+                _buildSectionLabel(
+                  'Stock',
+                  Iconsax.box_1,
+                  'Available quantity (optional)',
+                ),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _stockController,
+                  hint: 'Enter stock quantity',
+                  icon: Iconsax.box_1,
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      if (int.tryParse(value) == null) {
+                        return 'Invalid stock value';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Price Field
+                _buildSectionLabel(
+                  'Price',
+                  Iconsax.money_tick,
+                  'Variant price (optional)',
+                ),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _priceController,
+                  hint: 'Enter price',
+                  icon: Iconsax.money_tick,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty) {
+                      if (double.tryParse(value) == null) {
+                        return 'Invalid price value';
+                      }
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+
+                // Info note
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Iconsax.info_circle,
+                        color: Color(0xFF3B82F6),
+                        size: 18,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Leave stock/price empty to use default values.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF3B82F6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _save,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 6,
+                          shadowColor: const Color(
+                            0xFFF59E0B,
+                          ).withValues(alpha: 0.4),
+                        ),
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Iconsax.save_2, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Save Changes',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(String label, IconData icon, String subtitle) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 14, color: AppTheme.primaryColor),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Iconsax.warning_2, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.orange, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorGrid(List<ColorEntity> colors) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 12,
+      children: colors.map((color) {
+        final isSelected = _selectedColor.id == color.id;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              _selectedColor = color;
+            });
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _hexToColor(color.code),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFF59E0B)
+                        : Colors.grey.withValues(alpha: 0.2),
+                    width: isSelected ? 3 : 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 22)
+                    : null,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                color.name,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                  color: isSelected
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFF1F2937),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSizeGrid(List<SizeEntity> sizes) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: sizes.map((size) {
+        final isSelected = _selectedSize.id == size.id;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              _selectedSize = size;
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFFE5E7EB),
+                width: isSelected ? 2 : 1,
+              ),
+              boxShadow: isSelected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Text(
+              size.value.toUpperCase(),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? Colors.white : const Color(0xFF1F2937),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDialogTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFF1F2937)),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
+          prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+        ),
+        validator: validator,
       ),
     );
   }

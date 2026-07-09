@@ -3,7 +3,7 @@ import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
-import 'package:mobile/core/common/widgets/navigation.dart';
+import 'package:mobile/core/common/widgets/main_navigation_screen.dart';
 import 'package:mobile/core/common/widgets/no_internet_screen.dart';
 import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/core/services/navigation_service.dart';
@@ -17,7 +17,9 @@ import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_cat
 import 'package:mobile/features/admin/presentation/bloc/admin_color_size/admin_color_size_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_market_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/analytics/analytics_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/faq/admin_faq_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/revenue/revenue_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
@@ -134,6 +136,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<UserBloc>()),
           BlocProvider(create: (context) => sl<RevenueBloc>()),
           BlocProvider(create: (context) => sl<AdminProductBloc>()),
+          BlocProvider(create: (_) => sl<AnalyticsBloc>()),
           BlocProvider(create: (context) => sl<NotificationsBloc>()),
           BlocProvider(create: (context) => sl<ConversationsBloc>()),
           BlocProvider(create: (context) => sl<ChatRoomBloc>()),
@@ -141,6 +144,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<AdminCategoryBloc>()),
           BlocProvider(create: (context) => sl<AdminColorSizeBloc>()),
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
+          BlocProvider(create: (_) => sl<AdminBloc>()),
+
+          // BlocProvider(create: (_) => sl<FaqBloc>()),
+          BlocProvider(create: (_) => sl<AdminFaqBloc>()),
         ],
         child: MaterialApp(
           title: 'HALDOOR',

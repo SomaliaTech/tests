@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:iconsax/iconsax.dart';
-// ⚠️ Adjust this import to match your actual internal chat screen file name
-import 'package:mobile/features/chat/presentation/screens/conversations_screen.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:mobile/core/services/chat_admin_service.dart';
+import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
+import 'package:mobile/features/chat/presentation/screens/conversations_screen.dart';
+import 'package:mobile/features/chat/presentation/widgets/admin_chat_bottom_sheet.dart';
+import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
+import 'package:mobile/features/support/presentation/bloc/faq_event.dart';
+import 'package:mobile/features/support/presentation/bloc/faq_state.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -21,34 +26,6 @@ class _SupportScreenState extends State<SupportScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeInAnimation;
 
-  final List<Map<String, String>> _faqs = [
-    {
-      'question': 'How do I track my order?',
-      'answer':
-          'Go to the "Orders" tab in your profile and tap on any order to see real-time tracking updates and delivery status.',
-    },
-    {
-      'question': 'What payment methods do you accept?',
-      'answer':
-          'We accept EVC Plus, Sahal, and Cash on Delivery (COD) for your convenience.',
-    },
-    {
-      'question': 'How long does delivery take?',
-      'answer':
-          'Standard delivery within the city takes 1-2 business days. Deliveries outside the city may take 3-5 business days.',
-    },
-    {
-      'question': 'Can I return or exchange an item?',
-      'answer':
-          'Yes! You can request a return within 7 days of delivery if the item is damaged or incorrect. Contact our support team to start a return.',
-    },
-    {
-      'question': 'How do I change my delivery address?',
-      'answer':
-          'You can add or edit your addresses in the "Settings" > "Addresses" section before proceeding to checkout.',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -61,6 +38,9 @@ class _SupportScreenState extends State<SupportScreen>
       curve: Curves.easeInOut,
     );
     _animationController.forward();
+
+    // ✅ Load FAQs from backend
+    context.read<FaqBloc>().add(const LoadActiveFaqsEvent());
   }
 
   @override
@@ -70,20 +50,17 @@ class _SupportScreenState extends State<SupportScreen>
   }
 
   void _openInAppChat() {
-    HapticFeedback.mediumImpact();
-    // Navigate to your internal chat screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ConversationsScreen()),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AdminChatBottomSheet(),
     );
   }
 
   static const String _phoneNumber = '+252686330033';
   static const String _email = 'support@haldoor.so';
 
-  // Optional: Add fallback for WhatsApp if not installed
-
-  // Optional: Add SMS fallback if phone call fails
   Future<void> _makePhoneCall() async {
     final Uri phoneUri = Uri(scheme: 'tel', path: _phoneNumber);
     final Uri smsUri = Uri(scheme: 'sms', path: _phoneNumber);
@@ -93,7 +70,6 @@ class _SupportScreenState extends State<SupportScreen>
         await launchUrl(phoneUri);
         debugPrint('✅ Phone call initiated to: $_phoneNumber');
       } else if (await canLaunchUrl(smsUri)) {
-        // Fallback to SMS if calling is not supported
         await launchUrl(smsUri);
         debugPrint('✅ Opened SMS instead of call');
       } else {
@@ -117,11 +93,9 @@ class _SupportScreenState extends State<SupportScreen>
         debugPrint('✅ Email client opened for: $_email');
       } else {
         debugPrint('❌ Could not launch email app');
-        debugPrint('   URI: $emailUri');
       }
     } catch (e) {
       debugPrint('❌ Error launching email: $e');
-      debugPrint('   URI: $emailUri');
     }
   }
 
@@ -253,7 +227,7 @@ class _SupportScreenState extends State<SupportScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // ✅ 1. IN-APP CHAT CARD (Replaces WhatsApp)
+                    // ✅ 1. IN-APP CHAT CARD
                     _buildInAppChatCard(),
 
                     const SizedBox(height: 24),
@@ -272,7 +246,7 @@ class _SupportScreenState extends State<SupportScreen>
 
                     const SizedBox(height: 32),
 
-                    // ✅ 3. FAQ SECTION
+                    // ✅ 3. FAQ SECTION (Dynamic from backend)
                     Row(
                       children: [
                         Container(
@@ -300,11 +274,87 @@ class _SupportScreenState extends State<SupportScreen>
                     ),
                     const SizedBox(height: 12),
 
-                    ..._faqs.map(
-                      (faq) => _FaqItem(
-                        question: faq['question']!,
-                        answer: faq['answer']!,
-                      ),
+                    // ✅ Dynamic FAQs from BLoC
+                    BlocBuilder<FaqBloc, FaqState>(
+                      builder: (context, state) {
+                        if (state is FaqsLoading) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24.0),
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF2ED573),
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (state is FaqsLoaded) {
+                          if (state.faqs.isEmpty) {
+                            return Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'No FAQs available yet',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            children: state.faqs
+                                .map(
+                                  (faq) => FaqItem(
+                                    question: faq.question,
+                                    answer: faq.answer,
+                                  ),
+                                )
+                                .toList(),
+                          );
+                        }
+
+                        if (state is FaqError) {
+                          return Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  const Icon(
+                                    Iconsax.warning_2,
+                                    color: Colors.red,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    state.message,
+                                    style: const TextStyle(color: Colors.red),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton(
+                                    onPressed: () {
+                                      context.read<FaqBloc>().add(
+                                        const LoadActiveFaqsEvent(),
+                                      );
+                                    },
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return const SizedBox.shrink();
+                      },
                     ),
 
                     const SizedBox(height: 40),
@@ -426,7 +476,7 @@ class _SupportScreenState extends State<SupportScreen>
             title: 'Call Us',
             subtitle: '+252 61 532 8654',
             color: const Color(0xFF3B82F6),
-            onTap: this._makePhoneCall,
+            onTap: _makePhoneCall,
           ),
         ),
         const SizedBox(width: 12),
@@ -436,7 +486,7 @@ class _SupportScreenState extends State<SupportScreen>
             title: 'Email Us',
             subtitle: 'support@haldoor.com',
             color: const Color(0xFFF59E0B),
-            onTap: this._sendEmail,
+            onTap: _sendEmail,
           ),
         ),
       ],
@@ -501,20 +551,19 @@ class _SupportScreenState extends State<SupportScreen>
 }
 
 // ==========================================
-// FAQ ACCORDION WIDGET
+// FAQ ACCORDION WIDGET (Updated to public)
 // ==========================================
-class _FaqItem extends StatefulWidget {
+class FaqItem extends StatefulWidget {
   final String question;
   final String answer;
 
-  const _FaqItem({required this.question, required this.answer});
+  const FaqItem({super.key, required this.question, required this.answer});
 
   @override
-  State<_FaqItem> createState() => _FaqItemState();
+  State<FaqItem> createState() => FaqItemState();
 }
 
-class _FaqItemState extends State<_FaqItem>
-    with SingleTickerProviderStateMixin {
+class FaqItemState extends State<FaqItem> with SingleTickerProviderStateMixin {
   bool _isExpanded = false;
 
   @override

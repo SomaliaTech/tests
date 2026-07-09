@@ -1,5 +1,7 @@
 import 'package:fpdart/fpdart.dart';
+import 'package:mobile/core/services/storage/storage_service.dart'; // ✅ Add import
 import 'package:mobile/features/chat/data/datasources/chat_remote_datasource.dart';
+import 'package:mobile/features/chat/domain/entities/chat_user.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
@@ -9,8 +11,12 @@ import '../../domain/repositories/chat_repository.dart';
 
 class ChatRepositoryImpl implements ChatRepository {
   final ChatRemoteDataSource remoteDataSource;
+  final StorageService storageService; // ✅ Add this field
 
-  ChatRepositoryImpl({required this.remoteDataSource});
+  ChatRepositoryImpl({
+    required this.remoteDataSource,
+    required this.storageService, // ✅ Add this parameter
+  });
 
   @override
   ResultFuture<List<Conversation>> getConversations() async {
@@ -117,6 +123,23 @@ class ChatRepositoryImpl implements ChatRepository {
       return Left(ServerFailure(e.message));
     } catch (e) {
       return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<ChatUser>>> getAdminUsersForChat() async {
+    try {
+      final token = await storageService.getAuthToken(); // ✅ Now works
+      if (token == null) {
+        return Left(ServerFailure('No token found'));
+      }
+
+      final users = await remoteDataSource.getAdminUsersForChat();
+      return Right(users);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Failed to get admins: $e'));
     }
   }
 }

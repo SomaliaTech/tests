@@ -11,7 +11,12 @@ class ColorModel extends ColorEntity {
     return ColorModel(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
-      code: json['code'] ?? '#000000',
+      code: json['code'] ?? '',
     );
+  }
+
+  // ✅ NEW: Convert to entity
+  ColorEntity toEntity() {
+    return ColorEntity(id: id, name: name, code: code);
   }
 }

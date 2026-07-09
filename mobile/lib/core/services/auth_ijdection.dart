@@ -1,5 +1,6 @@
-// lib/core/services/auth_injection.dart
+// lib/core/services/auth_injection.dart (rename from auth_ijdection.dart)
 import 'package:get_it/get_it.dart';
+import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:mobile/features/auth/data/repositories/auth_repository_impl.dart';
@@ -12,11 +13,18 @@ import 'package:mobile/features/auth/domain/usecases/send_otp.dart';
 import 'package:mobile/features/auth/domain/usecases/upload_profile_image.dart';
 import 'package:mobile/features/auth/domain/usecases/verify_otp.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:flutter/foundation.dart';
 
 void authRegisterDependencies(GetIt sl) {
-  print('📦 Registering Auth Dependencies...');
+  debugPrint('📦 Registering Auth Dependencies...');
 
-  // Data Sources
+  // Data Sources - ✅ Use apiClient instead of client
+  // if (!sl.isRegistered<AuthRemoteDataSource>()) {
+  //   sl.registerLazySingleton<AuthRemoteDataSource>(
+  //     () => AuthRemoteDataSourceImpl(apiClient: sl<ApiClient>()),
+  //   );
+  // }
+
   if (!sl.isRegistered<AuthRemoteDataSource>()) {
     sl.registerLazySingleton<AuthRemoteDataSource>(
       () => AuthRemoteDataSourceImpl(client: sl()),
@@ -64,9 +72,9 @@ void authRegisterDependencies(GetIt sl) {
       checkAuthStatus: sl(),
       logout: sl(),
       storageService: sl(),
-      chatSocketService: sl<ChatSocketService>(), // ✅ pass the singleton
+      chatSocketService: sl<ChatSocketService>(),
     ),
   );
 
-  print('✅ Auth Dependencies Registered');
+  debugPrint('✅ Auth Dependencies Registered');
 }

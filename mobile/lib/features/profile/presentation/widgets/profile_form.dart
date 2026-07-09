@@ -55,7 +55,7 @@ class _ProfileFormState extends State<ProfileForm> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04), // ✅ Fixed
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -172,7 +172,9 @@ class _ProfileFormState extends State<ProfileForm> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withOpacity(0.1),
+                          color: const Color(
+                            0xFFF59E0B,
+                          ).withValues(alpha: 0.1), // ✅ Fixed
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -185,13 +187,10 @@ class _ProfileFormState extends State<ProfileForm> {
                       Expanded(
                         child: Text(
                           widget.selectedMarket?.name ??
-                              widget.profile.marketName ??
-                              'Select your market',
+                              'Select your market', // ✅ Fixed
                           style: TextStyle(
                             fontSize: 15,
-                            color:
-                                (widget.selectedMarket != null ||
-                                    widget.profile.marketName != null)
+                            color: widget.selectedMarket != null
                                 ? const Color(0xFF1F2937)
                                 : const Color(0xFF9CA3AF),
                             fontWeight: FontWeight.w500,
@@ -201,7 +200,9 @@ class _ProfileFormState extends State<ProfileForm> {
                       Container(
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2ED573).withOpacity(0.1),
+                          color: const Color(
+                            0xFF2ED573,
+                          ).withValues(alpha: 0.1), // ✅ Fixed
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
@@ -227,7 +228,9 @@ class _ProfileFormState extends State<ProfileForm> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
-                shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+                shadowColor: const Color(
+                  0xFF2ED573,
+                ).withValues(alpha: 0.4), // ✅ Fixed
                 elevation: 8,
                 padding: EdgeInsets.zero,
                 shape: RoundedRectangleBorder(
@@ -311,7 +314,7 @@ class _ProfileFormState extends State<ProfileForm> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1), // ✅ Fixed
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: iconColor, size: 20),
@@ -377,7 +380,7 @@ class _ProfileFormState extends State<ProfileForm> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1), // ✅ Fixed
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: iconColor, size: 20),

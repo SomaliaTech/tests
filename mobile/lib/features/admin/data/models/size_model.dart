@@ -14,4 +14,9 @@ class SizeModel extends SizeEntity {
       value: json['value'] ?? '',
     );
   }
+
+  // ✅ NEW: Convert to entity
+  SizeEntity toEntity() {
+    return SizeEntity(id: id, name: name, value: value);
+  }
 }

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/admin/domain/repositories/admin_product_repository.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_state.dart';
+import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 
 class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
   final AdminProductRepository repository;
@@ -45,44 +47,34 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     }
   }
 
+  // In AdminProductBloc - _onCreate method
   Future<void> _onCreate(
     CreateAdminProductEvent event,
     Emitter<AdminProductState> emit,
   ) async {
     try {
-      // Step 1: Create product
       emit(const AdminProductCreating(step: 'creating'));
-      final productId = await repository.createProduct(event.productData);
 
-      // Step 2: Upload images
-      if (event.images.isNotEmpty) {
-        for (int i = 0; i < event.images.length; i++) {
-          emit(
-            AdminProductCreating(
-              step: 'uploading_images',
-              current: i + 1,
-              total: event.images.length,
-            ),
-          );
-          final bytes = await event.images[i].readAsBytes();
-          final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-          await repository.uploadProductImage(productId, base64Image);
-        }
-      }
-
-      // Step 3: Add variants
+      final productData = Map<String, dynamic>.from(event.productData);
       if (event.variants.isNotEmpty) {
-        for (int i = 0; i < event.variants.length; i++) {
-          emit(
-            AdminProductCreating(
-              step: 'adding_variants',
-              current: i + 1,
-              total: event.variants.length,
-            ),
-          );
-          await repository.addProductVariant(productId, event.variants[i]);
-        }
+        productData['variants'] = event.variants.map((v) {
+          final clean = {'colorId': v['colorId'], 'sizeId': v['sizeId']};
+          if (v['stock'] != null) clean['stock'] = v['stock'];
+          if (v['price'] != null) clean['price'] = v['price'];
+          if (v['sku'] != null) clean['sku'] = v['sku'];
+          return clean;
+        }).toList();
       }
+
+      debugPrint(
+        '📦 [Bloc] Creating product with ${event.variants.length} variants and ${event.images.length} images',
+      );
+
+      // ✅ Send everything in ONE multipart request
+      final productId = await repository.createProduct(
+        productData,
+        images: event.images,
+      );
 
       emit(
         AdminProductOperationSuccess(
@@ -92,6 +84,7 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       );
       add(FetchAllAdminProductsEvent());
     } catch (e) {
+      debugPrint('❌ [Bloc] Create product error: $e');
       emit(AdminProductsError(e.toString()));
     }
   }
@@ -135,66 +128,29 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     }
   }
 
+  // In AdminProductBloc - Updated _onUpdate method
   Future<void> _onUpdate(
     UpdateAdminProductEvent event,
     Emitter<AdminProductState> emit,
   ) async {
     try {
-      // Step 1: Update product
       emit(const AdminProductCreating(step: 'updating'));
-      await repository.updateProduct(event.productId, event.updateData);
 
-      // Step 2: Delete removed images
-      if (event.deletedImageIds.isNotEmpty) {
-        for (int i = 0; i < event.deletedImageIds.length; i++) {
-          emit(
-            AdminProductCreating(
-              step: 'deleting_images',
-              current: i + 1,
-              total: event.deletedImageIds.length,
-            ),
-          );
-          // You'll need to add deleteImage method to repository
-          // await repository.deleteProductImage(event.productId, event.deletedImageIds[i]);
-        }
-      }
-
-      // Step 3: Upload new images
-      if (event.newImages.isNotEmpty) {
-        for (int i = 0; i < event.newImages.length; i++) {
-          emit(
-            AdminProductCreating(
-              step: 'uploading_images',
-              current: i + 1,
-              total: event.newImages.length,
-            ),
-          );
-          final bytes = await event.newImages[i].readAsBytes();
-          final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-          await repository.uploadProductImage(event.productId, base64Image);
-        }
-      }
-
-      // Step 4: Add new variants
-      if (event.newVariants.isNotEmpty) {
-        for (int i = 0; i < event.newVariants.length; i++) {
-          emit(
-            AdminProductCreating(
-              step: 'adding_variants',
-              current: i + 1,
-              total: event.newVariants.length,
-            ),
-          );
-          await repository.addProductVariant(
-            event.productId,
-            event.newVariants[i],
-          );
-        }
-      }
+      // ✅ Send everything in ONE request
+      await repository.updateProduct(
+        event.productId,
+        event.updateData,
+        newImages: event.newImages,
+        deletedImageIds: event.deletedImageIds,
+        existingVariants: event.existingVariants,
+        newVariants: event.newVariants,
+        deletedVariantIds: event.deletedVariantIds,
+      );
 
       emit(AdminProductOperationSuccess('Product updated successfully'));
       add(FetchAllAdminProductsEvent());
     } catch (e) {
+      debugPrint('❌ [Bloc] Update product error: $e');
       emit(AdminProductsError(e.toString()));
     }
   }

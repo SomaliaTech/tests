@@ -28,6 +28,8 @@ class AdminUserRemoteDataSourceImpl implements AdminUserRemoteDataSource {
     return token;
   }
 
+  // admin_user_remote_data_source.dart
+
   @override
   Future<List<AdminUserModel>> getAllUsers(String? search) async {
     final token = await _getToken();
@@ -45,7 +47,21 @@ class AdminUserRemoteDataSourceImpl implements AdminUserRemoteDataSource {
     );
 
     if (response.statusCode == 200) {
-      final List<dynamic> jsonList = json.decode(response.body);
+      final decoded = json.decode(response.body);
+
+      // ✅ Handle both List and Map with 'items' key
+      List<dynamic> jsonList;
+      if (decoded is List) {
+        jsonList = decoded;
+      } else if (decoded is Map && decoded.containsKey('items')) {
+        jsonList = decoded['items'];
+      } else if (decoded is Map && decoded.containsKey('data')) {
+        jsonList = decoded['data'];
+      } else {
+        print('❌ [AdminUsers] Unexpected response format: $decoded');
+        return [];
+      }
+
       return jsonList.map((json) => AdminUserModel.fromJson(json)).toList();
     } else {
       throw ServerException('Failed to load users: ${response.statusCode}');
@@ -93,8 +109,17 @@ class AdminUserRemoteDataSourceImpl implements AdminUserRemoteDataSource {
     Map<String, dynamic> updateData,
   ) async {
     final token = await _getToken();
+
+    // ✅ Check if admin status is being updated
+    final isAdminBeingUpdated = updateData.containsKey('isAdmin');
+
+    // ✅ Use different endpoint based on what's being updated
+    final endpoint = isAdminBeingUpdated
+        ? '${ApiConstants.baseUrl}/admin/users/$userId/admin'
+        : '${ApiConstants.baseUrl}/admin/users/$userId';
+
     final response = await client.put(
-      Uri.parse('${ApiConstants.baseUrl}/admin/users/$userId'),
+      Uri.parse(endpoint),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',

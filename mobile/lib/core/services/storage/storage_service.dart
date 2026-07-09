@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,15 +12,55 @@ class StorageService {
   static const String _userProfileImageKey = 'user_profile_image';
   static const String _userMarketIdKey = 'user_market_id';
   static const String _isAdminKey = 'is_admin';
+  static const String _isSuperAdminKey = 'is_super_admin'; // ✅ Already defined
   static const String _messageSoundKey = 'message_sound_enabled';
 
   final FlutterSecureStorage _secureStorage;
 
   // ✅ In-memory cache to prevent read delays
   String? _cachedToken;
+  bool? _cachedIsSuperAdmin; // ✅ Cache for super admin
 
   StorageService({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+
+  // ==========================================
+  // Super Admin
+  // ==========================================
+  Future<void> saveIsSuperAdmin(bool isSuperAdmin) async {
+    debugPrint('💾 Saving isSuperAdmin: $isSuperAdmin'); // ✅ Debug
+    _cachedIsSuperAdmin = isSuperAdmin;
+    await _secureStorage.write(
+      key: _isSuperAdminKey,
+      value: isSuperAdmin.toString(),
+    );
+    debugPrint('💾 isSuperAdmin saved successfully');
+  }
+
+  Future<void> setChatMuted(String chatId, bool isMuted) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('chat_muted_$chatId', isMuted);
+  }
+
+  // Get mute status for a specific chat
+  Future<bool> isChatMuted(String chatId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('chat_muted_$chatId') ?? false;
+  }
+
+  Future<bool> getIsSuperAdmin() async {
+    debugPrint('🔍 Getting isSuperAdmin from storage...'); // ✅ Debug
+    if (_cachedIsSuperAdmin != null) {
+      debugPrint('🔍 Cached isSuperAdmin: $_cachedIsSuperAdmin');
+      return _cachedIsSuperAdmin!;
+    }
+    final value = await _secureStorage.read(key: _isSuperAdminKey);
+    debugPrint('🔍 Raw isSuperAdmin value: $value'); // ✅ Debug
+    final result = value == 'true';
+    _cachedIsSuperAdmin = result;
+    debugPrint('🔍 Parsed isSuperAdmin: $result'); // ✅ Debug
+    return result;
+  }
 
   // ==========================================
   // Auth related
@@ -109,7 +150,6 @@ class StorageService {
     return await _secureStorage.read(key: _userProfileImageKey);
   }
 
-  // ✅ FIXED: Only one version using _secureStorage
   Future<void> saveUserMarketId(String marketId) async {
     await _secureStorage.write(key: _userMarketIdKey, value: marketId);
   }
@@ -136,6 +176,7 @@ class StorageService {
   // ==========================================
   Future<void> clearAuthData() async {
     _cachedToken = null;
+    _cachedIsSuperAdmin = null; // ✅ Clear cache
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);
@@ -145,5 +186,6 @@ class StorageService {
     await _secureStorage.delete(key: _userProfileImageKey);
     await _secureStorage.delete(key: _userMarketIdKey);
     await _secureStorage.delete(key: _isAdminKey);
+    await _secureStorage.delete(key: _isSuperAdminKey); // ✅ Clear super admin
   }
 }

@@ -6,6 +6,7 @@ class AdminProductEntity extends Equatable {
   final String slug;
   final String? description;
   final double price;
+  final double? compareAtPrice; // ✅ NEW: Added this field
   final int stock;
   final String? categoryId;
   final String? categoryName;
@@ -23,6 +24,7 @@ class AdminProductEntity extends Equatable {
     required this.slug,
     this.description,
     required this.price,
+    this.compareAtPrice, // ✅ NEW
     required this.stock,
     this.categoryId,
     this.categoryName,
@@ -42,6 +44,7 @@ class AdminProductEntity extends Equatable {
     slug,
     description,
     price,
+    compareAtPrice, // ✅ NEW
     stock,
     categoryId,
     categoryName,
@@ -74,7 +77,6 @@ class AdminProductImageEntity extends Equatable {
   List<Object?> get props => [id, url, publicId, isMain, order];
 }
 
-// ✅ UPDATED: Added colorCode and sizeValue fields
 class AdminProductVariantEntity extends Equatable {
   final String id;
   final String? sku;
@@ -82,10 +84,10 @@ class AdminProductVariantEntity extends Equatable {
   final double? price;
   final String? colorId;
   final String? colorName;
-  final String? colorCode; // ✅ NEW
+  final String? colorCode;
   final String? sizeId;
   final String? sizeName;
-  final String? sizeValue; // ✅ NEW
+  final String? sizeValue;
 
   const AdminProductVariantEntity({
     required this.id,
@@ -94,10 +96,10 @@ class AdminProductVariantEntity extends Equatable {
     this.price,
     this.colorId,
     this.colorName,
-    this.colorCode, // ✅ NEW
+    this.colorCode,
     this.sizeId,
     this.sizeName,
-    this.sizeValue, // ✅ NEW
+    this.sizeValue,
   });
 
   @override
@@ -121,7 +123,7 @@ class AdminCategoryEntity extends Equatable {
   final String slug;
   final String? description;
   final String? parentId;
-  final String? iconUrl; // ✅ NEW
+  final String? iconUrl;
   final List<AdminCategoryEntity> children;
 
   const AdminCategoryEntity({
@@ -130,7 +132,7 @@ class AdminCategoryEntity extends Equatable {
     required this.slug,
     this.description,
     this.parentId,
-    this.iconUrl, // ✅ NEW
+    this.iconUrl,
     this.children = const [],
   });
 

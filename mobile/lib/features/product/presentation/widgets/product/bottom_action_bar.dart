@@ -39,44 +39,6 @@ class BottomActionBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            // Chat with Admin Button - Only show for non-admin users
-            if (!isAdmin) ...[
-              const ChatWithAdminButton(),
-              const SizedBox(width: 8),
-            ],
-
-            // Favorite Button with haptic feedback
-            GestureDetector(
-              onTap: () {
-                // Light haptic for toggle actions
-                HapticFeedback.lightImpact();
-                onFavoriteTap();
-              },
-              child: Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: isInWishlist
-                      ? const Color(0xFFFF4757).withValues(alpha: 0.1)
-                      : Colors.grey.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isInWishlist
-                        ? const Color(0xFFFF4757)
-                        : Colors.grey.shade300,
-                  ),
-                ),
-                child: Icon(
-                  isInWishlist ? Iconsax.heart5 : Iconsax.heart,
-                  color: isInWishlist
-                      ? const Color(0xFFFF4757)
-                      : Colors.grey.shade600,
-                  size: 24,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-
             // Add to Cart Button with haptic feedback
             Expanded(
               child: GestureDetector(

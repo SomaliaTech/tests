@@ -1,3 +1,4 @@
+// lib/features/admin/data/models/market_model.dart
 import '../../domain/entities/market_entity.dart';
 
 class MarketModel extends MarketEntity {
@@ -7,6 +8,7 @@ class MarketModel extends MarketEntity {
     required super.slug,
     super.city,
     required super.isActive,
+    super.userCount,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -18,6 +20,9 @@ class MarketModel extends MarketEntity {
       slug: json['slug'] ?? '',
       city: json['city'],
       isActive: json['isActive'] ?? true,
+      userCount: json['userCount'] != null
+          ? int.tryParse(json['userCount'].toString())
+          : null,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : DateTime.now(),
@@ -25,5 +30,18 @@ class MarketModel extends MarketEntity {
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'slug': slug,
+      'city': city,
+      'isActive': isActive,
+      'userCount': userCount,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
   }
 }

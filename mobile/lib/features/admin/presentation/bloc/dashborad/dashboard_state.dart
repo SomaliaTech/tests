@@ -46,6 +46,7 @@ class DashboardLoaded extends DashboardState {
   ];
 }
 
+// In dashboard_state.dart
 class DashboardError extends DashboardState {
   final String message;
   const DashboardError(this.message);

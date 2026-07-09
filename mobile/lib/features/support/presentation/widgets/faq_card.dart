@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/support/data/model/support_models.dart';
+import 'package:mobile/features/support/presentation/screens/support_screen.dart';
 
 class FAQCard extends StatefulWidget {
-  final FAQItem item;
+  final FaqItem item;
 
   const FAQCard({super.key, required this.item});
 

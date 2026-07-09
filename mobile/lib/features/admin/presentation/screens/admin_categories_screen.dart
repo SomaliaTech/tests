@@ -84,7 +84,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left_2, color: Colors.black87),
+          icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -381,10 +381,10 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
   final ImagePicker _imagePicker = ImagePicker();
   File? _selectedIcon;
   String? _existingIconUrl;
+  bool _isSubmitting = false; // ✅ Add loading state
 
   bool get isEditing => widget.category != null;
 
-  // ✅ NEW: Determine if this is a subcategory
   bool get _isSubcategory {
     if (widget.parentCategory != null) return true;
     if (isEditing && widget.category!.parentId != null) return true;
@@ -447,29 +447,45 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
     }
   }
 
-  void _submit() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_isSubmitting) return; // ✅ Prevent double submit
 
-    final data = {
-      'name': _nameController.text.trim(),
-      'slug': _slugController.text.trim(),
-      'description': _descriptionController.text.trim(),
-    };
+    setState(() => _isSubmitting = true);
 
-    if (!isEditing && widget.parentCategory != null) {
-      data['parentId'] = widget.parentCategory!.id;
-    }
+    try {
+      final data = {
+        'name': _nameController.text.trim(),
+        'slug': _slugController.text.trim(),
+        'description': _descriptionController.text.trim(),
+      };
 
-    // ✅ Only send icon for parent categories
-    if (!_isSubcategory && _selectedIcon != null) {
-      final base64Image = await _convertToBase64();
-      if (base64Image != null) {
-        data['iconBase64'] = base64Image;
+      if (!isEditing && widget.parentCategory != null) {
+        data['parentId'] = widget.parentCategory!.id;
+      }
+
+      // Only send icon for parent categories
+      if (!_isSubcategory && _selectedIcon != null) {
+        final base64Image = await _convertToBase64();
+        if (base64Image != null) {
+          data['iconBase64'] = base64Image;
+        }
+      }
+
+      // ✅ Call onSubmit (this triggers the Bloc event)
+      widget.onSubmit(data);
+
+      // ✅ Close dialog after a short delay to allow Bloc to process
+      // The BlocListener in the parent will handle success/error toasts
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      if (mounted) {
+        ToastHelper.showError(context, 'Failed to submit: $e');
       }
     }
-
-    widget.onSubmit(data);
-    Navigator.pop(context);
   }
 
   @override
@@ -535,7 +551,6 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                 ),
                 const SizedBox(height: 24),
 
-                // ✅ Only show icon picker for parent categories
                 if (!_isSubcategory) ...[
                   _buildIconPicker(),
                   const SizedBox(height: 20),
@@ -591,7 +606,11 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => Navigator.pop(
+                                context,
+                              ), // ✅ Disable while submitting
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           side: BorderSide(color: Colors.grey[300]!),
@@ -611,7 +630,9 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: _submit,
+                        onPressed: _isSubmitting
+                            ? null
+                            : _submit, // ✅ Disable while submitting
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
                           foregroundColor: Colors.white,
@@ -621,17 +642,27 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                           ),
                           elevation: 0,
                         ),
-                        child: Text(
-                          isEditing
-                              ? 'Update'
-                              : (_isSubcategory
-                                    ? 'Create '
-                                    : 'Create Category'),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child:
+                            _isSubmitting // ✅ Show loading indicator
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                isEditing
+                                    ? 'Update'
+                                    : (_isSubcategory
+                                          ? 'Create Subcategory'
+                                          : 'Create Category'),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
                   ],

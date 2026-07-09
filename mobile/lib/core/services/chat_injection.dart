@@ -36,11 +36,13 @@ void registerChatDependencies() {
   }
 
   // Repositories
-  if (!sl.isRegistered<ChatRepository>()) {
-    sl.registerLazySingleton<ChatRepository>(
-      () => ChatRepositoryImpl(remoteDataSource: sl<ChatRemoteDataSource>()),
-    );
-  }
+  // In chat_injection.dart or wherever you register ChatRepositoryImpl
+  sl.registerLazySingleton<ChatRepository>(
+    () => ChatRepositoryImpl(
+      remoteDataSource: sl<ChatRemoteDataSource>(),
+      storageService: sl<StorageService>(), // ✅ Add this
+    ),
+  );
 
   // Use Cases
   if (!sl.isRegistered<GetConversations>()) {

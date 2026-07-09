@@ -7,103 +7,112 @@ import 'package:mobile/features/admin/domain/entities/chart_data_entity.dart';
 // ==========================================
 // 1. STAT CARD WIDGET (Light Theme) - FIXED
 // ==========================================
+// In your dashboard_widgets.dart file
 class DashboardStatCard extends StatelessWidget {
   final String title;
   final String value;
-  final double trend;
+  final double? trend;
   final IconData icon;
   final Color color;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const DashboardStatCard({
     super.key,
     required this.title,
     required this.value,
-    required this.trend,
+    this.trend,
     required this.icon,
     required this.color,
-    required this.onPressed,
+    this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isPositive = trend >= 0;
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: const EdgeInsets.all(8), // Reduced padding
+        padding: const EdgeInsets.all(14), // ✅ Reduced padding
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.05),
-              spreadRadius: 1,
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min, // ✅ Changed to min
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min, // ✅ Minimize vertical space
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12, // Reduced font size
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis, // ✅ Prevent overflow
-                  maxLines: 1,
-                ),
                 Container(
-                  padding: const EdgeInsets.all(3), // Reduced padding
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: color, size: 16), // Reduced size
+                  child: Icon(icon, color: color, size: 18), // ✅ Smaller icon
                 ),
+                if (trend != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: trend! >= 0
+                          ? const Color(0xFF2ED573).withValues(alpha: 0.1)
+                          : Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          trend! >= 0 ? Iconsax.arrow_up : Iconsax.arrow_down,
+                          size: 10,
+                          color: trend! >= 0
+                              ? const Color(0xFF2ED573)
+                              : Colors.red,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          '${trend!.abs().toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: trend! >= 0
+                                ? const Color(0xFF2ED573)
+                                : Colors.red,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
-            const SizedBox(height: 6), // Reduced spacing
+            const SizedBox(height: 10), // ✅ Reduced spacing
             Text(
               value,
-              style: const TextStyle(
-                color: Colors.black87,
-                fontSize: 17, // Reduced font size
+              style: TextStyle(
+                fontSize: 20, // ✅ Slightly smaller
                 fontWeight: FontWeight.bold,
+                color: const Color(0xFF1F2937),
               ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
             ),
-            const SizedBox(height: 4), // Reduced spacing
-            Row(
-              children: [
-                Icon(
-                  isPositive ? Iconsax.add_square5 : Iconsax.send_sqaure_2,
-                  color: isPositive ? AppTheme.primaryColor : Colors.redAccent,
-                  size: 12, // Reduced size
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  '${isPositive ? '+' : ''}${trend.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: isPositive
-                        ? AppTheme.primaryColor
-                        : Colors.redAccent,
-                    fontSize: 16, // Reduced font size
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 2),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[500],
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),

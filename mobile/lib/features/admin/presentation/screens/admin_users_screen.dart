@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/core/theme/theme.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/features/admin/domain/entities/admin_user_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_event.dart';
@@ -20,18 +22,38 @@ class AdminUsersScreen extends StatefulWidget {
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isSuperAdmin = false;
 
   @override
   void initState() {
     super.initState();
-    context.read<UserBloc>().add(const FetchAllUsersEvent());
+    _checkSuperAdmin();
+    _refreshUsers();
+  }
+
+  Future<void> _checkSuperAdmin() async {
+    final storageService = sl<StorageService>();
+    final isSuperAdmin = await storageService.getIsSuperAdmin();
+    if (mounted) {
+      setState(() {
+        _isSuperAdmin = isSuperAdmin;
+      });
+    }
+  }
+
+  void _refreshUsers() {
+    context.read<UserBloc>().add(
+      FetchAllUsersEvent(search: _searchQuery.isNotEmpty ? _searchQuery : null),
+    );
   }
 
   void _onSearchChanged(String query) {
     setState(() {
       _searchQuery = query;
     });
-    context.read<UserBloc>().add(FetchAllUsersEvent(search: query));
+    context.read<UserBloc>().add(
+      FetchAllUsersEvent(search: query.isNotEmpty ? query : null),
+    );
   }
 
   @override
@@ -69,16 +91,29 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
         ),
         centerTitle: true,
+        // ✅ Only show Add button and Refresh button for Super Admin
         actions: [
+          // Refresh button - visible to all admins
           IconButton(
-            icon: const Icon(Iconsax.add, color: Colors.black87),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddUserScreen()),
-              );
-            },
+            icon: const Icon(Iconsax.refresh, color: Colors.black87),
+            onPressed: _refreshUsers,
+            tooltip: 'Refresh',
           ),
+          // Add button - only for Super Admin
+          if (_isSuperAdmin)
+            IconButton(
+              icon: const Icon(Iconsax.add, color: Colors.black87),
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddUserScreen()),
+                );
+                // ✅ Refresh list when returning from AddUserScreen
+                if (result == true && mounted) {
+                  _refreshUsers();
+                }
+              },
+            ),
         ],
       ),
       body: BlocListener<UserBloc, UserState>(
@@ -93,6 +128,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               foregroundColor: Colors.white,
               icon: const Icon(Iconsax.tick_circle, color: Colors.white),
             );
+            // ✅ Refresh list on success
+            _refreshUsers();
           } else if (state is UserError) {
             toastification.show(
               title: Text(state.message),
@@ -198,21 +235,44 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         ),
                       );
                     }
-                    return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: users.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final user = users[index];
-                        return _buildUserCard(context, user);
+                    return RefreshIndicator(
+                      color: const Color(0xFF2ED573),
+                      onRefresh: () async {
+                        _refreshUsers();
                       },
+                      child: ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: users.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final user = users[index];
+                          return _buildUserCard(context, user);
+                        },
+                      ),
                     );
                   }
-                  return const Center(
-                    child: Text(
-                      'Failed to load users',
-                      style: TextStyle(color: Colors.red),
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Iconsax.warning_2,
+                          size: 60,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Failed to load users',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton.icon(
+                          onPressed: _refreshUsers,
+                          icon: const Icon(Iconsax.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -226,11 +286,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   Widget _buildUserCard(BuildContext context, AdminUserEntity user) {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => AdminUserDetailsScreen(user: user)),
         );
+        // ✅ Refresh list when returning from details screen
+        if (mounted) {
+          _refreshUsers();
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -270,15 +334,61 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    user.name ?? 'No Name',
-                    style: const TextStyle(
-                      color: Colors.black87,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          user.name ?? 'No Name',
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // ✅ Show admin/super admin badge
+                      if (user.isSuperAdmin == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Super',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        )
+                      else if (user.isAdmin == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Admin',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.purple,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+
                   const SizedBox(height: 4),
                   Text(
                     user.email ?? user.phoneNumber,
@@ -316,3 +426,5 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 }
+
+//

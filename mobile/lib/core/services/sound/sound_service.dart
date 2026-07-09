@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 
 class SoundService {
   static final SoundService _instance = SoundService._internal();
@@ -8,32 +9,38 @@ class SoundService {
   final AudioPlayer _player = AudioPlayer();
   bool _isInitialized = false;
 
+  // ✅ Debounce: prevent multiple plays within 500ms
+  DateTime? _lastPlayTime;
+
   Future<void> init() async {
     if (_isInitialized) return;
     _isInitialized = true;
 
     try {
       await _player.setSource(AssetSource('sounds/message_received.mp3'));
-      await _player.setVolume(1.0);
-      print('🔊 Sound service initialized successfully');
+      await _player.setReleaseMode(ReleaseMode.stop);
+      debugPrint('🔊 Sound service initialized successfully');
     } catch (e) {
-      print('❌ Sound service failed: $e');
+      debugPrint('❌ Sound service failed: $e');
     }
   }
 
   Future<void> playMessageSound() async {
     try {
-      // ✅ Simple approach: just stop and play
-      await _player.stop();
-      await _player.resume();
-    } catch (e) {
-      // If resume fails, try setting source again
-      try {
-        await _player.setSource(AssetSource('sounds/message_received.mp3'));
-        await _player.resume();
-      } catch (e2) {
-        print('❌ Sound play failed: $e2');
+      // ✅ Debounce: prevent rapid successive plays
+      final now = DateTime.now();
+      if (_lastPlayTime != null &&
+          now.difference(_lastPlayTime!).inMilliseconds < 500) {
+        debugPrint('🔊 Sound skipped (debounce)');
+        return;
       }
+      _lastPlayTime = now;
+
+      await _player.stop();
+      await _player.play(AssetSource('sounds/message_received.mp3'));
+      debugPrint('🔊 Message sound played');
+    } catch (e) {
+      debugPrint('❌ Sound play failed: $e');
     }
   }
 

@@ -35,11 +35,24 @@ class AdminMarketRepositoryImpl implements AdminMarketRepository {
     }
   }
 
+  // In admin_market_repository_impl.dart
+
   @override
   Future<void> deleteMarket(String marketId) async {
     try {
-      await remoteDataSource.deleteMarket(marketId);
-    } on ServerException {
+      final result = await remoteDataSource.deleteMarket(marketId);
+      // If the result contains a deactivated message, it's not an error
+      // The remote data source should handle this
+      return result;
+    } catch (e) {
+      // Only throw if it's a real error
+      if (e.toString().contains('BadRequestException') ||
+          e.toString().contains('Cannot delete')) {
+        throw ServerException(
+          'Cannot delete this market because it has associated users. '
+          'The market has been deactivated instead.',
+        );
+      }
       rethrow;
     }
   }

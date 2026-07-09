@@ -1,29 +1,30 @@
+// lib/features/profile/data/models/profile_model.dart
 import '../../domain/entities/profile.dart';
 
-class ProfileModel {
-  const ProfileModel._();
+class ProfileModel extends Profile {
+  const ProfileModel({
+    required super.id,
+    required super.name,
+    required super.phoneNumber,
+    super.email,
+    super.profileImage,
+    super.marketId,
+    required super.isVerified,
+    super.isAdmin,
+    super.isSuperAdmin,
+  });
 
-  static Profile fromJson(Map<String, dynamic> json) {
-    return Profile(
-      id: json['id'] as String,
-      name: json['name'] as String? ?? '',
-      phoneNumber: json['phoneNumber'] as String? ?? '',
+  factory ProfileModel.fromJson(Map<String, dynamic> json) {
+    return ProfileModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      phoneNumber: json['phoneNumber']?.toString() ?? '',
       email: json['email'] as String?,
       profileImage: json['profileImage'] as String?,
       marketId: json['marketId'] as String?,
-      marketName: json['marketName'] as String?,
+      isVerified: json['isVerified'] == true,
+      isAdmin: json['isAdmin'] == true, // ✅ Parse admin
+      isSuperAdmin: json['isSuperAdmin'] == true, // ✅ Parse super admin
     );
-  }
-
-  static Map<String, dynamic> toJson(Profile profile) {
-    return {
-      'id': profile.id,
-      'name': profile.name,
-      'phoneNumber': profile.phoneNumber,
-      'email': profile.email,
-      'profileImage': profile.profileImage,
-      'marketId': profile.marketId,
-      'marketName': profile.marketName,
-    };
   }
 }

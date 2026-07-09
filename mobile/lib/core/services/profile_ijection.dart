@@ -42,12 +42,14 @@ void registerProfileDependencies(GetIt sl) {
 
   // BLoC
   if (!sl.isRegistered<ProfileBloc>()) {
+    // In profile_injection.dart
     sl.registerFactory(
       () => ProfileBloc(
         getProfile: sl(),
         updateProfile: sl(),
         uploadProfileImage: sl(),
         deleteAccount: sl(),
+        storageService: sl(), // ✅ Add this
       ),
     );
   }

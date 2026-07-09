@@ -31,6 +31,7 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     CreateCategoryEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
+    emit(AdminCategoriesLoading());
     try {
       await repository.createCategory(event.data);
       emit(
@@ -46,6 +47,7 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     UpdateCategoryEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
+    emit(AdminCategoriesLoading());
     try {
       await repository.updateCategory(event.categoryId, event.data);
       emit(
@@ -61,6 +63,7 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     DeleteCategoryEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
+    emit(AdminCategoriesLoading());
     try {
       await repository.deleteCategory(event.categoryId);
       emit(

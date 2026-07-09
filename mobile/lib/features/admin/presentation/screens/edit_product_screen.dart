@@ -37,8 +37,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final List<File> _newImages = [];
   final List<String> _deletedImageIds = [];
 
-  final List<AdminProductVariantEntity> _existingVariants = [];
+  // ✅ Updated: Use Map for editable existing variants
+  final List<Map<String, dynamic>> _existingVariants = [];
   final List<Map<String, dynamic>> _newVariants = [];
+  final List<String> _deletedVariantIds = [];
 
   AdminCategoryEntity? _selectedCategory;
   AdminCategoryEntity? _selectedSubcategory;
@@ -47,7 +49,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
   AdminProductEntity? _productData;
 
-  // ✅ Cache categories locally
   List<AdminCategoryEntity> _cachedCategories = [];
   bool _categoriesLoaded = false;
   bool _categorySet = false;
@@ -84,8 +85,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
   void _populateFields(AdminProductEntity product) {
     print('🔍 [EditProduct] Populating fields...');
-    print('   - Product categoryId: ${product.categoryId}');
-    print('   - Product categoryName: ${product.categoryName}');
 
     _nameController.text = product.name;
     _descriptionController.text = product.description ?? '';
@@ -95,10 +94,27 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _tagsController.text = product.tags ?? '';
     _isActive = product.isActive;
     _existingImages.addAll(product.images);
-    _existingVariants.addAll(product.variants);
+
+    // ✅ Convert existing variants to editable Maps
+    _existingVariants.addAll(
+      product.variants.map(
+        (v) => {
+          'variantId': v.id,
+          'colorId': v.colorId,
+          'colorName': v.colorName ?? '',
+          'colorCode': v.colorCode ?? '#000000',
+          'sizeId': v.sizeId,
+          'sizeName': v.sizeName ?? '', // ✅ Added sizeName
+          'sizeValue': v.sizeValue ?? '',
+          'sku': v.sku,
+          'stock': v.stock,
+          'price': v.price,
+        },
+      ),
+    );
+
     _productData = product;
 
-    // ✅ Try to set category if categories are already loaded
     if (_categoriesLoaded && !_categorySet) {
       print('   ✅ Categories already loaded, setting category now');
       _setCategoryFromProduct(product);
@@ -113,22 +129,13 @@ class _EditProductScreenState extends State<EditProductScreen> {
       return;
     }
 
-    print('🔍 [EditProduct] Looking for category ID: ${product.categoryId}');
-    print('   📂 Cached categories count: ${_cachedCategories.length}');
-
-    // ✅ Use cached categories instead of checking BLoC state
     if (_cachedCategories.isEmpty) {
       print('⚠️ [EditProduct] No cached categories available');
       return;
     }
 
     for (final parentCategory in _cachedCategories) {
-      print(
-        '   🔍 Checking parent: ${parentCategory.name} (${parentCategory.id})',
-      );
-
       if (parentCategory.id == product.categoryId) {
-        print('   ✅ Found as parent category!');
         setState(() {
           _selectedCategory = parentCategory;
           _selectedSubcategory = null;
@@ -138,9 +145,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
       }
 
       for (final child in parentCategory.children) {
-        print('      🔍 Checking child: ${child.name} (${child.id})');
         if (child.id == product.categoryId) {
-          print('      ✅ Found as subcategory!');
           setState(() {
             _selectedCategory = parentCategory;
             _selectedSubcategory = child;
@@ -171,28 +176,28 @@ class _EditProductScreenState extends State<EditProductScreen> {
     }
   }
 
+  // In _EditProductScreenState - this is already correct!
   void _removeExistingImage(int index) {
     final image = _existingImages[index];
     setState(() {
-      _existingImages.removeAt(index);
-      _deletedImageIds.add(image.id);
+      _existingImages.removeAt(index); // Remove from UI
+      _deletedImageIds.add(image.id); // Mark for deletion
     });
+    // ✅ DO NOT call any API here - wait for form submission
   }
 
   void _removeNewImage(int index) {
     setState(() => _newImages.removeAt(index));
   }
 
+  // ✅ Add new variants
   void _showAddVariantDialog() {
+    final allExisting = [..._existingVariants, ..._newVariants];
+
     showDialog(
       context: context,
       builder: (context) => _AddVariantDialog(
-        existingVariants: [
-          ..._existingVariants.map(
-            (v) => {'colorId': v.colorId, 'sizeId': v.sizeId},
-          ),
-          ..._newVariants,
-        ],
+        existingVariants: allExisting,
         onAdd: (newVariants) {
           setState(() {
             _newVariants.addAll(newVariants);
@@ -202,11 +207,62 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  void _removeExistingVariant(int index) {
-    HapticFeedback.mediumImpact();
-    setState(() => _existingVariants.removeAt(index));
+  // ✅ Edit existing variant
+  void _editExistingVariant(int index) {
+    final allExisting = [..._existingVariants, ..._newVariants];
+
+    showDialog(
+      context: context,
+      builder: (context) => _EditVariantDialog(
+        variant: _existingVariants[index],
+        index: index,
+        existingVariants: allExisting,
+        onSave: (idx, updatedVariant) {
+          setState(() {
+            _existingVariants[idx] = updatedVariant;
+          });
+        },
+      ),
+    );
   }
 
+  // ✅ Edit new variant
+  void _editNewVariant(int index) {
+    final allExisting = [..._existingVariants, ..._newVariants];
+
+    showDialog(
+      context: context,
+      builder: (context) => _EditVariantDialog(
+        variant: _newVariants[index],
+        index: index,
+        existingVariants: allExisting,
+        isNew: true,
+        onSave: (idx, updatedVariant) {
+          setState(() {
+            _newVariants[idx] = updatedVariant;
+          });
+        },
+      ),
+    );
+  }
+
+  // ✅ Delete existing variant (mark for deletion)
+  // In _EditProductScreenState - this is already correct!
+  void _removeExistingVariant(int index) {
+    HapticFeedback.mediumImpact();
+    final variant = _existingVariants[index];
+    final variantId = variant['variantId'] as String?;
+
+    setState(() {
+      if (variantId != null) {
+        _deletedVariantIds.add(variantId); // Mark for deletion
+      }
+      _existingVariants.removeAt(index); // Remove from UI
+    });
+    // ✅ DO NOT call any API here - wait for form submission
+  }
+
+  // ✅ Delete new variant
   void _removeNewVariant(int index) {
     HapticFeedback.mediumImpact();
     setState(() => _newVariants.removeAt(index));
@@ -238,7 +294,17 @@ class _EditProductScreenState extends State<EditProductScreen> {
       'isActive': _isActive,
     };
 
-    print('📤 [EditProduct] Sending update data: $updateData');
+    // ✅ Send updated existing variants (without variantId for the API)
+    final updatedExistingVariants = _existingVariants.map((v) {
+      final clean = Map<String, dynamic>.from(v);
+      clean.remove('variantId');
+      return clean;
+    }).toList();
+
+    print('📤 [EditProduct] Sending update data');
+    print('   - Existing variants: ${updatedExistingVariants.length}');
+    print('   - New variants: ${_newVariants.length}');
+    print('   - Deleted variant IDs: ${_deletedVariantIds.length}');
 
     context.read<AdminProductBloc>().add(
       UpdateAdminProductEvent(
@@ -246,7 +312,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
         updateData: updateData,
         newImages: _newImages,
         deletedImageIds: _deletedImageIds,
+        existingVariants: updatedExistingVariants,
         newVariants: _newVariants,
+        deletedVariantIds: _deletedVariantIds,
       ),
     );
   }
@@ -257,23 +325,13 @@ class _EditProductScreenState extends State<EditProductScreen> {
       backgroundColor: const Color(0xFFF8F9FA),
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
-          // ✅ Handle categories loaded - CACHE them
           if (state is AdminCategoriesLoaded) {
-            print(
-              '✅ [EditProduct] Categories loaded - caching ${state.categories.length} categories',
-            );
             _cachedCategories = state.categories;
             setState(() => _categoriesLoaded = true);
-
-            // ✅ If product data is already loaded but category not set yet, set it now
             if (_productData != null && !_categorySet) {
-              print('   🔄 Product already loaded, setting category now');
               _setCategoryFromProduct(_productData!);
             }
-          }
-          // ✅ Handle product data loaded
-          else if (state is AdminProductDetailsLoaded && _isLoadingProduct) {
-            print('✅ [EditProduct] Product data loaded');
+          } else if (state is AdminProductDetailsLoaded && _isLoadingProduct) {
             _populateFields(state.product);
             setState(() => _isLoadingProduct = false);
           } else if (state is AdminProductOperationSuccess) {
@@ -396,9 +454,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                               title: 'Category',
                               subtitle: _selectedCategory != null
                                   ? 'Selected: ${_selectedSubcategory?.name ?? _selectedCategory!.name}'
-                                  : (_categoriesLoaded
-                                        ? 'Select a category'
-                                        : 'Loading categories...'),
+                                  : 'Select a category',
                               icon: Iconsax.category,
                               child: _categoriesLoaded
                                   ? _buildCategoryDropdowns()
@@ -491,14 +547,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
                               color: Color(0xFF1F2937),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Saving changes and uploading',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -511,42 +559,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  Widget _buildCategoryDropdowns() {
-    if (_cachedCategories.isEmpty) {
-      return _buildWarningBox('No categories available.');
-    }
-
-    return Column(
-      children: [
-        _buildCategoryDropdown(
-          label: 'Parent Category',
-          categories: _cachedCategories,
-          selectedCategory: _selectedCategory,
-          onChanged: (category) {
-            setState(() {
-              _selectedCategory = category;
-              _selectedSubcategory = null;
-            });
-          },
-        ),
-        if (_selectedCategory != null &&
-            _selectedCategory!.children.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _buildCategoryDropdown(
-            label: 'Subcategory',
-            categories: _selectedCategory!.children,
-            selectedCategory: _selectedSubcategory,
-            onChanged: (category) {
-              setState(() {
-                _selectedSubcategory = category;
-              });
-            },
-          ),
-        ],
-      ],
-    );
-  }
-
+  // ==========================================
+  // HEADER
+  // ==========================================
   Widget _buildHeader() {
     return SliverAppBar(
       expandedHeight: 140,
@@ -596,7 +611,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: -0.3,
                     ),
                   ),
                   SizedBox(height: 2),
@@ -650,29 +664,158 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  Widget _buildWarningBox(String message) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Iconsax.warning_2, color: Colors.orange, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(color: Colors.orange, fontSize: 13),
-            ),
+  // ==========================================
+  // CATEGORY DROPDOWNS
+  // ==========================================
+  Widget _buildCategoryDropdowns() {
+    if (_cachedCategories.isEmpty) {
+      return _buildWarningBox('No categories available.');
+    }
+
+    return Column(
+      children: [
+        _buildCategoryDropdown(
+          label: 'Parent Category',
+          categories: _cachedCategories,
+          selectedCategory: _selectedCategory,
+          onChanged: (category) {
+            setState(() {
+              _selectedCategory = category;
+              _selectedSubcategory = null;
+            });
+          },
+        ),
+        if (_selectedCategory != null &&
+            _selectedCategory!.children.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildCategoryDropdown(
+            label: 'Subcategory',
+            categories: _selectedCategory!.children,
+            selectedCategory: _selectedSubcategory,
+            onChanged: (category) {
+              setState(() {
+                _selectedSubcategory = category;
+              });
+            },
           ),
         ],
-      ),
+      ],
     );
   }
 
+  // ==========================================
+  // VARIANTS SECTION
+  // ==========================================
+  Widget _buildVariantsSection() {
+    final totalVariants = _existingVariants.length + _newVariants.length;
+
+    return Column(
+      children: [
+        if (totalVariants == 0)
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Iconsax.box_add,
+                    size: 40,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No variants added yet',
+                  style: TextStyle(
+                    color: Color(0xFF1F2937),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Add color and size combinations',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          ...List.generate(_existingVariants.length, (index) {
+            return _EditableVariantCard(
+              variantData: _existingVariants[index],
+              onEdit: () => _editExistingVariant(index),
+              onDelete: () => _removeExistingVariant(index),
+            );
+          }),
+          ...List.generate(_newVariants.length, (index) {
+            return _EditableVariantCard(
+              variantData: _newVariants[index],
+              isNew: true,
+              onEdit: () => _editNewVariant(index),
+              onDelete: () => _removeNewVariant(index),
+            );
+          }),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: _showAddVariantDialog,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 6,
+              shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+            ),
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                ),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Iconsax.add_circle, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Add New Variant',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // IMAGE UPLOAD SECTION
+  // ==========================================
   Widget _buildImageUploadSection() {
     final totalImages = _existingImages.length + _newImages.length;
 
@@ -841,117 +984,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  Widget _buildVariantsSection() {
-    return Column(
-      children: [
-        if (_existingVariants.isEmpty && _newVariants.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Iconsax.box_add,
-                    size: 40,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'No variants added yet',
-                  style: TextStyle(
-                    color: Color(0xFF1F2937),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Add color and size combinations',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-              ],
-            ),
-          )
-        else ...[
-          ...List.generate(_existingVariants.length, (index) {
-            final variant = _existingVariants[index];
-            return _ModernVariantCard(
-              variantData: {
-                'colorName': variant.colorName ?? '',
-                'colorCode': variant.colorCode ?? '#000000',
-                'sizeValue': variant.sizeValue ?? '',
-                'sku': variant.sku,
-                'stock': variant.stock,
-                'price': variant.price,
-              },
-              onDelete: () => _removeExistingVariant(index),
-            );
-          }),
-          ...List.generate(_newVariants.length, (index) {
-            return _ModernVariantCard(
-              variantData: _newVariants[index],
-              isNew: true,
-              onDelete: () => _removeNewVariant(index),
-            );
-          }),
-        ],
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton(
-            onPressed: _showAddVariantDialog,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 6,
-              shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
-            ),
-            child: Ink(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Iconsax.add_circle, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Add New Variant',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // ==========================================
+  // SUBMIT BUTTON
+  // ==========================================
   Widget _buildSubmitButton({required bool isUpdating}) {
     return SizedBox(
       width: double.infinity,
@@ -995,13 +1030,38 @@ class _EditProductScreenState extends State<EditProductScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3,
                         ),
                       ),
                     ],
                   ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // HELPER WIDGETS
+  // ==========================================
+  Widget _buildWarningBox(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Iconsax.warning_2, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.orange, fontSize: 13),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1211,7 +1271,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppTheme.primaryColor,
+            activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.3),
+            activeThumbColor: AppTheme.primaryColor,
+            inactiveThumbColor: Colors.grey.shade400,
+            inactiveTrackColor: Colors.grey.shade200,
           ),
         ],
       ),
@@ -1219,15 +1282,19 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 }
 
-// Modern Variant Card (same as before)
-class _ModernVariantCard extends StatelessWidget {
+// ============================================
+// EDITABLE VARIANT CARD (with Edit & Delete)
+// ============================================
+class _EditableVariantCard extends StatelessWidget {
   final Map<String, dynamic> variantData;
   final bool isNew;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ModernVariantCard({
+  const _EditableVariantCard({
     required this.variantData,
     this.isNew = false,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -1255,7 +1322,7 @@ class _ModernVariantCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isNew
-              ? const Color(0xFF2ED573).withValues(alpha: 0.3)
+              ? const Color(0xFF3B82F6).withValues(alpha: 0.3)
               : const Color(0xFFE5E7EB),
         ),
         boxShadow: [
@@ -1268,7 +1335,9 @@ class _ModernVariantCard extends StatelessWidget {
       ),
       child: Column(
         children: [
+          // Top Row: Color, Name, Size, Edit, Delete
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
                 width: 50,
@@ -1362,6 +1431,24 @@ class _ModernVariantCard extends StatelessWidget {
                   ],
                 ),
               ),
+              // Edit button
+              GestureDetector(
+                onTap: onEdit,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Iconsax.edit,
+                    color: Color(0xFF3B82F6),
+                    size: 18,
+                  ),
+                ),
+              ),
+              // Delete button
               GestureDetector(
                 onTap: onDelete,
                 child: Container(
@@ -1382,13 +1469,14 @@ class _ModernVariantCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
           const SizedBox(height: 12),
+          // Bottom Row: Stock and Price
           Row(
             children: [
               Expanded(
                 child: _buildInfoChip(
                   icon: Iconsax.box_1,
                   label: 'Stock',
-                  value: stock?.toString() ?? '0',
+                  value: stock?.toString() ?? 'Default',
                   color: const Color(0xFF3B82F6),
                 ),
               ),
@@ -1398,7 +1486,7 @@ class _ModernVariantCard extends StatelessWidget {
                   icon: Iconsax.money_tick,
                   label: 'Price',
                   value: price != null
-                      ? '\$${(price as num).toStringAsFixed(2)}'
+                      ? '\$${(double.tryParse(price.toString()) ?? 0).toStringAsFixed(2)}'
                       : 'Default',
                   color: const Color(0xFF2ED573),
                 ),
@@ -1456,7 +1544,604 @@ class _ModernVariantCard extends StatelessWidget {
   }
 }
 
-// Add Variant Dialog (same as AddProductScreen)
+// ============================================
+// EDIT VARIANT DIALOG
+// ============================================
+class _EditVariantDialog extends StatefulWidget {
+  final Map<String, dynamic> variant;
+  final int index;
+  final List<Map<String, dynamic>> existingVariants;
+  final bool isNew;
+  final void Function(int index, Map<String, dynamic> updatedVariant) onSave;
+
+  const _EditVariantDialog({
+    required this.variant,
+    required this.index,
+    required this.existingVariants,
+    this.isNew = false,
+    required this.onSave,
+  });
+
+  @override
+  State<_EditVariantDialog> createState() => _EditVariantDialogState();
+}
+
+class _EditVariantDialogState extends State<_EditVariantDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _skuController = TextEditingController();
+  final _stockController = TextEditingController();
+  final _priceController = TextEditingController();
+
+  late ColorEntity _selectedColor;
+  late SizeEntity _selectedSize;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final sku = widget.variant['sku'];
+    final stock = widget.variant['stock'];
+    final price = widget.variant['price'];
+
+    if (sku != null) _skuController.text = sku.toString();
+    if (stock != null) _stockController.text = stock.toString();
+    if (price != null) _priceController.text = price.toString();
+
+    _selectedColor = ColorEntity(
+      id: widget.variant['colorId'] ?? '',
+      name: widget.variant['colorName'] ?? '',
+      code: widget.variant['colorCode'] ?? '#000000',
+    );
+
+    // ✅ FIXED: Added required 'name' parameter
+    _selectedSize = SizeEntity(
+      id: widget.variant['sizeId'] ?? '',
+      name:
+          widget.variant['sizeName'] ??
+          widget.variant['sizeValue'] ??
+          '', // Use sizeName if available, otherwise use sizeValue
+      value: widget.variant['sizeValue'] ?? '',
+    );
+
+    context.read<AdminProductBloc>().add(FetchColorsEvent());
+    context.read<AdminProductBloc>().add(FetchSizesEvent());
+  }
+
+  @override
+  void dispose() {
+    _skuController.dispose();
+    _stockController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+
+    final isDuplicate = widget.existingVariants.asMap().entries.any((entry) {
+      if (entry.key == widget.index && !widget.isNew) return false;
+      return entry.value['colorId'] == _selectedColor.id &&
+          entry.value['sizeId'] == _selectedSize.id;
+    });
+
+    if (isDuplicate) {
+      ToastHelper.showWarning(
+        context,
+        'This color and size combination already exists',
+      );
+      return;
+    }
+
+    final updatedVariant = Map<String, dynamic>.from(widget.variant);
+    updatedVariant['colorId'] = _selectedColor.id;
+    updatedVariant['colorName'] = _selectedColor.name;
+    updatedVariant['colorCode'] = _selectedColor.code;
+    updatedVariant['sizeId'] = _selectedSize.id;
+    updatedVariant['sizeName'] = _selectedSize.name; // ✅ Added sizeName
+    updatedVariant['sizeValue'] = _selectedSize.value;
+    updatedVariant['sku'] = _skuController.text.isNotEmpty
+        ? _skuController.text.trim()
+        : null;
+
+    if (_stockController.text.isNotEmpty) {
+      final stock = int.tryParse(_stockController.text);
+      if (stock != null) updatedVariant['stock'] = stock;
+    } else {
+      updatedVariant['stock'] = null;
+    }
+
+    if (_priceController.text.isNotEmpty) {
+      final price = double.tryParse(_priceController.text);
+      if (price != null) updatedVariant['price'] = price;
+    } else {
+      updatedVariant['price'] = null;
+    }
+
+    HapticFeedback.mediumImpact();
+    widget.onSave(widget.index, updatedVariant);
+    Navigator.pop(context);
+    ToastHelper.showSuccess(context, 'Variant updated successfully');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.all(16),
+      child: Container(
+        width: double.maxFinite,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Iconsax.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Edit Variant',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1F2937),
+                            ),
+                          ),
+                          Text(
+                            'Change color, size & details',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Preview
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                        const Color(0xFFD97706).withValues(alpha: 0.04),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _hexToColor(_selectedColor.code),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _hexToColor(
+                                _selectedColor.code,
+                              ).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedColor.name,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1F2937),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFF59E0B),
+                                    Color(0xFFD97706),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Size: ${_selectedSize.value.toUpperCase()}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Colors
+                _buildSectionLabel('Change Color', Iconsax.colorfilter),
+                const SizedBox(height: 12),
+                BlocBuilder<AdminProductBloc, AdminProductState>(
+                  buildWhen: (prev, current) =>
+                      current is AdminColorsLoading ||
+                      current is AdminColorsLoaded,
+                  builder: (context, state) {
+                    if (state is AdminColorsLoading)
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    if (state is AdminColorsLoaded) {
+                      if (state.colors.isEmpty)
+                        return _buildEmptyState('No colors available');
+                      return _buildColorGrid(state.colors);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Sizes
+                _buildSectionLabel('Change Size', Iconsax.ruler),
+                const SizedBox(height: 12),
+                BlocBuilder<AdminProductBloc, AdminProductState>(
+                  buildWhen: (prev, current) =>
+                      current is AdminSizesLoading ||
+                      current is AdminSizesLoaded,
+                  builder: (context, state) {
+                    if (state is AdminSizesLoading)
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    if (state is AdminSizesLoaded) {
+                      if (state.sizes.isEmpty)
+                        return _buildEmptyState('No sizes available');
+                      return _buildSizeGrid(state.sizes);
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // SKU
+                _buildSectionLabel('SKU', Iconsax.barcode),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _skuController,
+                  hint: 'Enter SKU (optional)',
+                  icon: Iconsax.barcode,
+                ),
+                const SizedBox(height: 16),
+
+                // Stock
+                _buildSectionLabel('Stock', Iconsax.box_1),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _stockController,
+                  hint: 'Enter stock quantity',
+                  icon: Iconsax.box_1,
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+
+                // Price
+                _buildSectionLabel('Price', Iconsax.money_tick),
+                const SizedBox(height: 8),
+                _buildDialogTextField(
+                  controller: _priceController,
+                  hint: 'Enter price (optional)',
+                  icon: Iconsax.money_tick,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _save,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 6,
+                          shadowColor: const Color(
+                            0xFFF59E0B,
+                          ).withValues(alpha: 0.4),
+                        ),
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Iconsax.save_2, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Save Changes',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionLabel(String label, IconData icon) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 14, color: AppTheme.primaryColor),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1F2937),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Iconsax.warning_2, color: Colors.orange, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.orange, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorGrid(List<ColorEntity> colors) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 12,
+      children: colors.map((color) {
+        final isSelected = _selectedColor.id == color.id;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _selectedColor = color);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _hexToColor(color.code),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFF59E0B)
+                        : Colors.grey.withValues(alpha: 0.2),
+                    width: isSelected ? 3 : 2,
+                  ),
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 22)
+                    : null,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                color.name,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+                  color: isSelected
+                      ? const Color(0xFFF59E0B)
+                      : const Color(0xFF1F2937),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildSizeGrid(List<SizeEntity> sizes) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: sizes.map((size) {
+        final isSelected = _selectedSize.id == size.id;
+        return GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _selectedSize = size);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFFE5E7EB),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Text(
+              size.value.toUpperCase(),
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? Colors.white : const Color(0xFF1F2937),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDialogTextField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFF1F2937)),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
+          prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 20),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _hexToColor(String hexString) {
+    final buffer = StringBuffer();
+    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+    buffer.write(hexString.replaceFirst('#', ''));
+    return Color(int.parse(buffer.toString(), radix: 16));
+  }
+}
+
+// ============================================
+// ADD VARIANT DIALOG
+// ============================================
 class _AddVariantDialog extends StatefulWidget {
   final List<Map<String, dynamic>> existingVariants;
   final void Function(List<Map<String, dynamic>>) onAdd;
@@ -1473,10 +2158,8 @@ class _AddVariantDialog extends StatefulWidget {
 class _AddVariantDialogState extends State<_AddVariantDialog> {
   final _stockController = TextEditingController(text: '0');
   final _priceController = TextEditingController();
-
   final Set<ColorEntity> _selectedColors = {};
   final Set<SizeEntity> _selectedSizes = {};
-
   bool _hasCustomPrice = false;
   bool _hasCustomStock = false;
 
@@ -1521,19 +2204,18 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
     }
 
     final newVariants = <Map<String, dynamic>>[];
-
     for (final color in _selectedColors) {
       for (final size in _selectedSizes) {
         final exists = widget.existingVariants.any(
           (v) => v['colorId'] == color.id && v['sizeId'] == size.id,
         );
         if (exists) continue;
-
         newVariants.add({
           'colorId': color.id,
           'colorName': color.name,
           'colorCode': color.code,
           'sizeId': size.id,
+          'sizeName': size.name, // ✅ Added sizeName
           'sizeValue': size.value,
           'sku': null,
           'stock': stock,
@@ -1628,14 +2310,13 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                     current is AdminColorsLoading ||
                     current is AdminColorsLoaded,
                 builder: (context, state) {
-                  if (state is AdminColorsLoading) {
+                  if (state is AdminColorsLoading)
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(),
                       ),
                     );
-                  }
                   if (state is AdminColorsLoaded) {
                     if (state.colors.isEmpty)
                       return _buildEmptyState('No colors available');
@@ -1651,14 +2332,13 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                 buildWhen: (prev, current) =>
                     current is AdminSizesLoading || current is AdminSizesLoaded,
                 builder: (context, state) {
-                  if (state is AdminSizesLoading) {
+                  if (state is AdminSizesLoading)
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(),
                       ),
                     );
-                  }
                   if (state is AdminSizesLoaded) {
                     if (state.sizes.isEmpty)
                       return _buildEmptyState('No sizes available');
@@ -1835,26 +2515,22 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Stack(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _hexToColor(color.code),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppTheme.primaryColor
-                            : Colors.grey.withValues(alpha: 0.2),
-                        width: isSelected ? 3 : 2,
-                      ),
-                    ),
-                    child: isSelected
-                        ? const Icon(Icons.check, color: Colors.white, size: 22)
-                        : null,
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _hexToColor(color.code),
+                  border: Border.all(
+                    color: isSelected
+                        ? AppTheme.primaryColor
+                        : Colors.grey.withValues(alpha: 0.2),
+                    width: isSelected ? 3 : 2,
                   ),
-                ],
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, color: Colors.white, size: 22)
+                    : null,
               ),
               const SizedBox(height: 4),
               Text(
@@ -1925,7 +2601,6 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
   Widget _buildPreview() {
     final count = _selectedColors.length * _selectedSizes.length;
     if (count == 0) return const SizedBox.shrink();
-
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

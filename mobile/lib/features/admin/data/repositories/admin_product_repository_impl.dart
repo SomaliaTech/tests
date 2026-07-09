@@ -1,4 +1,5 @@
-import 'package:mobile/core/error/exceptions.dart';
+// lib/features/admin/data/repositories/admin_product_repository_impl.dart
+import 'dart:io';
 import 'package:mobile/features/admin/data/datasources/admin_product_remote_data_source.dart';
 import 'package:mobile/features/admin/domain/entities/admin_product_entity.dart';
 import 'package:mobile/features/admin/domain/entities/color_entity.dart';
@@ -12,86 +13,72 @@ class AdminProductRepositoryImpl implements AdminProductRepository {
 
   @override
   Future<List<AdminProductEntity>> getAllProducts() async {
-    try {
-      return await remoteDataSource.getAllProducts();
-    } on ServerException {
-      rethrow;
-    }
+    final models = await remoteDataSource.getAllProducts();
+    return models.map((model) => model.toEntity()).toList();
   }
 
   @override
   Future<AdminProductEntity> getProductById(String productId) async {
-    try {
-      return await remoteDataSource.getProductById(productId);
-    } on ServerException {
-      rethrow;
-    }
+    final model = await remoteDataSource.getProductById(productId);
+    return model.toEntity();
   }
 
   @override
-  Future<String> createProduct(Map<String, dynamic> productData) async {
-    try {
-      return await remoteDataSource.createProduct(productData);
-    } on ServerException {
-      rethrow;
-    }
+  Future<String> createProduct(
+    Map<String, dynamic> productData, {
+    List<File> images = const [],
+  }) async {
+    // ✅ Just delegate to remote data source
+    return await remoteDataSource.createProduct(productData, images: images);
   }
 
   @override
   Future<void> updateProduct(
     String productId,
-    Map<String, dynamic> updateData,
-  ) async {
-    try {
-      await remoteDataSource.updateProduct(productId, updateData);
-    } on ServerException {
-      rethrow;
-    }
+    Map<String, dynamic> updateData, {
+    List<File> newImages = const [],
+    List<String> deletedImageIds = const [],
+    List<Map<String, dynamic>> existingVariants = const [],
+    List<Map<String, dynamic>> newVariants = const [],
+    List<String> deletedVariantIds = const [],
+  }) async {
+    await remoteDataSource.updateProduct(
+      productId,
+      updateData,
+      newImages: newImages,
+      deletedImageIds: deletedImageIds,
+      existingVariants: existingVariants,
+      newVariants: newVariants,
+      deletedVariantIds: deletedVariantIds,
+    );
   }
 
   @override
   Future<void> deleteProduct(String productId) async {
-    try {
-      await remoteDataSource.deleteProduct(productId);
-    } on ServerException {
-      rethrow;
-    }
+    await remoteDataSource.deleteProduct(productId);
   }
 
   @override
   Future<List<AdminCategoryEntity>> getCategoriesTree() async {
-    try {
-      return await remoteDataSource.getCategoriesTree();
-    } on ServerException {
-      rethrow;
-    }
+    final models = await remoteDataSource.getCategoriesTree();
+    return models.map((model) => model.toEntity()).toList();
   }
 
   @override
   Future<List<ColorEntity>> getColors() async {
-    try {
-      return await remoteDataSource.getColors();
-    } on ServerException {
-      rethrow;
-    }
+    final models = await remoteDataSource.getColors();
+    return models.map((model) => model.toEntity()).toList();
   }
 
   @override
   Future<List<SizeEntity>> getSizes() async {
-    try {
-      return await remoteDataSource.getSizes();
-    } on ServerException {
-      rethrow;
-    }
+    final models = await remoteDataSource.getSizes();
+    return models.map((model) => model.toEntity()).toList();
   }
 
   @override
   Future<void> uploadProductImage(String productId, String base64Image) async {
-    try {
-      await remoteDataSource.uploadProductImage(productId, base64Image);
-    } on ServerException {
-      rethrow;
-    }
+    await remoteDataSource.uploadProductImage(productId, base64Image);
   }
 
   @override
@@ -99,10 +86,6 @@ class AdminProductRepositoryImpl implements AdminProductRepository {
     String productId,
     Map<String, dynamic> variantData,
   ) async {
-    try {
-      await remoteDataSource.addProductVariant(productId, variantData);
-    } on ServerException {
-      rethrow;
-    }
+    await remoteDataSource.addProductVariant(productId, variantData);
   }
 }

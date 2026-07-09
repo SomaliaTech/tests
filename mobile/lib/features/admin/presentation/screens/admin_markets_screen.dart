@@ -16,6 +16,8 @@ class AdminMarketsScreen extends StatefulWidget {
 }
 
 class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
+  List<MarketEntity> _markets = [];
+
   @override
   void initState() {
     super.initState();
@@ -25,6 +27,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   void _showAddMarketDialog({MarketEntity? market}) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => _AddEditMarketDialog(
         market: market,
         onSubmit: (data) {
@@ -41,23 +44,116 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   }
 
   void _showDeleteConfirmation(MarketEntity market) {
+    final hasUsers = market.userCount != null && market.userCount! > 0;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Market'),
-        content: Text('Are you sure you want to delete "${market.name}"?'),
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Iconsax.warning_2, color: Colors.red, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Market',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete "${market.name}"?',
+              style: const TextStyle(fontSize: 14, color: Color(0xFF333333)),
+            ),
+            if (hasUsers) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Iconsax.info_circle,
+                      color: Colors.orange,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This market has ${market.userCount} user(s) associated with it. You cannot delete a market that has active users.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Color(0xFF6B7280),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.read<AdminMarketBloc>().add(DeleteMarketEvent(market.id));
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
+          if (!hasUsers)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                context.read<AdminMarketBloc>().add(
+                  DeleteMarketEvent(market.id),
+                );
+              },
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red.withOpacity(0.1),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Delete',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(
+                'Understood',
+                style: TextStyle(
+                  color: Color(0xFF2ED573),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -71,7 +167,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left_2, color: Colors.black87),
+          icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -89,59 +185,59 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
           if (state is AdminMarketOperationSuccess) {
             ToastHelper.showSuccess(context, state.message);
           } else if (state is AdminMarketsError) {
-            ToastHelper.showError(context, state.message);
+            if (_markets.isEmpty) {
+              ToastHelper.showError(context, state.message);
+            }
           }
         },
         builder: (context, state) {
-          if (state is AdminMarketsLoading) {
+          if (state is AdminMarketsLoading && _markets.isEmpty) {
             return const Center(
               child: CircularProgressIndicator(color: AppTheme.primaryColor),
             );
           }
 
           if (state is AdminMarketsLoaded) {
-            if (state.markets.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Iconsax.buildings, size: 80, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No markets yet',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Create your first market to get started',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                    ),
-                  ],
-                ),
-              );
-            }
+            _markets = state.markets;
+          }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: state.markets.length,
-              itemBuilder: (context, index) {
-                final market = state.markets[index];
-                return _buildMarketCard(market);
-              },
+          if (_markets.isEmpty && state is! AdminMarketsLoading) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Iconsax.buildings, size: 80, color: Colors.grey[300]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No markets yet',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create your first market to get started',
+                    style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                  ),
+                ],
+              ),
             );
           }
 
-          if (state is AdminMarketsError) {
+          if (state is AdminMarketsError && _markets.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Iconsax.warning_2, size: 60, color: Colors.red),
                   const SizedBox(height: 16),
-                  Text(
-                    'Failed to load markets',
-                    style: TextStyle(color: Colors.grey[600]),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      state.message,
+                      style: TextStyle(color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
+                  const SizedBox(height: 16),
                   TextButton(
                     onPressed: () {
                       context.read<AdminMarketBloc>().add(
@@ -155,7 +251,14 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
             );
           }
 
-          return const SizedBox.shrink();
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            itemCount: _markets.length,
+            itemBuilder: (context, index) {
+              final market = _markets[index];
+              return _buildMarketCard(market);
+            },
+          );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -171,6 +274,8 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   }
 
   Widget _buildMarketCard(MarketEntity market) {
+    final hasUsers = market.userCount != null && market.userCount! > 0;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -254,9 +359,45 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                   ),
                   const SizedBox(height: 4),
                 ],
-                Text(
-                  'Slug: ${market.slug}',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                Row(
+                  children: [
+                    Text(
+                      'Slug: ${market.slug}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                    if (hasUsers) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Iconsax.people,
+                              size: 10,
+                              color: Colors.blue,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '${market.userCount} users',
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -305,13 +446,23 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'delete',
+                enabled: !hasUsers,
                 child: Row(
                   children: [
-                    Icon(Iconsax.trash, size: 18, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: Colors.red)),
+                    Icon(
+                      Iconsax.trash,
+                      size: 18,
+                      color: hasUsers ? Colors.grey : Colors.red,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Delete',
+                      style: TextStyle(
+                        color: hasUsers ? Colors.grey : Colors.red,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -323,6 +474,9 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   }
 }
 
+// ==========================================
+// Add/Edit Market Dialog
+// ==========================================
 class _AddEditMarketDialog extends StatefulWidget {
   final MarketEntity? market;
   final void Function(Map<String, dynamic>) onSubmit;
@@ -338,6 +492,7 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
   final _nameController = TextEditingController();
   final _slugController = TextEditingController();
   final _cityController = TextEditingController();
+  bool _isSubmitting = false;
 
   bool get isEditing => widget.market != null;
 
@@ -361,6 +516,9 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
 
     final data = {
       'name': _nameController.text.trim(),
@@ -369,137 +527,157 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
     };
 
     widget.onSubmit(data);
-    Navigator.pop(context);
+
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Container(
-        width: double.maxFinite,
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      isEditing ? Iconsax.edit : Iconsax.add_circle,
-                      color: AppTheme.primaryColor,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    isEditing ? 'Edit Market' : 'Add Market',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildTextField(
-                controller: _nameController,
-                label: 'Market Name',
-                hint: 'e.g., Bakara Market',
-                icon: Iconsax.buildings,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Market name is required';
-                  }
-                  return null;
-                },
-                onChanged: (value) {
-                  if (!isEditing) {
-                    setState(() {
-                      _slugController.text = value.toLowerCase().replaceAll(
-                        RegExp(r'[^a-z0-9]+'),
-                        '-',
-                      );
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _slugController,
-                label: 'Slug',
-                hint: 'market-slug',
-                icon: Iconsax.link_21,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Slug is required';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                controller: _cityController,
-                label: 'City',
-                hint: 'e.g., Mogadishu',
-                icon: Iconsax.location,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: double.maxFinite,
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Icon(
+                        isEditing ? Iconsax.edit : Iconsax.add_circle,
+                        color: AppTheme.primaryColor,
+                        size: 24,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
+                    const SizedBox(width: 12),
+                    Text(
+                      isEditing ? 'Edit Market' : 'Add Market',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
-                      child: Text(
-                        isEditing ? 'Update' : 'Create',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildTextField(
+                  controller: _nameController,
+                  label: 'Market Name',
+                  hint: 'e.g., Bakara Market',
+                  icon: Iconsax.buildings,
+                  enabled: !_isSubmitting,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Market name is required';
+                    }
+                    return null;
+                  },
+                  onChanged: (value) {
+                    if (!isEditing) {
+                      setState(() {
+                        _slugController.text = value.toLowerCase().replaceAll(
+                          RegExp(r'[^a-z0-9]+'),
+                          '-',
+                        );
+                      });
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _slugController,
+                  label: 'Slug',
+                  hint: 'market-slug',
+                  icon: Iconsax.link_21,
+                  enabled: !_isSubmitting,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Slug is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _cityController,
+                  label: 'City',
+                  hint: 'e.g., Mogadishu',
+                  icon: Iconsax.location,
+                  enabled: !_isSubmitting,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isSubmitting
+                            ? null
+                            : () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: Colors.grey[300]!),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                isEditing ? 'Update Market' : 'Create Market',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -511,6 +689,7 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
     required String label,
     required String hint,
     required IconData icon,
+    bool enabled = true,
     String? Function(String?)? validator,
     ValueChanged<String>? onChanged,
   }) {
@@ -534,6 +713,7 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
           ),
           child: TextFormField(
             controller: controller,
+            enabled: enabled,
             style: const TextStyle(color: Colors.black87),
             decoration: InputDecoration(
               hintText: hint,

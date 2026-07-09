@@ -37,14 +37,24 @@ class UpdateAdminProductEvent extends AdminProductEvent {
   final Map<String, dynamic> updateData;
   final List<File> newImages;
   final List<String> deletedImageIds;
+
+  // ✅ Added: Existing variants to update
+  final List<Map<String, dynamic>> existingVariants;
+
+  // ✅ Added: New variants to create
   final List<Map<String, dynamic>> newVariants;
+
+  // ✅ Added: Variant IDs to delete
+  final List<String> deletedVariantIds;
 
   const UpdateAdminProductEvent({
     required this.productId,
     required this.updateData,
     this.newImages = const [],
     this.deletedImageIds = const [],
+    this.existingVariants = const [],
     this.newVariants = const [],
+    this.deletedVariantIds = const [],
   });
 
   @override
@@ -53,7 +63,9 @@ class UpdateAdminProductEvent extends AdminProductEvent {
     updateData,
     newImages,
     deletedImageIds,
+    existingVariants,
     newVariants,
+    deletedVariantIds,
   ];
 }
 

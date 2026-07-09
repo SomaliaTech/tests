@@ -7,6 +7,7 @@ class AdminProductModel extends AdminProductEntity {
     required super.slug,
     super.description,
     required super.price,
+    super.compareAtPrice,
     required super.stock,
     super.categoryId,
     super.categoryName,
@@ -26,6 +27,9 @@ class AdminProductModel extends AdminProductEntity {
       slug: json['slug'] ?? '',
       description: json['description'],
       price: _parseDouble(json['price']),
+      compareAtPrice: json['compareAtPrice'] != null
+          ? _parseDouble(json['compareAtPrice'])
+          : null,
       stock: _parseInt(json['stock']),
       categoryId: json['categoryId'] ?? json['category']?['id'],
       categoryName: json['category']?['name'],
@@ -49,6 +53,11 @@ class AdminProductModel extends AdminProductEntity {
           ? DateTime.parse(json['updatedAt'])
           : DateTime.now(),
     );
+  }
+
+  // ✅ FIXED: Just return self since model extends entity
+  AdminProductEntity toEntity() {
+    return this;
   }
 
   static double _parseDouble(dynamic value) {
@@ -86,9 +95,13 @@ class AdminProductImageModel extends AdminProductImageEntity {
       order: json['order'] ?? 0,
     );
   }
+
+  // ✅ FIXED: Just return self
+  AdminProductImageEntity toEntity() {
+    return this;
+  }
 }
 
-// ✅ FIXED: Added colorCode and sizeValue to constructor
 class AdminProductVariantModel extends AdminProductVariantEntity {
   const AdminProductVariantModel({
     required super.id,
@@ -97,10 +110,10 @@ class AdminProductVariantModel extends AdminProductVariantEntity {
     super.price,
     super.colorId,
     super.colorName,
-    super.colorCode, // ✅ NEW
+    super.colorCode,
     super.sizeId,
     super.sizeName,
-    super.sizeValue, // ✅ NEW
+    super.sizeValue,
   });
 
   factory AdminProductVariantModel.fromJson(Map<String, dynamic> json) {
@@ -111,11 +124,16 @@ class AdminProductVariantModel extends AdminProductVariantEntity {
       price: _parseDouble(json['price']),
       colorId: json['colorId'] ?? json['color']?['id'],
       colorName: json['color']?['name'],
-      colorCode: json['color']?['code'], // ✅ NEW
+      colorCode: json['color']?['code'],
       sizeId: json['sizeId'] ?? json['size']?['id'],
       sizeName: json['size']?['name'],
-      sizeValue: json['size']?['value'], // ✅ NEW
+      sizeValue: json['size']?['value'],
     );
+  }
+
+  // ✅ FIXED: Just return self
+  AdminProductVariantEntity toEntity() {
+    return this;
   }
 
   static double _parseDouble(dynamic value) {
@@ -142,7 +160,7 @@ class AdminCategoryModel extends AdminCategoryEntity {
     required super.slug,
     super.description,
     super.parentId,
-    super.iconUrl, // ✅ NEW
+    super.iconUrl,
     super.children = const [],
   });
 
@@ -153,12 +171,17 @@ class AdminCategoryModel extends AdminCategoryEntity {
       slug: json['slug'] ?? '',
       description: json['description'],
       parentId: json['parentId'],
-      iconUrl: json['iconUrl'], // ✅ NEW
+      iconUrl: json['iconUrl'],
       children:
           (json['children'] as List<dynamic>?)
               ?.map((c) => AdminCategoryModel.fromJson(c))
               .toList() ??
           [],
     );
+  }
+
+  // ✅ FIXED: Just return self
+  AdminCategoryEntity toEntity() {
+    return this;
   }
 }

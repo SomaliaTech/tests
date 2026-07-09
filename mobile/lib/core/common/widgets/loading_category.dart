@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 class LoadingCategory extends StatelessWidget {
-  const LoadingCategory({super.key});
+  final int count;
+  const LoadingCategory({super.key, this.count = 8});
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +16,7 @@ class LoadingCategory extends StatelessWidget {
         mainAxisSpacing: 15,
         childAspectRatio: 0.85,
       ),
-      itemCount: 8,
+      itemCount: count,
       itemBuilder: (context, index) {
         return _buildSkeletonItem();
       },

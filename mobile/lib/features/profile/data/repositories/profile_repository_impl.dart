@@ -1,4 +1,6 @@
+import 'package:flutter/rendering.dart';
 import 'package:fpdart/fpdart.dart';
+import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/services/storage/storage_service.dart';
@@ -37,6 +39,14 @@ class ProfileRepositoryImpl implements ProfileRepository {
         await storageService.saveUserProfileImage(profile.profileImage!);
       if (profile.marketId != null)
         await storageService.saveUserMarketId(profile.marketId!);
+
+      // ✅ Save admin status
+      await storageService.saveIsAdmin(profile.isAdmin);
+      await storageService.saveIsSuperAdmin(profile.isSuperAdmin);
+
+      debugPrint(
+        '💾 Profile saved - isAdmin: ${profile.isAdmin}, isSuperAdmin: ${profile.isSuperAdmin}',
+      );
 
       return Right(profile);
     } on ServerException catch (e) {

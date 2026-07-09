@@ -1,3 +1,4 @@
+// lib/features/chat/domain/entities/chat_message.dart
 import 'package:equatable/equatable.dart';
 
 class ChatMessage extends Equatable {
@@ -21,7 +22,6 @@ class ChatMessage extends Equatable {
     required this.createdAt,
   });
 
-  // ✅ ADD THIS METHOD
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
       id:
@@ -37,15 +37,36 @@ class ChatMessage extends Equatable {
       type: json['type'] as String? ?? 'text',
       mediaUrl: json['media_url'] as String? ?? json['mediaUrl'] as String?,
       isRead: json['is_read'] as bool? ?? json['isRead'] as bool? ?? false,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
+      // ✅ FIX: Parse UTC string and convert to local time
+      createdAt: _parseUtcToLocal(json['created_at'] ?? json['createdAt']),
     );
   }
 
-  // ✅ ADD THIS METHOD for optimistic updates
+  /// Parses UTC ISO string or DateTime and converts to local time
+  static DateTime _parseUtcToLocal(dynamic value) {
+    if (value == null) return DateTime.now();
+
+    try {
+      DateTime utcTime;
+
+      if (value is String) {
+        utcTime = DateTime.parse(value);
+      } else if (value is DateTime) {
+        utcTime = value;
+      } else {
+        return DateTime.now();
+      }
+
+      // ✅ Convert UTC to local time
+      // If the time is already in UTC, toLocal() will convert it
+      // If it's already local, toLocal() returns the same time
+      return utcTime.toLocal();
+    } catch (e) {
+      print('❌ [ChatMessage] Error parsing datetime: $e');
+      return DateTime.now();
+    }
+  }
+
   ChatMessage copyWith({
     String? id,
     String? senderId,
@@ -77,7 +98,7 @@ class ChatMessage extends Equatable {
       'type': type,
       'media_url': mediaUrl,
       'is_read': isRead,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(), // ✅ Send as UTC
     };
   }
 

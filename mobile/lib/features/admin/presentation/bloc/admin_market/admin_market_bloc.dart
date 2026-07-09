@@ -30,6 +30,7 @@ class AdminMarketBloc extends Bloc<AdminMarketEvent, AdminMarketState> {
     CreateMarketEvent event,
     Emitter<AdminMarketState> emit,
   ) async {
+    // ✅ Don't emit loading - the dialog handles its own loading state
     try {
       await repository.createMarket(event.data);
       emit(const AdminMarketOperationSuccess('Market created successfully'));
@@ -43,6 +44,7 @@ class AdminMarketBloc extends Bloc<AdminMarketEvent, AdminMarketState> {
     UpdateMarketEvent event,
     Emitter<AdminMarketState> emit,
   ) async {
+    // ✅ Don't emit loading
     try {
       await repository.updateMarket(event.marketId, event.data);
       emit(const AdminMarketOperationSuccess('Market updated successfully'));
@@ -56,12 +58,23 @@ class AdminMarketBloc extends Bloc<AdminMarketEvent, AdminMarketState> {
     DeleteMarketEvent event,
     Emitter<AdminMarketState> emit,
   ) async {
+    // ✅ Don't emit loading
     try {
       await repository.deleteMarket(event.marketId);
       emit(const AdminMarketOperationSuccess('Market deleted successfully'));
       add(FetchAllMarketsEvent());
     } catch (e) {
-      emit(AdminMarketsError(e.toString()));
+      final errorStr = e.toString();
+      final message =
+          errorStr.contains('foreign key') ||
+              errorStr.contains('users') ||
+              errorStr.contains('associated') ||
+              errorStr.contains('ServerException')
+          ? 'Cannot delete this market because it has associated users. Remove all users first.'
+          : 'Failed to delete market: $errorStr';
+
+      emit(AdminMarketsError(message));
+      // ✅ Don't fetch markets on delete error
     }
   }
 }

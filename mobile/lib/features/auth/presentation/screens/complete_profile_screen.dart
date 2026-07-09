@@ -73,37 +73,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     }
   }
 
-  // Future<void> _pickImage() async {
-  //   final picker = ImagePicker();
-  //   final picked = await picker.pickImage(
-  //     source: ImageSource.gallery,
-  //     imageQuality: 80,
-  //     maxWidth: 800,
-  //   );
-
-  //   if (picked != null) {
-  //     if (!mounted) return; // ✅ Fix: Check mounted
-  //     setState(() => _uploading = true);
-
-  //     try {
-  //       final bytes = await picked.readAsBytes();
-  //       final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-
-  //       if (!mounted) return; // ✅ Fix: Check mounted after async
-  //       context.read<AuthBloc>().add(UploadProfileImageEvent(base64Image));
-  //     } catch (e) {
-  //       if (!mounted) return; // ✅ Fix: Check mounted
-  //       setState(() => _uploading = false);
-  //       toastification.show(
-  //         context: context,
-  //         title: const Text('Error'),
-  //         description: const Text('Failed to process image'),
-  //         type: ToastificationType.error,
-  //       );
-  //     }
-  //   }
-  // }
-
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
@@ -244,24 +213,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   decoration: _inputDecoration('Full Name *', Icons.person),
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Name is required' : null,
-                ),
-                const SizedBox(height: 20),
-
-                // Email
-                TextFormField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: _inputDecoration('Email Address *', Icons.email),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return 'Email is required';
-                    }
-                    final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                    if (!emailRegex.hasMatch(v)) {
-                      return 'Enter a valid email';
-                    }
-                    return null;
-                  },
                 ),
                 const SizedBox(height: 20),
 
