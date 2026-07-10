@@ -2,7 +2,7 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
-  NotFoundException, // ✅ ADDED
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +23,7 @@ interface User {
   marketId: string | null;
   isVerified: boolean | null;
   isAdmin: boolean | null;
+  isSuperAdmin: boolean | null; // ✅ ADD THIS
   otpCode: string | null;
   otpExpiresAt: Date | null;
   createdAt: Date;
@@ -120,11 +121,14 @@ export class AuthService {
         updatedAt: new Date(),
       })
       .where(eq(users.phoneNumber, phoneNumber));
+
     const token = this.generateToken(
       currentUser.id,
       phoneNumber,
       currentUser.isAdmin ?? false,
+      currentUser.isSuperAdmin ?? false, // ✅ Pass isSuperAdmin
     );
+
     const hasProfile = !!(
       currentUser.name && currentUser.name.trim().length > 0
     );
@@ -138,9 +142,9 @@ export class AuthService {
         isVerified: true,
         hasProfile: hasProfile,
         name: currentUser.name,
-        email: currentUser.email,
         profileImage: currentUser.profileImage,
         isAdmin: currentUser.isAdmin ?? false,
+        isSuperAdmin: currentUser.isSuperAdmin ?? false, // ✅ ADD THIS
       },
     };
   }
@@ -174,10 +178,10 @@ export class AuthService {
         user: {
           id: updatedUser.id,
           name: updatedUser.name,
-          email: updatedUser.email,
           phoneNumber: updatedUser.phoneNumber,
           profileImage: updatedUser.profileImage,
           isAdmin: updatedUser.isAdmin ?? false,
+          isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
         },
       };
     } catch (error: unknown) {
@@ -191,7 +195,6 @@ export class AuthService {
     userId: string,
     data: {
       name: string;
-      email: string;
       marketId: string;
       profileImage?: string;
     },
@@ -199,18 +202,10 @@ export class AuthService {
     console.log('🔍 Completing profile for user:', userId);
     console.log('📦 Data received:', data);
 
-    // ✅ Validate required fields
-    if (!data.name || !data.email || !data.marketId) {
-      throw new BadRequestException('Name, email, and market are required');
+    if (!data.name || !data.marketId) {
+      throw new BadRequestException('Name and market are required');
     }
 
-    // ✅ Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(data.email)) {
-      throw new BadRequestException('Invalid email format');
-    }
-
-    // ✅ Validate market exists
     const marketResult = await this.drizzle.db
       .select()
       .from(markets)
@@ -225,26 +220,13 @@ export class AuthService {
     const market = marketResult[0];
     console.log('✅ Market found:', market.name);
 
-    // ✅ Check if email is already taken
-    const existingEmail = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.email, data.email))
-      .limit(1);
-
-    if (existingEmail.length > 0 && existingEmail[0].id !== userId) {
-      throw new BadRequestException('Email already in use');
-    }
-
     const updateData: any = {
       name: data.name,
-      email: data.email,
       marketId: data.marketId,
       isVerified: true,
       updatedAt: new Date(),
     };
 
-    // ✅ Handle profile image upload if provided
     if (data.profileImage) {
       try {
         console.log('📸 Uploading profile image...');
@@ -252,7 +234,6 @@ export class AuthService {
           data.profileImage,
           'profiles',
         );
-        // ✅ FIXED: Use secure_url instead of url
         updateData.profileImage = uploadResult.secure_url;
         console.log('✅ Image uploaded:', uploadResult.secure_url);
       } catch (error) {
@@ -261,7 +242,6 @@ export class AuthService {
       }
     }
 
-    // ✅ Update user
     const [updatedUser] = await this.drizzle.db
       .update(users)
       .set(updateData)
@@ -274,14 +254,13 @@ export class AuthService {
 
     console.log('✅ Profile completed successfully');
 
-    // ✅ Generate new token with updated user data
-    // In completeProfile method (already correct, but verify)
     const token = this.jwtService.sign({
       sub: updatedUser.id,
       phoneNumber: updatedUser.phoneNumber,
-      isAdmin: updatedUser.isAdmin ?? false, // ✅ Already correct in completeProfile
+      isAdmin: updatedUser.isAdmin ?? false,
+      isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
     });
-    // ✅ Send notification for profile completion
+
     await this.notificationsService.createSystemNotification(
       userId,
       'Profile Completed',
@@ -294,13 +273,13 @@ export class AuthService {
       user: {
         id: updatedUser.id,
         name: updatedUser.name,
-        email: updatedUser.email,
         phoneNumber: updatedUser.phoneNumber,
         profileImage: updatedUser.profileImage,
         marketId: updatedUser.marketId,
         isVerified: updatedUser.isVerified,
         hasProfile: true,
         isAdmin: updatedUser.isAdmin ?? false,
+        isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
       },
     };
   }
@@ -330,12 +309,12 @@ export class AuthService {
         id: user.id,
         phoneNumber: user.phoneNumber,
         name: user.name,
-        email: user.email,
         profileImage: user.profileImage,
         marketId: user.marketId,
         isVerified: user.isVerified,
         hasProfile: hasProfile,
         isAdmin: user.isAdmin ?? false,
+        isSuperAdmin: user.isSuperAdmin ?? false, // ✅ ADD THIS
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -345,12 +324,7 @@ export class AuthService {
     }
   }
 
-  async updateProfile(
-    userId: string,
-    name?: string,
-    email?: string,
-    marketId?: string,
-  ) {
+  async updateProfile(userId: string, name?: string, marketId?: string) {
     try {
       console.log(
         ` Updating profile: userId=${userId}, name=${name}, marketId=${marketId}`,
@@ -369,10 +343,6 @@ export class AuthService {
         updateData.name = name;
         changes.push('name');
       }
-      if (email && email !== oldUser.email) {
-        updateData.email = email;
-        changes.push('email');
-      }
       if (marketId && marketId !== oldUser.marketId) {
         updateData.marketId = marketId;
         changes.push('market');
@@ -390,11 +360,11 @@ export class AuthService {
           user: {
             id: user.id,
             name: user.name,
-            email: user.email,
             phoneNumber: user.phoneNumber,
             profileImage: user.profileImage,
             marketId: user.marketId,
             isAdmin: user.isAdmin ?? false,
+            isSuperAdmin: user.isSuperAdmin ?? false, // ✅ ADD THIS
           },
         };
       }
@@ -423,11 +393,11 @@ export class AuthService {
         user: {
           id: updatedUser.id,
           name: updatedUser.name,
-          email: updatedUser.email,
           phoneNumber: updatedUser.phoneNumber,
           profileImage: updatedUser.profileImage,
           marketId: updatedUser.marketId,
           isAdmin: updatedUser.isAdmin ?? false,
+          isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
         },
       };
     } catch (error: unknown) {
@@ -438,18 +408,19 @@ export class AuthService {
     }
   }
 
-  // ✅ Fixed - Include isAdmin
   private generateToken(
     userId: string,
     phoneNumber: string,
     isAdmin?: boolean,
+    isSuperAdmin?: boolean, // ✅ ADD THIS
   ): string {
     const expiresIn = 364 * 24 * 60 * 60;
     return this.jwtService.sign(
       {
         sub: userId,
         phoneNumber,
-        isAdmin: isAdmin ?? false, // ✅ Include isAdmin
+        isAdmin: isAdmin ?? false,
+        isSuperAdmin: isSuperAdmin ?? false, // ✅ ADD THIS
       },
       { expiresIn: expiresIn },
     );

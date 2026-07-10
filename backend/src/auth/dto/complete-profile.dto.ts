@@ -1,5 +1,6 @@
+// complete-profile.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, Length, IsUrl } from 'class-validator';
+import { IsString, IsOptional, Length, IsUrl, IsUUID } from 'class-validator';
 
 export class CompleteProfileDto {
   @ApiProperty({
@@ -12,14 +13,15 @@ export class CompleteProfileDto {
   @Length(2, 255)
   name: string;
 
+  // ✅ EMAIL COMPLETELY REMOVED
+
   @ApiProperty({
-    description: 'User email address',
-    example: 'farah@example.com',
-    required: false,
+    description: 'Market ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
   })
-  @IsEmail()
-  @IsOptional()
-  email?: string;
+  @IsUUID()
+  @IsString()
+  marketId: string;
 
   @ApiProperty({
     description: 'Profile image URL',

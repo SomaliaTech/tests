@@ -104,20 +104,13 @@ export class AuthController {
     @Body()
     body: {
       name: string;
-      email: string;
       marketId: string;
       profileImage?: string;
     },
   ) {
     // Validate required fields
-    if (!body.name || !body.email || !body.marketId) {
-      throw new BadRequestException('Name, email, and market are required');
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(body.email)) {
-      throw new BadRequestException('Invalid email format');
+    if (!body.name || !body.marketId) {
+      throw new BadRequestException('Name, and market are required');
     }
 
     // ✅ FIXED: Use req.user.userId instead of req.user.id
@@ -240,7 +233,6 @@ export class AuthController {
         id: '550e8400-e29b-41d4-a716-446655440000',
         phoneNumber: '+252612345678',
         name: 'farah Jamac',
-        email: 'farah@example.com',
         profileImage: 'https://example.com/profile.jpg',
         isVerified: true,
         hasProfile: true,
@@ -273,7 +265,6 @@ export class AuthController {
         id: '550e8400-e29b-41d4-a716-446655440000',
         phoneNumber: '+252612345678',
         name: 'Farah jamac Updated',
-        email: 'farah.updated@example.com',
         profileImage: 'https://example.com/profile.jpg',
         marketId: '550e8400-e29b-41d4-a716-446655440001',
       },
@@ -294,7 +285,6 @@ export class AuthController {
     return this.authService.updateProfile(
       req.user.userId,
       updateProfileDto.name,
-      updateProfileDto.email,
       updateProfileDto.marketId,
     );
   }

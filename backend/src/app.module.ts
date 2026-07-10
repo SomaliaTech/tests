@@ -15,6 +15,7 @@ import { AppService } from './app.service';
 import { SupabaseModule } from './supabase/supabase.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
+import { FaqModule } from './faq/faq.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -34,6 +35,7 @@ import { ChatModule } from './chat/chat.module';
     DashboardModule,
     NotificationsModule,
     ChatModule,
+    FaqModule,
   ],
   controllers: [AppController],
   providers: [AppService],

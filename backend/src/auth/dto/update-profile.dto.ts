@@ -12,15 +12,6 @@ export class UpdateProfileDto {
   name?: string;
 
   @ApiProperty({
-    description: 'User email address',
-    example: 'farah.updated@example.com',
-    required: false,
-  })
-  @IsString()
-  @IsOptional()
-  email?: string;
-
-  @ApiProperty({
     description: 'Market ID associated with the user',
     example: '550e8400-e29b-41d4-a716-446655440000',
     required: false,
