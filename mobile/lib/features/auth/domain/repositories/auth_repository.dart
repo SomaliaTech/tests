@@ -9,7 +9,6 @@ abstract class AuthRepository {
   );
   ResultFuture<({String token, User user})> completeProfile({
     required String name,
-    required String email,
     required String marketId,
     String? profileImageUrl,
   });

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import {
@@ -18,18 +19,25 @@ import {
   sizes,
   cartItems,
 } from '../drizzle/schema';
-import { eq, and, or, like, sql, desc } from 'drizzle-orm'; // ✅ Added or, like
+import { eq, and, or, like, sql, desc, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { CreateOrderDto, AddressDto } from './dto/create-order.dto';
+import { CreateOrderDto } from './dto/create-order.dto';
+import { AddressDto } from './dto/address.dto';
 import { AddToCartDto } from '../products/dto/cart.dto';
 import { ChatGateway } from '../chat/chat.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/notification.entity';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     private drizzle: DrizzleService,
     @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
+    @Inject(forwardRef(() => NotificationsService))
+    private notificationsService: NotificationsService,
   ) {}
 
   // ==========================================
@@ -37,6 +45,8 @@ export class OrdersService {
   // ==========================================
 
   async addAddress(userId: string, addressData: AddressDto) {
+    this.logger.log(`Adding address for user: ${userId}`);
+
     if (addressData.isDefault) {
       await this.drizzle.db
         .update(addresses)
@@ -49,13 +59,14 @@ export class OrdersService {
       .values({
         id: uuidv4(),
         userId,
-        label: addressData.label,
-        fullAddress: addressData.fullAddress,
-        phoneNumber: addressData.phoneNumber,
+        label: addressData.label.trim(),
+        fullAddress: addressData.fullAddress.trim(),
+        phoneNumber: addressData.phoneNumber.trim(),
         isDefault: addressData.isDefault || false,
       })
       .returning();
 
+    this.logger.log(`Address added: ${address.id}`);
     return address;
   }
 
@@ -103,20 +114,205 @@ export class OrdersService {
   }
 
   // ==========================================
+  // CART MANAGEMENT
+  // ==========================================
+  async getCart(userId: string) {
+    const userCartItems = await this.drizzle.db.query.cartItems.findMany({
+      where: eq(cartItems.userId, userId),
+      with: {
+        variant: {
+          with: {
+            product: { with: { images: true } },
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    let subtotal = 0;
+    const items = userCartItems.map((cartItem) => {
+      const variant = cartItem.variant;
+      const product = variant?.product;
+
+      // ✅ Handle case where variant is null
+      const unitPrice = variant?.price
+        ? Number(variant.price)
+        : Number(product?.price || 0);
+      const totalPrice = unitPrice * cartItem.quantity;
+      subtotal += totalPrice;
+
+      return {
+        id: cartItem.id,
+        productVariantId: cartItem.productVariantId, // This is null for non-variant products
+        productId: product?.id || cartItem.productId,
+        name: product?.name || 'Unknown Product',
+        price: unitPrice,
+        quantity: cartItem.quantity,
+        totalPrice,
+        inStock: (variant?.stock || product?.stock || 0) > 0,
+        imageUrl: product?.images?.[0]?.url || '',
+        color: variant?.color?.name || null,
+        size: variant?.size?.name || null,
+        // ✅ Add a flag to indicate if this has a variant
+        hasVariant: cartItem.productVariantId !== null,
+      };
+    });
+
+    return { items, subtotal, itemCount: items.length };
+  }
+  async addToCart(userId: string, dto: AddToCartDto) {
+    const { productId, productVariantId, quantity } = dto;
+
+    if (quantity < 1) {
+      throw new BadRequestException('Quantity must be at least 1');
+    }
+
+    const product = await this.drizzle.db.query.products.findFirst({
+      where: eq(products.id, productId),
+    });
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
+
+    let variant: any = null;
+    if (productVariantId) {
+      variant = await this.drizzle.db.query.productVariants.findFirst({
+        where: and(
+          eq(productVariants.id, productVariantId),
+          eq(productVariants.productId, productId),
+        ),
+      });
+      if (!variant) {
+        throw new NotFoundException(
+          `Variant with ID ${productVariantId} not found`,
+        );
+      }
+      if (variant.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    }
+
+    // Check for existing cart item
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(
+        and(
+          eq(cartItems.userId, userId),
+          eq(cartItems.productId, productId),
+          productVariantId
+            ? eq(cartItems.productVariantId, productVariantId)
+            : sql`${cartItems.productVariantId} IS NULL`,
+        ),
+      )
+      .limit(1);
+
+    if (existingItem) {
+      const [updated] = await this.drizzle.db
+        .update(cartItems)
+        .set({
+          quantity: existingItem.quantity + quantity,
+          updatedAt: new Date(),
+        })
+        .where(eq(cartItems.id, existingItem.id))
+        .returning();
+      return updated;
+    }
+
+    const [newItem] = await this.drizzle.db
+      .insert(cartItems)
+      .values({
+        id: uuidv4(),
+        userId,
+        productId,
+        productVariantId: productVariantId || null,
+        quantity,
+      })
+      .returning();
+    return newItem;
+  }
+
+  async updateCartItem(userId: string, itemId: string, quantity: number) {
+    if (quantity < 1) {
+      throw new BadRequestException('Quantity must be at least 1');
+    }
+
+    const [existingItem] = await this.drizzle.db
+      .select()
+      .from(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .limit(1);
+
+    if (!existingItem) throw new NotFoundException('Cart item not found');
+
+    // Check stock
+    if (existingItem.productVariantId) {
+      const [variant] = await this.drizzle.db
+        .select({ stock: productVariants.stock })
+        .from(productVariants)
+        .where(eq(productVariants.id, existingItem.productVariantId))
+        .limit(1);
+      if (variant && variant.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    } else {
+      const [product] = await this.drizzle.db
+        .select({ stock: products.stock })
+        .from(products)
+        .where(eq(products.id, existingItem.productId))
+        .limit(1);
+      if (product && product.stock < quantity) {
+        throw new BadRequestException('Insufficient stock');
+      }
+    }
+
+    const [updated] = await this.drizzle.db
+      .update(cartItems)
+      .set({ quantity, updatedAt: new Date() })
+      .where(eq(cartItems.id, itemId))
+      .returning();
+
+    if (!updated) throw new NotFoundException('Cart item not found');
+
+    return updated;
+  }
+
+  async removeCartItem(userId: string, itemId: string) {
+    const [deleted] = await this.drizzle.db
+      .delete(cartItems)
+      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
+      .returning();
+
+    if (!deleted) throw new NotFoundException('Cart item not found');
+    return { message: 'Item removed from cart' };
+  }
+
+  async clearCart(userId: string) {
+    await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
+    return { message: 'Cart cleared successfully' };
+  }
+
+  // ==========================================
   // ORDER MANAGEMENT
   // ==========================================
+  // ==========================================
+  // FAST ORDER MANAGEMENT
+  // ==========================================
+
   async createOrder(userId: string, orderData: CreateOrderDto) {
-    return this.drizzle.db.transaction(async (tx) => {
+    this.logger.log(`Creating order for user: ${userId}`);
+
+    const result = await this.drizzle.db.transaction(async (tx) => {
       const [user] = await tx.select().from(users).where(eq(users.id, userId));
       if (!user) throw new NotFoundException('User not found');
 
       let totalAmount = 0;
       const orderItemsData: any[] = [];
 
-      // ✅ Process each item (variant OR base product)
+      // Process items in parallel where possible
       for (const item of orderData.items) {
         if (item.productVariantId) {
-          // ✅ Item has a variant
           const [variant] = await tx
             .select({
               id: productVariants.id,
@@ -147,15 +343,14 @@ export class OrdersService {
             variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
           if (availableStock < item.quantity) {
             throw new BadRequestException(
-              `Insufficient stock for ${variant.productName}. Available: ${availableStock}, Requested: ${item.quantity}`,
+              `Insufficient stock for ${variant.productName}`,
             );
           }
 
           const unitPrice = variant.price
             ? Number(variant.price)
             : Number(variant.productPrice ?? 0);
-          const itemTotal = unitPrice * item.quantity;
-          totalAmount += itemTotal;
+          totalAmount += unitPrice * item.quantity;
 
           orderItemsData.push({
             id: uuidv4(),
@@ -168,44 +363,39 @@ export class OrdersService {
             sizeName: variant.sizeName,
             quantity: item.quantity,
             unitPrice: unitPrice.toString(),
-            totalPrice: itemTotal.toString(),
+            totalPrice: (unitPrice * item.quantity).toString(),
           });
         } else {
-          // ✅ Item is a base product (no variant)
           const [product] = await tx
             .select()
             .from(products)
             .where(eq(products.id, item.productId))
             .limit(1);
-
-          if (!product) {
+          if (!product)
             throw new BadRequestException(
               `Product ${item.productId} not found`,
             );
-          }
-
           if (product.stock < item.quantity) {
             throw new BadRequestException(
-              `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.quantity}`,
+              `Insufficient stock for ${product.name}`,
             );
           }
 
           const unitPrice = Number(product.price);
-          const itemTotal = unitPrice * item.quantity;
-          totalAmount += itemTotal;
+          totalAmount += unitPrice * item.quantity;
 
           orderItemsData.push({
             id: uuidv4(),
             orderId: '',
             productId: product.id,
-            productVariantId: null, // ✅ No variant
+            productVariantId: null,
             productName: product.name,
             variantSku: product.sku,
             colorName: null,
             sizeName: null,
             quantity: item.quantity,
             unitPrice: unitPrice.toString(),
-            totalPrice: itemTotal.toString(),
+            totalPrice: (unitPrice * item.quantity).toString(),
           });
         }
       }
@@ -231,98 +421,180 @@ export class OrdersService {
         })
         .returning();
 
+      // Batch insert order items
       orderItemsData.forEach((item) => (item.orderId = order.id));
-
       if (orderItemsData.length > 0) {
         await tx.insert(orderItems).values(orderItemsData);
       }
 
-      // ✅ Deduct stock appropriately
-      for (const orderItem of orderItemsData) {
-        if (orderItem.productVariantId) {
-          // Check if variant has its own stock
-          const [variant] = await tx
-            .select({ stock: productVariants.stock })
-            .from(productVariants)
-            .where(eq(productVariants.id, orderItem.productVariantId))
-            .limit(1);
-
-          if (variant && variant.stock > 0) {
-            await tx
-              .update(productVariants)
-              .set({
-                stock: sql`${productVariants.stock} - ${orderItem.quantity}`,
-              })
-              .where(eq(productVariants.id, orderItem.productVariantId));
-          } else if (orderItem.productId) {
-            await tx
-              .update(products)
-              .set({ stock: sql`${products.stock} - ${orderItem.quantity}` })
-              .where(eq(products.id, orderItem.productId));
-          }
-        } else if (orderItem.productId) {
-          // Base product - deduct from product stock
-          await tx
+      // Deduct stock in parallel
+      const stockUpdates = orderItemsData.map((item) => {
+        if (item.productVariantId) {
+          return tx
+            .update(productVariants)
+            .set({ stock: sql`${productVariants.stock} - ${item.quantity}` })
+            .where(eq(productVariants.id, item.productVariantId));
+        } else if (item.productId) {
+          return tx
             .update(products)
-            .set({ stock: sql`${products.stock} - ${orderItem.quantity}` })
-            .where(eq(products.id, orderItem.productId));
+            .set({ stock: sql`${products.stock} - ${item.quantity}` })
+            .where(eq(products.id, item.productId));
         }
-      }
+        return Promise.resolve();
+      });
+      await Promise.all(stockUpdates);
 
+      // Clear cart
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
-      await tx.insert(notifications).values({
-        id: uuidv4(),
+      // Notify admins inside transaction (fire and forget pattern)
+      this._notifyAdminsNewOrder(tx, order, user.name || 'Customer').catch(
+        () => {},
+      );
+
+      return { order, totalAmount, items: orderItemsData, user };
+    });
+
+    // ✅ FIRE AND FORGET - Don't await these! Return response immediately
+    const { order, user } = result;
+
+    // Fire-and-forget: WebSocket notification
+    this.chatGateway.server.to(`user:${userId}`).emit('new_notification', {
+      id: uuidv4(),
+      type: 'order',
+      title: 'Order Created',
+      message: `Your order #${order.orderNumber} has been created`,
+      actionText: 'View Order',
+      actionLink: `/orders/${order.id}`,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalAmount,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+      isRead: false,
+    });
+
+    // Fire-and-forget: Push notification
+    this.notificationsService
+      .create({
         userId,
-        type: 'order',
+        type: NotificationType.ORDER,
         title: 'Order Created',
-        message: `Your order #${orderNumber} has been created successfully`,
+        message: `Your order #${order.orderNumber} has been created`,
         actionText: 'View Order',
         actionLink: `/orders/${order.id}`,
-      });
+      })
+      .catch(() => {});
 
-      await this.notifyAdminsNewOrder(tx, order, user.name || 'Customer');
-
-      return { order, totalAmount, items: orderItemsData };
-    });
+    // ✅ Return immediately without waiting for email/notifications
+    return {
+      order: result.order,
+      totalAmount: result.totalAmount,
+      items: result.items,
+    };
   }
-  // Line 241 - In getOrders method
-  async getOrders(userId: string, status?: string) {
+
+  // ==========================================
+  // FAST PAYMENT PROCESSING
+  // ==========================================
+  async processPayment(
+    orderId: string,
+    userId: string,
+    paymentData: { paymentMethod: string; phoneNumber?: string },
+  ) {
+    this.logger.log(`Processing payment for order: ${orderId}`);
+
+    const [order] = await this.drizzle.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.userId, userId)));
+
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentStatus === 'PAID') {
+      throw new BadRequestException('Order is already paid');
+    }
+
+    const [updatedOrder] = await this.drizzle.db
+      .update(orders)
+      .set({
+        paymentStatus: 'PAID',
+        status: 'CONFIRMED',
+        updatedAt: new Date(),
+        paymentMethod: paymentData.paymentMethod,
+      })
+      .where(eq(orders.id, orderId))
+      .returning();
+
+    // ✅ Fire-and-forget notifications (don't block response)
+    this.notificationsService
+      .create({
+        userId,
+        type: NotificationType.PAYMENT,
+        title: 'Payment Successful',
+        message: `Payment for order #${order.orderNumber} was received`,
+        actionText: 'View Order',
+        actionLink: `/orders/${order.id}`,
+      })
+      .catch(() => {});
+
+    // ✅ Return immediately
+    return {
+      message: 'Payment processed successfully',
+      transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      orderNumber: order.orderNumber,
+      order: updatedOrder,
+    };
+  }
+  async getOrders(
+    userId: string,
+    status?: string,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    const offset = (page - 1) * limit;
     const conditions = [eq(orders.userId, userId)];
     if (status) conditions.push(eq(orders.status, status));
 
-    return this.drizzle.db.query.orders.findMany({
-      where: and(...conditions),
-      orderBy: [desc(orders.createdAt)],
-      with: {
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: {
-                  with: {
-                    images: true,
-                  },
+    const whereClause = and(...conditions);
+
+    const [items, total] = await Promise.all([
+      this.drizzle.db.query.orders.findMany({
+        where: whereClause,
+        orderBy: [desc(orders.createdAt)],
+        limit: Math.min(limit, 50),
+        offset,
+        with: {
+          items: {
+            with: {
+              variant: {
+                with: {
+                  product: { with: { images: true } },
+                  color: true,
+                  size: true,
                 },
-                color: true,
-                size: true,
-                // ❌ REMOVE THIS: image: true,
               },
             },
           },
         },
+      }),
+      this.drizzle.db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(orders)
+        .where(whereClause),
+    ]);
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total: total[0]?.count || 0,
+        totalPages: Math.ceil((total[0]?.count || 0) / limit),
       },
-    });
+    };
   }
 
-  // Line 271 - In getOrderById method
   async getOrderById(orderId: string, userId: string) {
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(orderId)) {
-      throw new NotFoundException('Invalid order ID format');
-    }
-
     const order = await this.drizzle.db.query.orders.findFirst({
       where: and(eq(orders.id, orderId), eq(orders.userId, userId)),
       with: {
@@ -330,14 +602,9 @@ export class OrdersService {
           with: {
             variant: {
               with: {
-                product: {
-                  with: {
-                    images: true,
-                  },
-                },
+                product: { with: { images: true } },
                 color: true,
                 size: true,
-                // ❌ REMOVE THIS: image: true,
               },
             },
           },
@@ -350,6 +617,8 @@ export class OrdersService {
   }
 
   async updateOrderStatus(orderId: string, status: string) {
+    this.logger.log(`Updating order ${orderId} status to ${status}`);
+
     const [order] = await this.drizzle.db
       .update(orders)
       .set({ status, updatedAt: new Date() })
@@ -358,426 +627,60 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
 
-    await this.drizzle.db.insert(notifications).values({
-      id: uuidv4(),
-      userId: order.userId!,
-      type: 'order',
-      title: 'Order Status Updated',
-      message: `Your order #${order.orderNumber} is now ${status.toLowerCase()}`,
-      actionText: 'View Order',
-      actionLink: `/orders/${order.id}`,
-    });
+    // Send notification to user
+    if (order.userId) {
+      // Get user email if needed
+      const [user] = await this.drizzle.db
+        .select({ email: users.email, name: users.name })
+        .from(users)
+        .where(eq(users.id, order.userId))
+        .limit(1);
 
-    return order;
-  }
-  async getAllOrders(search?: string) {
-    // ✅ Simplified query without deep nesting
-    const ordersList = await this.drizzle.db.query.orders.findMany({
-      where:
-        search && search.trim()
-          ? or(
-              like(orders.orderNumber, `%${search.trim()}%`),
-              like(orders.customerName, `%${search.trim()}%`),
-              like(orders.customerEmail, `%${search.trim()}%`),
-            )
-          : undefined,
-      orderBy: [desc(orders.createdAt)],
-      limit: 100, // ✅ Add limit to prevent timeout
-      with: {
-        user: true,
-        items: true, // ✅ Don't nest variant -> product
-      },
-    });
-
-    // ✅ Fetch additional data separately if needed
-    const enrichedOrders = await Promise.all(
-      ordersList.map(async (order) => {
-        const enrichedItems = await Promise.all(
-          order.items.map(async (item) => {
-            if (item.productVariantId) {
-              const variant =
-                await this.drizzle.db.query.productVariants.findFirst({
-                  where: eq(productVariants.id, item.productVariantId),
-                  with: {
-                    product: true,
-                    color: true,
-                    size: true,
-                  },
-                });
-              return { ...item, variant };
-            }
-            return item;
-          }),
-        );
-        return { ...order, items: enrichedItems };
-      }),
-    );
-
-    return enrichedOrders;
-  }
-  // ==========================================
-  // NOTIFICATION MANAGEMENT
-  // ==========================================
-
-  async getUserNotifications(userId: string) {
-    return this.drizzle.db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt));
-  }
-
-  async markNotificationAsRead(notificationId: string, userId: string) {
-    const [notification] = await this.drizzle.db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(notifications.id, notificationId),
-          eq(notifications.userId, userId),
-        ),
-      )
-      .returning();
-
-    if (!notification) throw new NotFoundException('Notification not found');
-    return notification;
-  }
-
-  async markAllNotificationsAsRead(userId: string) {
-    await this.drizzle.db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(eq(notifications.userId, userId));
-
-    return { message: 'All notifications marked as read' };
-  }
-
-  async deleteNotification(notificationId: string, userId: string) {
-    const [deleted] = await this.drizzle.db
-      .delete(notifications)
-      .where(
-        and(
-          eq(notifications.id, notificationId),
-          eq(notifications.userId, userId),
-        ),
-      )
-      .returning();
-
-    if (!deleted) throw new NotFoundException('Notification not found');
-    return { message: 'Notification deleted successfully' };
-  }
-
-  async getUnreadCount(userId: string) {
-    const result = await this.drizzle.db
-      .select({ count: sql<number>`count(*)` })
-      .from(notifications)
-      .where(
-        and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
-      );
-
-    return { unreadCount: Number(result[0]?.count) || 0 };
-  }
-
-  async createNotification(
-    userId: string,
-    type: string,
-    title: string,
-    message: string,
-    actionText?: string,
-    actionLink?: string,
-  ) {
-    const [notification] = await this.drizzle.db
-      .insert(notifications)
-      .values({
-        id: uuidv4(),
-        userId,
-        type,
-        title,
-        message,
-        actionText,
-        actionLink,
-      })
-      .returning();
-
-    return notification;
-  }
-
-  async processPayment(
-    orderId: string,
-    userId: string,
-    paymentData: { paymentMethod: string; phoneNumber?: string },
-  ) {
-    const [order] = await this.drizzle.db
-      .select()
-      .from(orders)
-      .where(and(eq(orders.id, orderId), eq(orders.userId, userId)));
-
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.paymentStatus === 'PAID')
-      throw new BadRequestException('Order is already paid');
-
-    const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    const [updatedOrder] = await this.drizzle.db
-      .update(orders)
-      .set({
-        paymentStatus: 'PAID',
-        status: 'CONFIRMED',
-        updatedAt: new Date(),
-      })
-      .where(eq(orders.id, orderId))
-      .returning();
-
-    await this.createNotification(
-      userId,
-      'payment',
-      'Payment Successful',
-      `Payment for order #${order.orderNumber} was received successfully`,
-      'View Order',
-      `/orders/${order.id}`,
-    );
-
-    return {
-      message: 'Payment processed successfully',
-      transactionId,
-      orderNumber: order.orderNumber,
-      order: updatedOrder,
-    };
-  }
-
-  // ==========================================
-  // CART MANAGEMENT
-  // ==========================================
-
-  async getCart(userId: string) {
-    const userCartItems = await this.drizzle.db.query.cartItems.findMany({
-      where: eq(cartItems.userId, userId),
-      with: {
-        variant: {
-          with: {
-            product: {
-              with: {
-                images: true,
-              },
-            },
-            color: true,
-            size: true,
-          },
-        },
-      },
-    });
-
-    let subtotal = 0;
-    const items = userCartItems.map((cartItem) => {
-      const variant = cartItem.variant;
-      const product = variant?.product;
-
-      const unitPrice = variant?.price
-        ? Number(variant.price)
-        : Number(product?.price || 0);
-      const totalPrice = unitPrice * cartItem.quantity;
-      subtotal += totalPrice;
-
-      return {
-        id: cartItem.id,
-        productVariantId: cartItem.productVariantId,
-        productId: product?.id || '',
-        name: product?.name || 'Unknown Product',
-        price: unitPrice,
-        quantity: cartItem.quantity,
-        totalPrice,
-        inStock: (variant?.stock || 0) > 0,
-        imageUrl: product?.images?.[0]?.url || '',
-        color: variant?.color?.name || null,
-        size: variant?.size?.name || null,
-      };
-    });
-
-    return {
-      items,
-      subtotal,
-      itemCount: items.length,
-    };
-  }
-
-  async addToCart(userId: string, dto: AddToCartDto) {
-    const { productId, productVariantId, quantity } = dto;
-
-    // Validate product exists
-    const product = await this.drizzle.db.query.products.findFirst({
-      where: eq(products.id, productId),
-    });
-
-    if (!product) {
-      throw new NotFoundException(`Product with ID ${productId} not found`);
-    }
-
-    let variant: any = null;
-    if (productVariantId) {
-      variant = await this.drizzle.db.query.productVariants.findFirst({
-        where: and(
-          eq(productVariants.id, productVariantId),
-          eq(productVariants.productId, productId),
-        ),
+      await this.notificationsService.create({
+        userId: order.userId,
+        type: NotificationType.ORDER,
+        title: 'Order Status Updated',
+        message: `Your order #${order.orderNumber} is now ${status.toLowerCase()}`,
+        actionText: 'View Order',
+        actionLink: `/orders/${order.id}`,
       });
 
-      if (!variant) {
-        throw new NotFoundException(
-          `Variant with ID ${productVariantId} not found`,
-        );
-      }
+      // Also notify all admins
+      await this._notifyAdminsStatusChange(order, status);
 
-      if (variant.stock < quantity) {
-        throw new BadRequestException('Insufficient stock');
-      }
+      // ✅ Send shipping update email if user has email
     }
-
-    // Check if item already exists in cart
-    const [existingItem] = await this.drizzle.db
-      .select()
-      .from(cartItems)
-      .where(
-        and(
-          eq(cartItems.userId, userId),
-          eq(cartItems.productId, productId),
-          productVariantId
-            ? eq(cartItems.productVariantId, productVariantId)
-            : sql`${cartItems.productVariantId} IS NULL`,
-        ),
-      )
-      .limit(1);
-
-    if (existingItem) {
-      const [updated] = await this.drizzle.db
-        .update(cartItems)
-        .set({
-          quantity: existingItem.quantity + quantity,
-          updatedAt: new Date(),
-        })
-        .where(eq(cartItems.id, existingItem.id))
-        .returning();
-      return updated;
-    } else {
-      const [newItem] = await this.drizzle.db
-        .insert(cartItems)
-        .values({
-          id: uuidv4(),
-          userId,
-          productId,
-          productVariantId: productVariantId || null,
-          quantity,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-      return newItem;
-    }
-  }
-
-  async removeCartItem(userId: string, itemId: string) {
-    const [deleted] = await this.drizzle.db
-      .delete(cartItems)
-      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
-      .returning();
-
-    if (!deleted) throw new NotFoundException('Cart item not found');
-    return { message: 'Item removed from cart' };
-  }
-
-  async clearCart(userId: string) {
-    await this.drizzle.db.delete(cartItems).where(eq(cartItems.userId, userId));
-    return { message: 'Cart cleared successfully' };
-  }
-
-  async updateCartItem(userId: string, itemId: string, quantity: number) {
-    const [existingItem] = await this.drizzle.db
-      .select()
-      .from(cartItems)
-      .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
-      .limit(1);
-
-    if (!existingItem) {
-      throw new NotFoundException('Cart item not found');
-    }
-
-    // Check stock availability
-    if (existingItem.productVariantId) {
-      const [variant] = await this.drizzle.db
-        .select()
-        .from(productVariants)
-        .where(eq(productVariants.id, existingItem.productVariantId))
-        .limit(1);
-
-      if (variant && variant.stock < quantity) {
-        throw new BadRequestException('Insufficient stock');
-      }
-    } else {
-      const [product] = await this.drizzle.db
-        .select()
-        .from(products)
-        .where(eq(products.id, existingItem.productId as string))
-        .limit(1);
-
-      if (product && product.stock < quantity) {
-        throw new BadRequestException('Insufficient stock');
-      }
-    }
-
-    const [updated] = await this.drizzle.db
-      .update(cartItems)
-      .set({
-        quantity,
-        updatedAt: new Date(),
-      })
-      .where(eq(cartItems.id, itemId))
-      .returning();
-
-    if (!updated) throw new NotFoundException('Cart item not found');
-
-    const product = await this.drizzle.db
-      .select()
-      .from(products)
-      .where(eq(products.id, existingItem.productId as string))
-      .limit(1);
 
     return {
-      id: updated.id,
-      productId: product[0].id,
-      productVariantId: updated.productVariantId,
-      name: product[0].name,
-      imageUrl: '',
-      price: Number(product[0].price),
-      quantity: updated.quantity,
-      totalPrice: Number(product[0].price) * updated.quantity,
-      inStock: true,
+      message: 'Order status updated successfully',
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+      },
     };
   }
 
   // ==========================================
-  // ADMIN NOTIFICATION HELPERS
+  // PRIVATE HELPERS
   // ==========================================
 
-  /**
-   * Notify all admin users about a new order
-   * Creates database notifications and emits real-time WebSocket events
-   */
-  private async notifyAdminsNewOrder(
+  private async _notifyAdminsNewOrder(
     tx: any,
     order: any,
     customerName: string,
   ) {
     try {
-      // Get all admin users
       const admins = await tx
-        .select({ id: users.id })
+        .select({ id: users.id, email: users.email, name: users.name })
         .from(users)
-        .where(eq(users.isAdmin, true));
+        .where(or(eq(users.isAdmin, true), eq(users.isSuperAdmin, true)));
 
       const notificationTitle = 'New Order Received';
       const notificationMessage = `New order #${order.orderNumber} from ${customerName} - $${order.totalAmount}`;
 
-      // Create notification for each admin in database
       for (const admin of admins) {
+        // Save notification to DB
         await tx.insert(notifications).values({
           id: uuidv4(),
           userId: admin.id,
@@ -787,9 +690,11 @@ export class OrdersService {
           actionText: 'View Order',
           actionLink: `/admin/orders/${order.id}`,
         });
+
+        // Send email to admin (fire and forget)
       }
 
-      // ✅ Emit real-time notification to all admins via WebSocket
+      // WebSocket to admin room
       this.chatGateway.server.to('admins').emit('new_notification', {
         id: uuidv4(),
         type: 'order',
@@ -805,20 +710,32 @@ export class OrdersService {
         isRead: false,
       });
 
-      // ✅ Also emit specific new_order event for dashboard refresh
-      this.chatGateway.server.to('admins').emit('new_order', {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        customerName: customerName,
-        totalAmount: order.totalAmount,
-        status: order.status,
-        paymentStatus: order.paymentStatus,
-        createdAt: order.createdAt,
-      });
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      console.error('⚠️ Failed to notify admins:', errorMessage);
+      this.logger.log(`📧 Admin notifications sent to ${admins.length} admins`);
+    } catch (error) {
+      this.logger.warn('Failed to notify admins:', error);
+    }
+  }
+  private async _notifyAdminsStatusChange(order: any, status: string) {
+    try {
+      const admins = await this.drizzle.db
+        .select({ id: users.id })
+        .from(users)
+        .where(or(eq(users.isAdmin, true), eq(users.isSuperAdmin, true)));
+
+      for (const admin of admins) {
+        if (admin.id !== order.userId) {
+          await this.notificationsService.create({
+            userId: admin.id,
+            type: NotificationType.ORDER,
+            title: 'Order Status Changed',
+            message: `Order #${order.orderNumber} changed to ${status.toLowerCase()}`,
+            actionText: 'View Order',
+            actionLink: `/admin/orders/${order.id}`,
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.warn('Failed to notify admins of status change:', error);
     }
   }
 }

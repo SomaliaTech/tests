@@ -10,6 +10,7 @@ class ChatMessage extends Equatable {
   final String? mediaUrl;
   final bool isRead;
   final DateTime createdAt;
+  final String? senderName;
 
   const ChatMessage({
     required this.id,
@@ -18,6 +19,7 @@ class ChatMessage extends Equatable {
     this.content,
     required this.type,
     this.mediaUrl,
+    this.senderName,
     required this.isRead,
     required this.createdAt,
   });

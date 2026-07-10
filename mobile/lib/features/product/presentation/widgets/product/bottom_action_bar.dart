@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
-import 'chat_button.dart';
 
 class BottomActionBar extends StatelessWidget {
   final String productName;
@@ -9,6 +8,7 @@ class BottomActionBar extends StatelessWidget {
   final VoidCallback onFavoriteTap;
   final VoidCallback onAddToCartTap;
   final VoidCallback onBuyNowTap;
+  final VoidCallback? onChatTap; // ✅ Optional chat callback
   final bool isAdmin;
 
   const BottomActionBar({
@@ -18,6 +18,7 @@ class BottomActionBar extends StatelessWidget {
     required this.onFavoriteTap,
     required this.onAddToCartTap,
     required this.onBuyNowTap,
+    this.onChatTap,
     this.isAdmin = false,
   });
 
@@ -39,11 +40,68 @@ class BottomActionBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            // Add to Cart Button with haptic feedback
+            // ✅ Heart (Favorite) Button
+            GestureDetector(
+              onTap: () {
+                HapticFeedback.lightImpact();
+                onFavoriteTap();
+              },
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: isInWishlist
+                      ? const Color(0xFF2ED573).withValues(alpha: 0.1)
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isInWishlist
+                        ? const Color(0xFF2ED573)
+                        : Colors.grey[300]!,
+                    width: 1.5,
+                  ),
+                ),
+                child: Icon(
+                  isInWishlist ? Iconsax.heart5 : Iconsax.heart,
+                  color: isInWishlist
+                      ? const Color(0xFF2ED573)
+                      : Colors.grey[600],
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // ✅ Chat Button (Optional)
+            if (onChatTap != null && isAdmin) ...[
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  onChatTap!();
+                },
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue[300]!, width: 1.5),
+                  ),
+                  child: Icon(
+                    Iconsax.message,
+                    color: Colors.blue[700],
+                    size: 24,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // Add to Cart Button (flexible)
             Expanded(
+              flex: onChatTap != null && isAdmin ? 1 : 2,
               child: GestureDetector(
                 onTap: () {
-                  // Medium haptic for primary action
                   HapticFeedback.mediumImpact();
                   onAddToCartTap();
                 },
@@ -59,14 +117,14 @@ class BottomActionBar extends StatelessWidget {
                       Icon(
                         Iconsax.shopping_cart,
                         color: Colors.white,
-                        size: 15,
+                        size: 18,
                       ),
                       SizedBox(width: 8),
                       Text(
                         'Add to Cart',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -77,11 +135,14 @@ class BottomActionBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // Buy Now Button with haptic feedback
-            // Buy Now Button - Use gradient or different color
+            // Buy Now Button (flexible)
             Expanded(
+              flex: onChatTap != null && isAdmin ? 1 : 2,
               child: GestureDetector(
-                onTap: onBuyNowTap,
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  onBuyNowTap();
+                },
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
@@ -100,13 +161,13 @@ class BottomActionBar extends StatelessWidget {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Iconsax.flash, color: Colors.white, size: 15),
+                      Icon(Iconsax.flash, color: Colors.white, size: 18),
                       SizedBox(width: 8),
                       Text(
                         'Buy Now',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

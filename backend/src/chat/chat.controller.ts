@@ -259,15 +259,23 @@ export class ChatController {
   // ==========================================
 
   @Get('users/:userId/status')
-  @ApiOperation({ summary: 'Check if a user is online' })
+  @ApiOperation({ summary: 'Check if a user is online and get basic info' })
   async getUserStatus(@Param('userId') userId: string) {
     const [isOnline, user] = await Promise.all([
       this.chatGateway.isUserOnline(userId),
       this.chatService.getUserById(userId),
     ]);
-    return { userId, isOnline, lastSeen: isOnline ? null : user?.lastSeen };
-  }
 
+    // ✅ Return full user info
+    return {
+      userId,
+      isOnline,
+      lastSeen: isOnline ? null : user?.lastSeen,
+      name: user?.name || null, // ✅ Add name
+      phoneNumber: user?.phoneNumber || null, // ✅ Add phone
+      profileImage: user?.profileImage || null, // ✅ Add profile image
+    };
+  }
   // ==========================================
   // SEARCH CONVERSATIONS
   // ==========================================

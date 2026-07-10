@@ -78,12 +78,24 @@ class AuthRepositoryImpl implements AuthRepository {
       await storageService.saveAuthToken(token);
       await storageService.saveUserId(user.id);
       await storageService.saveLoginStatus(true);
-      await storageService.saveIsAdmin(user.isAdmin); // 👈 ADDED THIS
+
+      // ✅ Fix: Handle nullable bool with null safety
+      await storageService.saveIsAdmin(user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
+
       await storageService.saveUserPhone(user.phoneNumber);
-      if (user.name != null) await storageService.saveUserName(user.name!);
-      if (user.email != null) await storageService.saveUserEmail(user.email!);
-      if (user.profileImage != null)
+
+      if (user.name != null) {
+        await storageService.saveUserName(user.name!);
+      }
+
+      if (user.profileImage != null) {
         await storageService.saveUserProfileImage(user.profileImage!);
+      }
+
+      developer.log(
+        '👑 VerifyOTP - Saved isAdmin: ${user.isAdmin ?? false}, isSuperAdmin: ${user.isSuperAdmin ?? false}',
+      );
 
       return Right((token: token, user: user));
     } on ServerException catch (e) {
@@ -96,8 +108,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   ResultFuture<({String token, User user})> completeProfile({
     required String name,
-    required String email, // ✅ Now required
-    required String marketId, // ✅ Added
+    required String marketId,
     String? profileImageUrl,
   }) async {
     try {
@@ -109,20 +120,28 @@ class AuthRepositoryImpl implements AuthRepository {
       final data = await remoteDataSource.completeProfile(
         token,
         name,
-        email,
-        marketId, // ✅ Pass marketId
+        marketId,
         profileImageUrl,
       );
       final user = UserModel.fromJson(data['user']);
       final newToken = data['token'] as String;
 
       await storageService.saveAuthToken(newToken);
-      await storageService.saveIsAdmin(user.isAdmin);
+
+      // ✅ Fix: Handle nullable bool with null safety
+      await storageService.saveIsAdmin(user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
+
       await storageService.saveUserName(user.name ?? name);
-      await storageService.saveUserEmail(email); // ✅ Save email
-      await storageService.saveUserMarketId(marketId); // ✅ Save marketId
-      if (profileImageUrl != null)
+      await storageService.saveUserMarketId(marketId);
+
+      if (profileImageUrl != null) {
         await storageService.saveUserProfileImage(profileImageUrl);
+      }
+
+      developer.log(
+        '👑 CompleteProfile - Saved isAdmin: ${user.isAdmin ?? false}, isSuperAdmin: ${user.isSuperAdmin ?? false}',
+      );
 
       return Right((token: newToken, user: user));
     } on ServerException catch (e) {
@@ -145,9 +164,18 @@ class AuthRepositoryImpl implements AuthRepository {
 
       // Save to local storage for offline access
       await storageService.saveUserName(user.name ?? '');
-      if (user.email != null) await storageService.saveUserEmail(user.email!);
-      if (user.profileImage != null)
+
+      // ✅ Fix: Handle nullable bool with null safety
+      await storageService.saveIsAdmin(user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
+
+      if (user.profileImage != null) {
         await storageService.saveUserProfileImage(user.profileImage!);
+      }
+
+      developer.log(
+        '👑 GetCurrentUser - isAdmin: ${user.isAdmin ?? false}, isSuperAdmin: ${user.isSuperAdmin ?? false}',
+      );
 
       return Right(user);
     } on UnauthorizedException catch (e) {

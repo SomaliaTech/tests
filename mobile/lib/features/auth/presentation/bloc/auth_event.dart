@@ -26,19 +26,16 @@ class VerifyOtpEvent extends AuthEvent {
 
 class CompleteProfileEvent extends AuthEvent {
   final String name;
-  final String email; // ✅ Changed from String? to String (required)
-  final String marketId; // ✅ Added marketId
+  final String? email; // ✅ Make email nullable
+  final String marketId;
   final String? profileImageUrl;
 
   const CompleteProfileEvent({
     required this.name,
-    required this.email, // ✅ Now required
-    required this.marketId, // ✅ Required
+    this.email, // ✅ Now optional
+    required this.marketId,
     this.profileImageUrl,
   });
-
-  @override
-  List<Object?> get props => [name, email, marketId, profileImageUrl];
 }
 
 class UploadProfileImageEvent extends AuthEvent {

@@ -50,35 +50,56 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
     ),
   ];
 
-  double get _totalAmount => widget.product.price * widget.quantity;
+  // ✅ NEW: Get the selected variant based on color/size
+  ProductVariant? get _selectedVariant {
+    if (widget.product.variants.isEmpty) return null;
 
-  String get _variantId {
-    if (widget.product.variants.isEmpty) {
-      return '';
+    if (widget.selectedColor == null && widget.selectedSize == null) {
+      return widget.product.variants.first;
     }
-    try {
-      final variant = widget.product.variants.firstWhere((v) {
-        final colorMatch =
-            widget.selectedColor == null || v.colorName == widget.selectedColor;
-        final sizeMatch =
-            widget.selectedSize == null || v.sizeName == widget.selectedSize;
-        return colorMatch && sizeMatch;
-      }, orElse: () => widget.product.variants.first);
-      return variant.id;
-    } catch (e) {
-      return widget.product.variants.first.id;
-    }
+
+    return widget.product.variants.firstWhere((v) {
+      final colorMatch =
+          widget.selectedColor == null || v.colorName == widget.selectedColor;
+      final sizeMatch =
+          widget.selectedSize == null || v.sizeName == widget.selectedSize;
+      return colorMatch && sizeMatch;
+    }, orElse: () => widget.product.variants.first);
   }
 
+  // ✅ NEW: Get the unit price of the selected variant
+  // ✅ NEW: Get the unit price of the selected variant
+  double get _unitPrice {
+    final variantPrice = _selectedVariant?.price;
+    // ✅ FIX: If variant price is 0 or null, fallback to base product price
+    return (variantPrice != null && variantPrice > 0)
+        ? variantPrice
+        : widget.product.price;
+  }
+
+  // ✅ UPDATED: Calculate total using the variant price
+  double get _totalAmount => _unitPrice * widget.quantity;
+
+  // ✅ SIMPLIFIED: Use _selectedVariant to get the ID
+  String? get _variantId => _selectedVariant?.id;
+
   Map<String, dynamic> get _orderData {
+    final items = <Map<String, dynamic>>[
+      {
+        'productId': widget.product.id,
+        if (_variantId != null) 'productVariantId': _variantId,
+        'quantity': widget.quantity,
+      },
+    ];
+
+    print('📦 Building order data:');
+    print('  - productId: ${widget.product.id}');
+    print('  - variantId: ${_variantId ?? "NULL (no variant)"}');
+    print('  - quantity: ${widget.quantity}');
+    print('  - items: $items');
+
     return {
-      'items': [
-        {
-          'productId': widget.product.id, // ✅ ADD THIS
-          'productVariantId': _variantId,
-          'quantity': widget.quantity,
-        },
-      ],
+      'items': items,
       'shippingAddress': {
         'label': widget.address.label,
         'fullAddress': widget.address.fullAddress,
@@ -114,7 +135,6 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
         } else if (state is PaymentProcessed) {
           setState(() => _isProcessing = false);
 
-          // ✅ FIX: Extract the actual order ID from the payment result
           final paymentResult = state.paymentResult;
           final orderId =
               paymentResult['order']?['id'] as String? ??
@@ -174,18 +194,14 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
       return;
     }
 
-    if (widget.product.variants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product has no available variants')),
-      );
-      return;
-    }
+    print('💳 Processing payment for: ${widget.product.name}');
+    print('💳 Variant ID: ${_variantId ?? "NULL"}');
+    print('💳 Payment method: $_selectedPaymentMethod');
 
     setState(() => _isProcessing = true);
     context.read<OrderBloc>().add(CreateOrderEvent(_orderData));
   }
 
-  // ✅ FIXED: Navigate with actual order ID
   void _navigateToSuccessPage(String orderId) {
     print('✅ Navigating to success page with order ID: $orderId');
 
@@ -458,7 +474,7 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '\$${widget.product.price.toStringAsFixed(2)}',
+                    '\$${_unitPrice.toStringAsFixed(2)}', // ✅ UPDATED: Show variant unit price
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
@@ -503,11 +519,12 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '\$${_totalAmount.toStringAsFixed(2)}',
+                  '\$${_totalAmount.toStringAsFixed(2)}', // ✅ FIXED: Show correct total
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Colors
+                        .white, // ✅ FIXED: White text for visibility on green gradient
                   ),
                 ),
               ),
@@ -710,7 +727,7 @@ class _PaymentOptionsModalState extends State<PaymentOptionsModal> {
                           const Icon(Iconsax.shopping_cart, size: 20),
                           const SizedBox(width: 8),
                           Text(
-                            'Pay \$${_totalAmount.toStringAsFixed(2)}',
+                            'Pay \$${_totalAmount.toStringAsFixed(2)}', // ✅ Automatically uses correct total
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,

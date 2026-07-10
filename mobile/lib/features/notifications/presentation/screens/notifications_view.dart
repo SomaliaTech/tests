@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/core/error/error_handler.dart';
+import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:mobile/features/notifications/domain/entities/notification.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_event.dart';
@@ -32,7 +34,7 @@ class NotificationsView extends StatelessWidget {
             color: Color(0xFF333333),
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           BlocBuilder<NotificationsBloc, NotificationsState>(
             builder: (context, state) {
@@ -67,17 +69,27 @@ class NotificationsView extends StatelessWidget {
           if (state is NotificationsSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.message),
+                content: Row(
+                  children: [
+                    const Icon(
+                      Iconsax.tick_circle,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(state.message)),
+                  ],
+                ),
                 backgroundColor: const Color(0xFF2ED573),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                duration: const Duration(seconds: 2),
               ),
             );
           } else if (state is NotificationsError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: Colors.red,
-              ),
-            );
+            ErrorHandler.showError(context, state.message);
           }
         },
         child: BlocBuilder<NotificationsBloc, NotificationsState>(
@@ -155,16 +167,16 @@ class NotificationsView extends StatelessWidget {
 
                   // Notifications List
                   Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: () async {
-                        context.read<NotificationsBloc>().add(
-                          RefreshNotifications(),
-                        );
-                      },
-                      color: const Color(0xFF2ED573),
-                      child: state.isEmpty
-                          ? EmptyState(filter: state.currentFilter)
-                          : ListView.builder(
+                    child: state.isEmpty
+                        ? EmptyState(filter: state.currentFilter)
+                        : RefreshIndicator(
+                            onRefresh: () async {
+                              context.read<NotificationsBloc>().add(
+                                RefreshNotifications(),
+                              );
+                            },
+                            color: const Color(0xFF2ED573),
+                            child: ListView.builder(
                               padding: const EdgeInsets.all(15),
                               itemCount: state.filteredNotifications.length,
                               itemBuilder: (context, index) {
@@ -189,10 +201,14 @@ class NotificationsView extends StatelessWidget {
                                 );
                               },
                             ),
-                    ),
+                          ),
                   ),
                 ],
               );
+            }
+
+            if (state is NotificationsError) {
+              return _buildErrorState(context, state.message);
             }
 
             return const SizedBox.shrink();
@@ -202,18 +218,250 @@ class NotificationsView extends StatelessWidget {
     );
   }
 
-  // ✅ Helper method to extract order ID from actionLink
-  String? _extractOrderIdFromActionLink(String? actionLink) {
-    if (actionLink == null || actionLink.isEmpty) return null;
+  // ==========================================
+  // NOTIFICATION PRESS HANDLER
+  // ==========================================
 
-    // Extract the last part of the URL
-    // Example: /orders/54db6b6c-e7b4-4eec-9449-1948ed966140
-    final parts = actionLink.split('/');
-    if (parts.length >= 2) {
-      return parts.last;
+  void _handleNotificationPress(
+    BuildContext context,
+    NotificationEntity notification,
+  ) {
+    if (!notification.read) {
+      context.read<NotificationsBloc>().add(
+        MarkNotificationAsRead(notification.id),
+      );
+    }
+
+    debugPrint(
+      '🔔 Notification pressed: type=${notification.type}, actionLink=${notification.actionLink}',
+    );
+
+    // Handle navigation based on notification type
+    if (notification.type != null) {
+      switch (notification.type) {
+        case 'order':
+          _navigateToOrder(context, notification);
+          break;
+        case 'message':
+        case 'new_message':
+          _navigateToChat(context, notification);
+          break;
+        case 'payment':
+          _navigateToPayment(context, notification);
+          break;
+        case 'product':
+          _navigateToProduct(context, notification);
+          break;
+        case 'system':
+          _navigateFromActionLink(
+            context,
+            notification.actionLink,
+            notification,
+          );
+          break;
+        default:
+          _navigateFromActionLink(
+            context,
+            notification.actionLink,
+            notification,
+          );
+          break;
+      }
+    } else {
+      _navigateFromActionLink(context, notification.actionLink, notification);
+    }
+  }
+
+  // ==========================================
+  // NAVIGATION HELPERS
+  // ==========================================
+
+  void _navigateFromActionLink(
+    BuildContext context,
+    String? actionLink,
+    NotificationEntity notification,
+  ) {
+    if (actionLink == null || actionLink.isEmpty) return;
+
+    debugPrint('🔗 Navigating to: $actionLink');
+
+    final uri = Uri.tryParse(actionLink);
+    if (uri == null) return;
+
+    final segments = uri.path.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.isEmpty) return;
+
+    switch (segments[0]) {
+      case 'orders':
+        if (segments.length >= 2) {
+          _navigateToOrderById(context, segments[1]);
+        }
+        break;
+      case 'products':
+        if (segments.length >= 2) {
+          _navigateToProductById(context, segments[1]);
+        }
+        break;
+      case 'chat':
+        if (segments.length >= 2) {
+          // ✅ Extract name from notification title
+          final partnerName = _extractNameFromTitle(notification.title);
+          _navigateToChatById(context, segments[1], partnerName);
+        }
+        break;
+      case 'home':
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        break;
+      case 'admin':
+        if (segments.length >= 2) {
+          if (segments[1] == 'orders' && segments.length >= 3) {
+            _navigateToOrderById(context, segments[2]);
+          } else if (segments[1] == 'products' && segments.length >= 3) {
+            _navigateToProductById(context, segments[2]);
+          } else {
+            Navigator.pushNamed(context, '/admin');
+          }
+        } else {
+          Navigator.pushNamed(context, '/admin');
+        }
+        break;
+      case 'settings':
+      case 'profile':
+        Navigator.pushNamed(context, '/settings');
+        break;
+      default:
+        debugPrint('⚠️ Unknown action link pattern: $actionLink');
+        break;
+    }
+  }
+
+  void _navigateToOrder(BuildContext context, NotificationEntity notification) {
+    final orderId = _extractIdFromLink(notification.actionLink, 'orders');
+    if (orderId != null) {
+      _navigateToOrderById(context, orderId);
+    } else {
+      _navigateFromActionLink(context, notification.actionLink, notification);
+    }
+  }
+
+  void _navigateToChat(BuildContext context, NotificationEntity notification) {
+    final partnerId = _extractIdFromLink(notification.actionLink, 'chat');
+    if (partnerId != null) {
+      // ✅ Extract name from notification title (e.g., "New message from Hussein mahamed")
+      final partnerName = _extractNameFromTitle(notification.title);
+      _navigateToChatById(context, partnerId, partnerName);
+    } else {
+      _navigateFromActionLink(context, notification.actionLink, notification);
+    }
+  }
+
+  void _navigateToPayment(
+    BuildContext context,
+    NotificationEntity notification,
+  ) {
+    _navigateToOrder(context, notification);
+  }
+
+  void _navigateToProduct(
+    BuildContext context,
+    NotificationEntity notification,
+  ) {
+    final productId = _extractIdFromLink(notification.actionLink, 'products');
+    if (productId != null) {
+      _navigateToProductById(context, productId);
+    } else {
+      _navigateFromActionLink(context, notification.actionLink, notification);
+    }
+  }
+
+  void _navigateToOrderById(BuildContext context, String orderId) {
+    debugPrint('📦 Navigating to order: $orderId');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OrderDetailsScreen(orderId: orderId),
+      ),
+    );
+  }
+
+  void _navigateToChatById(
+    BuildContext context,
+    String partnerId, [
+    String partnerName = 'User',
+  ]) {
+    debugPrint('💬 Navigating to chat with: $partnerId ($partnerName)');
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatRoomScreen(
+          partnerId: partnerId,
+          partnerName: partnerName,
+          isOnline: false,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToProductById(BuildContext context, String productId) {
+    debugPrint('🛍️ Navigating to product: $productId');
+    Navigator.pushNamed(
+      context,
+      '/product-details',
+      arguments: {'productId': productId},
+    );
+  }
+
+  // ==========================================
+  // LINK PARSING HELPERS
+  // ==========================================
+
+  /// ✅ Extract partner name from notification title
+  /// Examples:
+  /// - "New message from Hussein mahamed" -> "Hussein mahamed"
+  /// - "New message from +252615328654" -> "+252615328654"
+  /// - "Payment Successful" -> "User" (fallback)
+  String _extractNameFromTitle(String? title) {
+    if (title == null || title.isEmpty) return 'User';
+
+    // Try to extract name after "from "
+    if (title.contains('from ')) {
+      return title.split('from ').last.trim();
+    }
+
+    // Try common patterns
+    final patterns = ['from ', 'with ', 'by '];
+    for (final pattern in patterns) {
+      if (title.contains(pattern)) {
+        return title.split(pattern).last.trim();
+      }
+    }
+
+    return 'User';
+  }
+
+  String? _extractIdFromLink(String? actionLink, String resource) {
+    if (actionLink == null || actionLink.isEmpty) return null;
+    try {
+      final uri = Uri.parse(actionLink);
+      final segments = uri.path.split('/').where((s) => s.isNotEmpty).toList();
+      final resourceIndex = segments.indexOf(resource);
+      if (resourceIndex != -1 && resourceIndex + 1 < segments.length) {
+        return segments[resourceIndex + 1];
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to extract ID from link: $e');
     }
     return null;
   }
+
+  String? _extractOrderIdFromActionLink(String? actionLink) {
+    return _extractIdFromLink(actionLink, 'orders');
+  }
+
+  // ==========================================
+  // DIALOGS
+  // ==========================================
 
   void _showDeleteDialog(BuildContext context, String id) {
     showDialog(
@@ -285,43 +533,64 @@ class NotificationsView extends StatelessWidget {
     );
   }
 
-  void _handleNotificationPress(
-    BuildContext context,
-    NotificationEntity notification,
-  ) {
-    // Mark as read if not already
-    if (!notification.read) {
-      context.read<NotificationsBloc>().add(
-        MarkNotificationAsRead(notification.id),
-      );
-    }
+  // ==========================================
+  // ERROR STATE
+  // ==========================================
 
-    // Handle navigation based on action link
-    if (notification.actionLink != null &&
-        notification.actionLink!.isNotEmpty) {
-      print("📱 Notification clicked: ${notification.actionLink}");
+  Widget _buildErrorState(BuildContext context, String message) {
+    final friendlyMessage = ErrorHandler.parseError(message);
 
-      // ✅ Extract order ID from actionLink
-      final orderId = _extractOrderIdFromActionLink(notification.actionLink);
-
-      if (orderId != null && orderId.isNotEmpty) {
-        print("📦 Navigating to order details: $orderId");
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OrderDetailsScreen(orderId: orderId),
-          ),
-        );
-      } else {
-        // Fallback: show snackbar if no order ID found
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Navigate to: ${notification.actionLink}'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Failed to load notifications',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              friendlyMessage,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                context.read<NotificationsBloc>().add(LoadNotifications());
+              },
+              icon: const Icon(Iconsax.refresh, size: 18),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2ED573),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

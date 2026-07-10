@@ -13,7 +13,6 @@ class NotificationsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, authState) {
-        // ✅ Wait for AuthBloc to finish checking
         if (authState is AuthChecking) {
           return const Scaffold(
             backgroundColor: Colors.white,
@@ -22,9 +21,6 @@ class NotificationsScreen extends StatelessWidget {
             ),
           );
         }
-
-        // 🚨 FIX: We no longer need to manually extract or pass the token!
-        // The NotificationsRepository now fetches it directly from StorageService.
 
         return BlocProvider.value(
           value: getNotificationBloc()..add(LoadNotifications()),

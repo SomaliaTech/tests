@@ -9,6 +9,10 @@ import {
   UseGuards,
   Request,
   Query,
+  ParseUUIDPipe,
+  DefaultValuePipe,
+  ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -36,6 +40,7 @@ export class OrdersController {
   // ==========================================
   // 1. ADDRESS ENDPOINTS
   // ==========================================
+
   @Post('addresses')
   @ApiOperation({
     summary: 'Add a new address',
@@ -122,7 +127,7 @@ export class OrdersController {
   })
   async setDefaultAddress(
     @Request() req,
-    @Param('addressId') addressId: string,
+    @Param('addressId', ParseUUIDPipe) addressId: string,
   ) {
     return this.ordersService.setDefaultAddress(req.user.userId, addressId);
   }
@@ -149,13 +154,17 @@ export class OrdersController {
     status: 401,
     description: 'Unauthorized',
   })
-  async deleteAddress(@Request() req, @Param('addressId') addressId: string) {
+  async deleteAddress(
+    @Request() req,
+    @Param('addressId', ParseUUIDPipe) addressId: string,
+  ) {
     return this.ordersService.deleteAddress(req.user.userId, addressId);
   }
 
   // ==========================================
   // 2. CART ENDPOINTS
   // ==========================================
+
   @Get('cart')
   @ApiOperation({
     summary: 'Get shopping cart',
@@ -234,9 +243,12 @@ export class OrdersController {
   })
   async updateCartItem(
     @Request() req,
-    @Param('itemId') itemId: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
     @Body('quantity') quantity: number,
   ) {
+    if (!quantity || quantity < 1) {
+      throw new BadRequestException('Quantity must be at least 1');
+    }
     return this.ordersService.updateCartItem(req.user.userId, itemId, quantity);
   }
 
@@ -262,7 +274,10 @@ export class OrdersController {
     status: 401,
     description: 'Unauthorized',
   })
-  async removeCartItem(@Request() req, @Param('itemId') itemId: string) {
+  async removeCartItem(
+    @Request() req,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+  ) {
     return this.ordersService.removeCartItem(req.user.userId, itemId);
   }
 
@@ -284,115 +299,9 @@ export class OrdersController {
   }
 
   // ==========================================
-  // 3. NOTIFICATION ENDPOINTS
+  // 3. ORDER ENDPOINTS
   // ==========================================
-  @Get('notifications')
-  @ApiOperation({
-    summary: 'Get user notifications',
-    description: 'Returns all notifications for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Notifications retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async getNotifications(@Request() req) {
-    return this.ordersService.getUserNotifications(req.user.userId);
-  }
 
-  @Get('notifications/unread/count')
-  @ApiOperation({
-    summary: 'Get unread notification count',
-    description:
-      'Returns the count of unread notifications for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Unread count retrieved',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async getUnreadCount(@Request() req) {
-    return this.ordersService.getUnreadCount(req.user.userId);
-  }
-
-  @Put('notifications/read-all')
-  @ApiOperation({
-    summary: 'Mark all as read',
-    description: 'Marks all notifications as read for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'All notifications marked as read',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async markAllAsRead(@Request() req) {
-    return this.ordersService.markAllNotificationsAsRead(req.user.userId);
-  }
-
-  @Put('notifications/:id/read')
-  @ApiOperation({
-    summary: 'Mark notification as read',
-    description: 'Marks a specific notification as read.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-    example: '550e8400-e29b-41d4-a716-446655440003',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Notification marked as read',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async markNotificationAsRead(@Request() req, @Param('id') id: string) {
-    return this.ordersService.markNotificationAsRead(id, req.user.userId);
-  }
-
-  @Delete('notifications/:id')
-  @ApiOperation({
-    summary: 'Delete notification',
-    description: 'Deletes a specific notification.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-    example: '550e8400-e29b-41d4-a716-446655440003',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Notification deleted successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  async deleteNotification(@Request() req, @Param('id') id: string) {
-    return this.ordersService.deleteNotification(id, req.user.userId);
-  }
-
-  // ==========================================
-  // 4. ORDER ENDPOINTS
-  // ==========================================
   @Post()
   @ApiOperation({
     summary: 'Create a new order',
@@ -425,8 +334,26 @@ export class OrdersController {
     name: 'status',
     required: false,
     description: 'Filter orders by status',
-    enum: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
-    example: 'PENDING',
+    enum: [
+      'PENDING',
+      'CONFIRMED',
+      'PROCESSING',
+      'SHIPPED',
+      'DELIVERED',
+      'CANCELLED',
+    ],
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page',
   })
   @ApiResponse({
     status: 200,
@@ -436,8 +363,13 @@ export class OrdersController {
     status: 401,
     description: 'Unauthorized',
   })
-  async getOrders(@Request() req, @Query('status') status?: string) {
-    return this.ordersService.getOrders(req.user.userId, status);
+  async getOrders(
+    @Request() req,
+    @Query('status') status?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
+  ) {
+    return this.ordersService.getOrders(req.user.userId, status, page, limit);
   }
 
   @Post(':id/payment')
@@ -470,15 +402,16 @@ export class OrdersController {
   })
   async processPayment(
     @Request() req,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() paymentData: ProcessPaymentDto,
   ) {
     return this.ordersService.processPayment(id, req.user.userId, paymentData);
   }
 
   // ==========================================
-  // 5. DYNAMIC ORDER ROUTES (MUST BE LAST!)
+  // 4. DYNAMIC ORDER ROUTES (MUST BE LAST!)
   // ==========================================
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get order by ID',
@@ -501,7 +434,7 @@ export class OrdersController {
     status: 401,
     description: 'Unauthorized',
   })
-  async getOrderById(@Request() req, @Param('id') id: string) {
+  async getOrderById(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.getOrderById(id, req.user.userId);
   }
 
@@ -521,7 +454,14 @@ export class OrdersController {
       properties: {
         status: {
           type: 'string',
-          enum: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'],
+          enum: [
+            'PENDING',
+            'CONFIRMED',
+            'PROCESSING',
+            'SHIPPED',
+            'DELIVERED',
+            'CANCELLED',
+          ],
           example: 'PROCESSING',
         },
       },
@@ -540,7 +480,7 @@ export class OrdersController {
     description: 'Unauthorized',
   })
   async updateOrderStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: string,
   ) {
     return this.ordersService.updateOrderStatus(id, status);

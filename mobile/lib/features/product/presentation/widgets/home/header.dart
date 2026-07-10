@@ -99,7 +99,7 @@ class _HeaderState extends State<Header> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "HALDOOR",
+                    "FARXADA",
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,

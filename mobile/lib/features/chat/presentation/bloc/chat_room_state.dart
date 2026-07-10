@@ -56,7 +56,8 @@ class ChatRoomLoaded extends ChatRoomState {
   final bool isPartnerOnline;
   final bool isPartnerTyping;
   final String? currentUserId;
-  final bool isHistoryLoaded; // ✅ NEW: Tracks if history has been fetched
+  final bool isHistoryLoaded;
+  final String? partnerName; // ✅ Add this field
 
   const ChatRoomLoaded({
     required this.messages,
@@ -64,7 +65,27 @@ class ChatRoomLoaded extends ChatRoomState {
     this.isPartnerTyping = false,
     this.currentUserId,
     this.isHistoryLoaded = false,
+    this.partnerName, // ✅ Add this
   });
+
+  // ✅ ADD THIS METHOD
+  ChatRoomLoaded copyWith({
+    List<ChatMessage>? messages,
+    bool? isPartnerOnline,
+    bool? isPartnerTyping,
+    String? currentUserId,
+    bool? isHistoryLoaded,
+    String? partnerName,
+  }) {
+    return ChatRoomLoaded(
+      messages: messages ?? this.messages,
+      isPartnerOnline: isPartnerOnline ?? this.isPartnerOnline,
+      isPartnerTyping: isPartnerTyping ?? this.isPartnerTyping,
+      currentUserId: currentUserId ?? this.currentUserId,
+      isHistoryLoaded: isHistoryLoaded ?? this.isHistoryLoaded,
+      partnerName: partnerName ?? this.partnerName,
+    );
+  }
 
   @override
   List<Object?> get props => [
@@ -73,5 +94,6 @@ class ChatRoomLoaded extends ChatRoomState {
     isPartnerTyping,
     currentUserId,
     isHistoryLoaded,
+    partnerName,
   ];
 }

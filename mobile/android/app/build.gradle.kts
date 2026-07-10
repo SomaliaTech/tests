@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.mobile"
+    applicationId "com.yourcompany.farxada"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 

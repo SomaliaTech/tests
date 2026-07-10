@@ -259,12 +259,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
                       _buildInputField(
                         controller: _fullAddressController,
                         label: 'Full Address',
-                        hint: 'Street, building, apartment...',
+                        hint:
+                            'Faldan Gali alaabta  Meesha lagu keeni doono alaabta',
                         icon: Iconsax.location,
                         iconColor: const Color(0xFF3B82F6),
                         maxLines: 3,
                         validator: (value) => value?.isEmpty ?? true
-                            ? 'Please enter your full address'
+                            ? 'Faldan gali meesha aad joogto'
                             : null,
                       ),
                       const SizedBox(height: 20),

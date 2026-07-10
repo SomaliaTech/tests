@@ -59,7 +59,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           );
           final normalizedPhone = '+252$rawPhone';
 
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) =>

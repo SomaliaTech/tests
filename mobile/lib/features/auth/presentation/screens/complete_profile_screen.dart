@@ -20,7 +20,7 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController nameController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
+  // ✅ REMOVED: emailController
 
   String? _profileImageUrl;
   bool _uploading = false;
@@ -37,7 +37,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   Future<void> _fetchMarkets() async {
-    if (!mounted) return; // ✅ Fix: Check mounted before setState
+    if (!mounted) return;
     setState(() => _loadingMarkets = true);
     try {
       final response = await http.get(
@@ -48,7 +48,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         },
       );
 
-      if (!mounted) return; // ✅ Fix: Check mounted after async
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -60,7 +60,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         throw Exception('Failed to load markets');
       }
     } catch (e) {
-      if (!mounted) return; // ✅ Fix: Check mounted before setState
+      if (!mounted) return;
       setState(() => _loadingMarkets = false);
       if (mounted) {
         toastification.show(
@@ -87,7 +87,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
       try {
         final bytes = await picked.readAsBytes();
-        // ✅ Send raw base64 without data URI prefix
         final base64Image = base64Encode(bytes);
 
         if (!mounted) return;
@@ -117,7 +116,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is ProfileImageUploaded) {
-            if (!mounted) return; // ✅ Fix: Check mounted
+            if (!mounted) return;
             setState(() {
               _profileImageUrl = state.imageUrl;
               _uploading = false;
@@ -130,7 +129,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               autoCloseDuration: const Duration(seconds: 2),
             );
           } else if (state is ProfileCompleted) {
-            if (!mounted) return; // ✅ Fix: Check mounted
+            if (!mounted) return;
             toastification.show(
               context: context,
               title: const Text('✓ Success'),
@@ -142,7 +141,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               context,
             ).pushNamedAndRemoveUntil('/home', (route) => false);
           } else if (state is AuthError) {
-            if (!mounted) return; // ✅ Fix: Check mounted
+            if (!mounted) return;
             toastification.show(
               context: context,
               title: const Text('Error'),
@@ -183,9 +182,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                         Positioned.fill(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.black.withValues(
-                                alpha: 0.5,
-                              ), // ✅ Fix: Use withValues
+                              color: Colors.black.withValues(alpha: 0.5),
                               shape: BoxShape.circle,
                             ),
                             child: const Center(
@@ -207,7 +204,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Full Name
+                // Full Name (Required)
                 TextFormField(
                   controller: nameController,
                   decoration: _inputDecoration('Full Name *', Icons.person),
@@ -216,20 +213,20 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Market Dropdown
+                // ✅ EMAIL FIELD REMOVED
+
+                // Market Dropdown (Required)
                 _loadingMarkets
                     ? const Center(child: CircularProgressIndicator())
                     : DropdownButtonFormField<String>(
-                        initialValue:
-                            _selectedMarketId, // ✅ Fix: Use initialValue instead of value
+                        initialValue: _selectedMarketId,
                         decoration: _inputDecoration(
                           'Market *',
                           Icons.location_city,
                         ),
                         items: _markets.map<DropdownMenuItem<String>>((market) {
                           return DropdownMenuItem<String>(
-                            value:
-                                market['id'] as String, // ✅ Fix: Cast to String
+                            value: market['id'] as String,
                             child: Text(market['name'] ?? ''),
                           );
                         }).toList(),
@@ -253,9 +250,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                 context.read<AuthBloc>().add(
                                   CompleteProfileEvent(
                                     name: nameController.text.trim(),
-                                    email: emailController.text.trim(),
-                                    marketId:
-                                        _selectedMarketId!, // ✅ Make sure this is not null
+                                    // ✅ EMAIL REMOVED - no email parameter
+                                    marketId: _selectedMarketId!,
                                     profileImageUrl: _profileImageUrl,
                                   ),
                                 );

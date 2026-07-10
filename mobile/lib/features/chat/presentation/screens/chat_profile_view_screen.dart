@@ -6,6 +6,9 @@ import 'package:get_it/get_it.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:mobile/core/services/injection_container.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:mobile/core/constants/api_constants.dart';
 
 class ChatProfileViewScreen extends StatefulWidget {
   final String partnerId;
@@ -32,6 +35,13 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
   bool _isMuted = false;
   bool _isLoading = true;
 
+  // ✅ Dynamic user info
+  String _phoneNumber = '';
+  String _username = '';
+  String _displayName = '';
+  String _profileImage = '';
+  bool _isLoadingUserInfo = true;
+
   // Dynamic shared media counts
   int _photoCount = 0;
   int _videoCount = 0;
@@ -41,7 +51,10 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
   @override
   void initState() {
     super.initState();
+    _displayName = widget.partnerName;
+    _profileImage = widget.partnerImage ?? '';
     _loadMuteStatus();
+    _loadUserInfo();
     _loadSharedMediaCounts();
   }
 
@@ -58,6 +71,170 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
       debugPrint('❌ Error loading mute status: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// ✅ Fetch user info from API
+  Future<void> _loadUserInfo() async {
+    try {
+      final storageService = GetIt.instance<StorageService>();
+      final token = await storageService.getAuthToken();
+
+      if (token == null) {
+        _setDefaultUserInfo();
+        return;
+      }
+
+      // Try the status endpoint first
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConstants.baseUrl}/chat/users/${widget.partnerId}/status',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _phoneNumber = data['phoneNumber'] as String? ?? '';
+            _displayName =
+                data['name'] as String? ??
+                data['fullName'] as String? ??
+                widget.partnerName;
+            _profileImage =
+                data['profileImage'] as String? ?? widget.partnerImage ?? '';
+            _username = _generateUsername(_displayName);
+            _isLoadingUserInfo = false;
+          });
+        }
+      } else {
+        // Try user search endpoint as fallback
+        await _loadUserInfoFromSearch(token);
+      }
+    } catch (e) {
+      debugPrint('❌ Error loading user info: $e');
+      await _loadUserInfoFromFallback();
+    }
+  }
+
+  /// ✅ Fallback: Try user search endpoint
+  Future<void> _loadUserInfoFromSearch(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConstants.baseUrl}/chat/users/chat-search?q=${Uri.encodeComponent(widget.partnerName)}&limit=1',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final users = data is List
+            ? data
+            : (data['users'] as List? ?? data['data'] as List? ?? []);
+
+        if (users.isNotEmpty) {
+          final user = users.first as Map<String, dynamic>;
+          if (mounted) {
+            setState(() {
+              _phoneNumber = user['phoneNumber'] as String? ?? '';
+              _displayName =
+                  user['name'] as String? ??
+                  user['fullName'] as String? ??
+                  widget.partnerName;
+              _profileImage =
+                  user['profileImage'] as String? ?? widget.partnerImage ?? '';
+              _username = _generateUsername(_displayName);
+              _isLoadingUserInfo = false;
+            });
+          }
+          return;
+        }
+      }
+      _setDefaultUserInfo();
+    } catch (e) {
+      debugPrint('❌ Error loading user info from search: $e');
+      _setDefaultUserInfo();
+    }
+  }
+
+  /// ✅ Try auth/me endpoint or conversations endpoint
+  Future<void> _loadUserInfoFromFallback() async {
+    try {
+      final storageService = GetIt.instance<StorageService>();
+      final token = await storageService.getAuthToken();
+      if (token == null) {
+        _setDefaultUserInfo();
+        return;
+      }
+
+      // Try conversations endpoint which might have user info
+      final response = await http.get(
+        Uri.parse('${ApiConstants.baseUrl}/chat/conversations'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final conversations = data is List
+            ? data
+            : (data['data'] as List? ?? []);
+
+        for (final conv in conversations) {
+          final participants = conv['participants'] as List? ?? [];
+          for (final participant in participants) {
+            if (participant['id'] == widget.partnerId) {
+              if (mounted) {
+                setState(() {
+                  _phoneNumber = participant['phoneNumber'] as String? ?? '';
+                  _displayName =
+                      participant['name'] as String? ??
+                      participant['fullName'] as String? ??
+                      widget.partnerName;
+                  _profileImage =
+                      participant['profileImage'] as String? ??
+                      widget.partnerImage ??
+                      '';
+                  _username = _generateUsername(_displayName);
+                  _isLoadingUserInfo = false;
+                });
+              }
+              return;
+            }
+          }
+        }
+      }
+      _setDefaultUserInfo();
+    } catch (e) {
+      debugPrint('❌ Error loading user info from conversations: $e');
+      _setDefaultUserInfo();
+    }
+  }
+
+  void _setDefaultUserInfo() {
+    if (mounted) {
+      setState(() {
+        _phoneNumber = '';
+        _displayName = widget.partnerName;
+        _profileImage = widget.partnerImage ?? '';
+        _username = _generateUsername(widget.partnerName);
+        _isLoadingUserInfo = false;
+      });
+    }
+  }
+
+  String _generateUsername(String name) {
+    if (name.isEmpty) return 'user';
+    return '@${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '_').replaceAll(RegExp(r'_+'), '_')}';
   }
 
   Future<void> _loadSharedMediaCounts() async {
@@ -130,18 +307,34 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
   }
 
   void _openFullScreenImage() {
-    if (widget.partnerImage != null && widget.partnerImage!.isNotEmpty) {
+    final imageToShow = _profileImage.isNotEmpty
+        ? _profileImage
+        : widget.partnerImage;
+    if (imageToShow != null && imageToShow.isNotEmpty) {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => _FullScreenProfileImage(
-            imageUrl: widget.partnerImage!,
+            imageUrl: imageToShow,
             heroTag: 'avatar_${widget.partnerId}',
-            name: widget.partnerName,
+            name: _displayName,
           ),
         ),
       );
     }
+  }
+
+  /// ✅ Format phone number for display
+  String _formatPhoneNumber(String phone) {
+    if (phone.isEmpty) return 'No phone number';
+    // Format: +252 61 532 8654 or similar
+    if (phone.startsWith('+')) {
+      final cleaned = phone.substring(1);
+      if (cleaned.length >= 9) {
+        return '+${cleaned.substring(0, 3)} ${cleaned.substring(3, 5)} ${cleaned.substring(5, 8)} ${cleaned.substring(8)}';
+      }
+    }
+    return phone;
   }
 
   @override
@@ -160,7 +353,6 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
               icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
               onPressed: () => Navigator.pop(context),
             ),
-
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 color: Colors.white,
@@ -207,7 +399,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        widget.partnerName,
+                        _displayName,
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -259,7 +451,11 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                       _buildModernInfoTile(
                         icon: Iconsax.call,
                         title: 'Phone',
-                        subtitle: '+255 123 456 789',
+                        subtitle: _isLoadingUserInfo
+                            ? 'Loading...'
+                            : _phoneNumber.isNotEmpty
+                            ? _formatPhoneNumber(_phoneNumber)
+                            : 'No phone number',
                       ),
                       Divider(
                         height: 1,
@@ -269,8 +465,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                       _buildModernInfoTile(
                         icon: Iconsax.user,
                         title: 'Username',
-                        subtitle:
-                            '@${widget.partnerName.toLowerCase().replaceAll(' ', '_')}',
+                        subtitle: _isLoadingUserInfo ? 'Loading...' : _username,
                       ),
                     ],
                   ),
@@ -278,17 +473,6 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                   const SizedBox(height: 24),
 
                   // Shared Media Section with DYNAMIC counts
-                  const Text(
-                    'Shared Media',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  const SizedBox(height: 24),
 
                   // Settings Card
                   _buildModernCard(
@@ -380,7 +564,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                     children: [
                       _buildModernActionTile(
                         icon: Iconsax.warning_2,
-                        title: 'Report ${widget.partnerName.split(' ')[0]}',
+                        title: 'Report ${_displayName.split(' ').first}',
                         iconColor: Colors.red,
                         onTap: () => _showReportDialog(context),
                       ),
@@ -398,11 +582,50 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
   }
 
   // ==========================================
+  // SHARED MEDIA GRID
+  // ==========================================
+
+  Widget _buildMediaCountItem({
+    required IconData icon,
+    required int count,
+    required String label,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          count.toString(),
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
   // AVATAR WITH GRADIENT FALLBACK
   // ==========================================
   Widget _buildProfileAvatar() {
-    final hasImage =
-        widget.partnerImage != null && widget.partnerImage!.isNotEmpty;
+    final imageToShow = _profileImage.isNotEmpty
+        ? _profileImage
+        : widget.partnerImage;
+    final hasImage = imageToShow != null && imageToShow.isNotEmpty;
 
     final fallbackWidget = Container(
       width: 140,
@@ -427,9 +650,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
       ),
       child: Center(
         child: Text(
-          widget.partnerName.isNotEmpty
-              ? widget.partnerName[0].toUpperCase()
-              : '?',
+          _displayName.isNotEmpty ? _displayName[0].toUpperCase() : '?',
           style: const TextStyle(
             fontSize: 56,
             fontWeight: FontWeight.bold,
@@ -442,7 +663,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
     if (!hasImage) return fallbackWidget;
 
     return CachedNetworkImage(
-      imageUrl: widget.partnerImage!,
+      imageUrl: imageToShow!,
       imageBuilder: (context, imageProvider) => Container(
         width: 140,
         height: 140,
@@ -612,7 +833,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Report ${widget.partnerName.split(' ')[0]}?'),
+        title: Text('Report ${_displayName.split(' ').first}?'),
         content: const Text(
           'The last 5 messages from this contact will be forwarded to our team for review.',
         ),
@@ -627,7 +848,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${widget.partnerName.split(' ')[0]} reported'),
+                  content: Text('${_displayName.split(' ').first} reported'),
                   backgroundColor: Colors.orange,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -687,7 +908,6 @@ class _FullScreenProfileImage extends StatelessWidget {
                 child: CircularProgressIndicator(color: Colors.white),
               ),
               errorWidget: (context, url, error) {
-                // Fallback to initial letter if image fails
                 return Center(
                   child: Container(
                     width: 200,

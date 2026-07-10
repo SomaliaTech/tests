@@ -1,7 +1,6 @@
 // lib/features/chat/presentation/bloc/chat_room_bloc.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
@@ -32,8 +31,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   bool _historyLoaded = false;
   XFile? _selectedImage;
   Timer? _typingTimer;
-  Timer? _minimumLoadTimer; // ✅ Timer to enforce minimum loading time
+  Timer? _minimumLoadTimer;
   bool _isUserTyping = false;
+  String? _partnerName; // ✅ Store partner name
 
   // Subscriptions
   StreamSubscription? _msgSub;
@@ -43,7 +43,6 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   StreamSubscription? _messageReadSub;
   StreamSubscription? _connectionSub;
 
-  // ✅ Minimum duration to show skeleton loader (prevents flash)
   static const Duration _minimumLoadDuration = Duration(seconds: 4);
 
   String? get currentUserId => _currentUserId;
@@ -72,6 +71,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     on<SendSelectedImageEvent>(_onSendSelectedImage);
     on<CancelImageSelectionEvent>(_onCancelImageSelection);
     on<UpdateReadReceiptsEvent>(_onUpdateReadReceipts);
+    on<LoadPartnerInfoEvent>(_onLoadPartnerInfo);
   }
 
   // ==========================================
@@ -87,6 +87,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
           isPartnerTyping: _isPartnerTyping,
           currentUserId: _currentUserId,
           isHistoryLoaded: _historyLoaded,
+          partnerName: _partnerName, // ✅ Include partner name
         ),
       );
     }
@@ -135,6 +136,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     if (isClosed) return;
     if (message.senderId == _currentPartnerId ||
         message.receiverId == _currentPartnerId) {
+      // ✅ Extract partner name from incoming messages
+      if (message.senderId == _currentPartnerId) {
+        _partnerName = message.senderName ?? _partnerName;
+      }
       add(ReceiveMessageEvent(message));
     }
   }
@@ -190,23 +195,19 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     _hasMarkedRead = false;
     _historyLoaded = false;
 
-    // ✅ Start minimum load timer - shows skeleton for at least 4 seconds
     final completer = Completer<void>();
     _minimumLoadTimer?.cancel();
     _minimumLoadTimer = Timer(_minimumLoadDuration, () {
       completer.complete();
     });
 
-    // Show loading/skeleton state
     if (_messages.isEmpty) {
       emit(ChatRoomLoading());
     }
 
-    // Fetch history
     final result = await getChatHistory(event.partnerId);
     if (isClosed) return;
 
-    // ✅ Wait for minimum load duration to complete
     await completer.future;
     if (isClosed) return;
 
@@ -220,7 +221,6 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         }
       },
       (history) {
-        // Merge: Keep socket messages that arrived during loading
         final historyIds = history.map((m) => m.id).toSet();
         final socketMessages = _messages
             .where((m) => !historyIds.contains(m.id))
@@ -230,6 +230,19 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         _messages.insertAll(0, socketMessages);
 
         _historyLoaded = true;
+
+        // ✅ Extract partner name from the first message sent by the partner
+        if (_partnerName == null || _partnerName!.isEmpty) {
+          for (final msg in history) {
+            if (msg.senderId == event.partnerId &&
+                msg.senderName != null &&
+                msg.senderName!.isNotEmpty) {
+              _partnerName = msg.senderName;
+              break;
+            }
+          }
+        }
+
         _emitLoaded(emit);
         _triggerMarkAsRead();
       },
@@ -243,6 +256,13 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     if (isClosed) return;
 
     final msg = event.message;
+
+    // ✅ Extract partner name from incoming messages
+    if (msg.senderId == _currentPartnerId &&
+        msg.senderName != null &&
+        msg.senderName!.isNotEmpty) {
+      _partnerName = msg.senderName;
+    }
 
     // Reset typing AND read flag for new messages from partner
     if (msg.senderId == _currentPartnerId) {
@@ -282,7 +302,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       type: event.type,
       mediaUrl: event.mediaUrl,
       isRead: false,
-      createdAt: DateTime.now(), // ✅ Local time for temp messages
+      createdAt: DateTime.now(),
     );
 
     _messages.insert(0, tempMessage);
@@ -354,6 +374,43 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       _messages = List.from(history);
       _emitLoaded(emit);
     });
+  }
+
+  // ==========================================
+  // LOAD PARTNER INFO
+  // ==========================================
+
+  Future<void> _onLoadPartnerInfo(
+    LoadPartnerInfoEvent event,
+    Emitter<ChatRoomState> emit,
+  ) async {
+    try {
+      final storageService = GetIt.instance<StorageService>();
+      final token = await storageService.getAuthToken();
+
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse(
+          '${ApiConstants.baseUrl}/chat/users/${event.partnerId}/status',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final name =
+            data['name'] as String? ?? data['phoneNumber'] as String? ?? 'User';
+
+        _partnerName = name;
+        _emitLoaded(emit);
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to load partner info: $e');
+    }
   }
 
   // ==========================================
@@ -525,7 +582,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
 
   @override
   Future<void> close() {
-    _minimumLoadTimer?.cancel(); // ✅ Cancel minimum load timer
+    _minimumLoadTimer?.cancel();
     _typingTimer?.cancel();
     _msgSub?.cancel();
     _statusSub?.cancel();

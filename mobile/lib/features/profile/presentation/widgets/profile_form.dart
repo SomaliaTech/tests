@@ -7,7 +7,7 @@ class ProfileForm extends StatefulWidget {
   final Profile profile;
   final Market? selectedMarket;
   final Function(String) onNameChanged;
-  final Function(String) onEmailChanged;
+
   final VoidCallback onMarketTap;
   final VoidCallback onUpdatePressed;
   final bool isUpdating;
@@ -17,7 +17,7 @@ class ProfileForm extends StatefulWidget {
     required this.profile,
     required this.selectedMarket,
     required this.onNameChanged,
-    required this.onEmailChanged,
+
     required this.onMarketTap,
     required this.onUpdatePressed,
     required this.isUpdating,
@@ -114,18 +114,6 @@ class _ProfileFormState extends State<ProfileForm> {
             iconColor: const Color(0xFF3B82F6),
             onChanged: widget.onNameChanged,
             hint: 'Enter your full name',
-          ),
-          const SizedBox(height: 20),
-
-          // Email Field
-          _buildEditableField(
-            controller: _emailController,
-            label: 'Email Address',
-            icon: Iconsax.message,
-            iconColor: const Color(0xFF8B5CF6),
-            keyboardType: TextInputType.emailAddress,
-            onChanged: widget.onEmailChanged,
-            hint: 'Enter your email',
           ),
           const SizedBox(height: 20),
 

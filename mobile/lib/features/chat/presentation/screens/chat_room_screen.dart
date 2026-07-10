@@ -26,7 +26,7 @@ class ChatRoomScreen extends StatefulWidget {
   const ChatRoomScreen({
     super.key,
     required this.partnerId,
-    required this.partnerName,
+    this.partnerName = '', // ✅ Default to empty string
     this.partnerImage,
     this.isOnline = false,
   });
@@ -82,6 +82,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
 
     await _chatRoomBloc.getCurrentUserId();
     if (!mounted) return;
+
+    // ✅ Fetch partner info if name is not provided
+    if (widget.partnerName.isEmpty) {
+      _chatRoomBloc.add(LoadPartnerInfoEvent(widget.partnerId));
+    }
 
     if (!_socketService.isConnected) {
       await _socketService.connect();
@@ -242,68 +247,90 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.partnerName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                BlocBuilder<ChatRoomBloc, ChatRoomState>(
-                  buildWhen: (p, c) {
-                    if (p is ChatRoomLoaded && c is ChatRoomLoaded) {
-                      return p.isPartnerOnline != c.isPartnerOnline ||
-                          p.isPartnerTyping != c.isPartnerTyping;
-                    }
-                    return true;
-                  },
-                  builder: (context, state) {
-                    if (state is ChatRoomLoaded && state.isPartnerTyping) {
-                      return const Text(
-                        'typing...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF2ED573),
-                          fontStyle: FontStyle.italic,
-                        ),
-                      );
-                    }
-                    final isOnline = state is ChatRoomLoaded
-                        ? state.isPartnerOnline
-                        : widget.isOnline;
-                    return Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: isOnline
-                                ? const Color(0xFF2ED573)
-                                : Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isOnline ? 'Online' : 'Offline',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isOnline
-                                ? const Color(0xFF2ED573)
-                                : Colors.grey,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+                _buildPartnerName(), // ✅ Use the new method
+                _buildPartnerStatus(),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // ✅ NEW: Partner name with loading state
+  Widget _buildPartnerName() {
+    return BlocBuilder<ChatRoomBloc, ChatRoomState>(
+      builder: (context, state) {
+        String displayName = widget.partnerName;
+
+        // If partner name is empty, try to get it from state
+        if (displayName.isEmpty && state is ChatRoomLoaded) {
+          displayName = state.partnerName ?? '';
+        }
+
+        // If still empty, show default
+        if (displayName.isEmpty) {
+          displayName = 'User';
+        }
+
+        return Text(
+          displayName,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF333333),
+          ),
+          overflow: TextOverflow.ellipsis,
+        );
+      },
+    );
+  }
+
+  // ✅ NEW: Partner online/typing status
+  Widget _buildPartnerStatus() {
+    return BlocBuilder<ChatRoomBloc, ChatRoomState>(
+      buildWhen: (p, c) {
+        if (p is ChatRoomLoaded && c is ChatRoomLoaded) {
+          return p.isPartnerOnline != c.isPartnerOnline ||
+              p.isPartnerTyping != c.isPartnerTyping;
+        }
+        return true;
+      },
+      builder: (context, state) {
+        if (state is ChatRoomLoaded && state.isPartnerTyping) {
+          return const Text(
+            'typing...',
+            style: TextStyle(
+              fontSize: 12,
+              color: Color(0xFF2ED573),
+              fontStyle: FontStyle.italic,
+            ),
+          );
+        }
+        final isOnline = state is ChatRoomLoaded
+            ? state.isPartnerOnline
+            : widget.isOnline;
+        return Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: isOnline ? const Color(0xFF2ED573) : Colors.grey,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              isOnline ? 'Online' : 'Offline',
+              style: TextStyle(
+                fontSize: 12,
+                color: isOnline ? const Color(0xFF2ED573) : Colors.grey,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -317,9 +344,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       },
       builder: (context, state) {
         if (state is ChatRoomLoaded && state.isPartnerTyping) {
+          // ✅ Get partner name from state if available
+          final name = state.partnerName ?? widget.partnerName;
           return TypingIndicator(
             partnerImage: widget.partnerImage,
-            partnerName: widget.partnerName,
+            partnerName: name.isNotEmpty ? name : 'User',
           );
         }
         return const SizedBox.shrink();
@@ -621,8 +650,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
-  // In ChatRoomScreen, update the AppBar avatar section:
-
   Widget _buildPartnerAvatar() {
     final hasImage =
         widget.partnerImage != null && widget.partnerImage!.isNotEmpty;
@@ -675,7 +702,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
-  // Add this method to handle navigation
   void _navigateToProfile() {
     Navigator.push(
       context,
@@ -685,7 +711,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
           partnerName: widget.partnerName,
           partnerImage: widget.partnerImage,
           isOnline: widget.isOnline,
-          // You can pass lastSeen if available from your state
         ),
       ),
     );

@@ -9,7 +9,7 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	
 	<key>CFBundleDisplayName</key>
-	<string>Haldoor</string>
+	<string>FARXADA</string>
 	
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>

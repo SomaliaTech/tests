@@ -11,7 +11,6 @@ class NotificationsRemoteDataSource {
 
   Future<List<NotificationEntity>> getNotifications(String token) async {
     try {
-      // ✅ FIX: Only log token if it's long enough
       if (token.isNotEmpty) {
         final displayToken = token.length > 20
             ? '${token.substring(0, 20)}...'
@@ -31,9 +30,41 @@ class NotificationsRemoteDataSource {
       );
 
       print('📦 Response status: ${response.statusCode}');
+      print(
+        '📦 Response body (first 200 chars): ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
+      );
 
       if (response.statusCode == 200) {
-        final List<dynamic> jsonList = json.decode(response.body);
+        final decoded = json.decode(response.body);
+
+        // ✅ Handle different response formats
+        List<dynamic> jsonList;
+
+        if (decoded is List) {
+          // Direct array response
+          jsonList = decoded;
+        } else if (decoded is Map<String, dynamic>) {
+          // Check for common wrapper keys
+          if (decoded.containsKey('data') && decoded['data'] is List) {
+            jsonList = decoded['data'];
+          } else if (decoded.containsKey('items') && decoded['items'] is List) {
+            jsonList = decoded['items'];
+          } else if (decoded.containsKey('notifications') &&
+              decoded['notifications'] is List) {
+            jsonList = decoded['notifications'];
+          } else if (decoded.containsKey('results') &&
+              decoded['results'] is List) {
+            jsonList = decoded['results'];
+          } else {
+            // Unknown format - log and return empty
+            print('⚠️ Unknown response format: $decoded');
+            return [];
+          }
+        } else {
+          print('⚠️ Unexpected response type: ${decoded.runtimeType}');
+          return [];
+        }
+
         print('✅ Found ${jsonList.length} notifications');
         return jsonList
             .map((json) => NotificationEntity.fromJson(json))
@@ -48,6 +79,7 @@ class NotificationsRemoteDataSource {
       }
     } catch (e) {
       print('❌ Network error: $e');
+      if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }
   }

@@ -25,10 +25,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
@@ -47,29 +44,38 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDHYBpr8-C8llMttHsW-Gi_3MAmaUISlfM',
-    appId: '1:759730002001:web:31cf9f4387a21415a80070',
-    messagingSenderId: '759730002001',
-    projectId: 'haldoor-6c091',
-    authDomain: 'haldoor-6c091.firebaseapp.com',
-    storageBucket: 'haldoor-6c091.firebasestorage.app',
-    measurementId: 'G-2MHQJ5CERX',
+    apiKey: 'AIzaSyBsJDf_YtNJo_ypckNB3TOOHgw3M9q8wuc',
+    appId: '1:375449913411:web:b712493b99bc5097b0ecf6',
+    messagingSenderId: '375449913411',
+    projectId: 'faraxda',
+    authDomain: 'faraxda.firebaseapp.com',
+    storageBucket: 'faraxda.firebasestorage.app',
+    measurementId: 'G-CYCJM39QKL',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBRb62gy2rf03xZ7rM-C91KjAFeHW13XIA',
-    appId: '1:759730002001:android:20a75d1067b529a4a80070',
-    messagingSenderId: '759730002001',
-    projectId: 'haldoor-6c091',
-    storageBucket: 'haldoor-6c091.firebasestorage.app',
+    apiKey: 'AIzaSyCS8N2bSuE9KgVbDajdhi15QgwMkRIeuJg',
+    appId: '1:375449913411:android:66264e7b69cecc3ab0ecf6',
+    messagingSenderId: '375449913411',
+    projectId: 'faraxda',
+    storageBucket: 'faraxda.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBbx_MU3rXvZvsymWqJU3rxRSd0x4o-8pg',
-    appId: '1:759730002001:ios:ab5567d3bfb2b047a80070',
-    messagingSenderId: '759730002001',
-    projectId: 'haldoor-6c091',
-    storageBucket: 'haldoor-6c091.firebasestorage.app',
+    apiKey: 'AIzaSyCkxHd4JXiDGmlM6puKfCwMQmm2DeuY7fE',
+    appId: '1:375449913411:ios:57f3f2d8008c9952b0ecf6',
+    messagingSenderId: '375449913411',
+    projectId: 'faraxda',
+    storageBucket: 'faraxda.firebasestorage.app',
+    iosBundleId: 'com.yourcompany.farxada',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyCkxHd4JXiDGmlM6puKfCwMQmm2DeuY7fE',
+    appId: '1:375449913411:ios:6859e6cb3ee6f43fb0ecf6',
+    messagingSenderId: '375449913411',
+    projectId: 'faraxda',
+    storageBucket: 'faraxda.firebasestorage.app',
     iosBundleId: 'com.example.mobile',
   );
 }

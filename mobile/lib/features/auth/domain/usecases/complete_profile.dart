@@ -11,13 +11,11 @@ class CompleteProfile {
 
   ResultFuture<({String token, User user})> call({
     required String name,
-    required String email, // ✅ Now required
     required String marketId, // ✅ Added
     String? profileImageUrl,
   }) async {
     return await repository.completeProfile(
       name: name,
-      email: email,
       marketId: marketId,
       profileImageUrl: profileImageUrl,
     );

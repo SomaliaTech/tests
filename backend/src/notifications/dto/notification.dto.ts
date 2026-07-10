@@ -1,58 +1,80 @@
-// notification.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
-  IsUUID,
-  IsBoolean,
   IsOptional,
+  IsBoolean,
+  IsUUID,
   IsEnum,
+  MaxLength,
 } from 'class-validator';
 import { NotificationType } from '../notification.entity';
 
 export class CreateNotificationDto {
-  @ApiProperty({
-    description: 'User ID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiProperty({ description: 'User ID' })
   @IsUUID()
-  @IsString()
-  userId!: string;
+  userId: string;
 
   @ApiProperty({ description: 'Notification type', enum: NotificationType })
   @IsEnum(NotificationType)
-  type!: NotificationType;
+  type: NotificationType;
 
-  @ApiProperty({
-    description: 'Notification title',
-    example: 'Order Delivered',
-  })
+  @ApiProperty({ description: 'Notification title', maxLength: 255 })
   @IsString()
-  title!: string;
+  @MaxLength(255)
+  title: string;
 
-  @ApiProperty({
-    description: 'Notification message',
-    example: 'Your order has been delivered',
-  })
+  @ApiProperty({ description: 'Notification message' })
   @IsString()
-  message!: string;
+  message: string;
 
-  @ApiPropertyOptional({ description: 'Action text', example: 'View Order' })
+  @ApiProperty({ description: 'Action button text', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   actionText?: string;
 
-  @ApiPropertyOptional({
-    description: 'Action link',
-    example: '/orders/123',
-  })
+  @ApiProperty({ description: 'Action link URL', required: false })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   actionLink?: string;
 }
 
 export class UpdateNotificationDto {
-  @ApiPropertyOptional({ description: 'Mark as read', example: true })
+  @ApiProperty({
+    description: 'Notification type',
+    enum: NotificationType,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(NotificationType)
+  type?: NotificationType;
+
+  @ApiProperty({ description: 'Notification title', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  title?: string;
+
+  @ApiProperty({ description: 'Notification message', required: false })
+  @IsOptional()
+  @IsString()
+  message?: string;
+
+  @ApiProperty({ description: 'Is notification read', required: false })
   @IsOptional()
   @IsBoolean()
   isRead?: boolean;
+
+  @ApiProperty({ description: 'Action button text', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  actionText?: string;
+
+  @ApiProperty({ description: 'Action link URL', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  actionLink?: string;
 }

@@ -102,3 +102,12 @@ class SendSelectedImageEvent extends ChatRoomEvent {
   @override
   List<Object?> get props => [caption];
 }
+
+// ✅ ADD THIS EVENT
+class LoadPartnerInfoEvent extends ChatRoomEvent {
+  final String partnerId;
+  const LoadPartnerInfoEvent(this.partnerId);
+
+  @override
+  List<Object?> get props => [partnerId];
+}

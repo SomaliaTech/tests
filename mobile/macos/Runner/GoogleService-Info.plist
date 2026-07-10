@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.yourcompany.farxada</string>
+	<string>com.example.mobile</string>
 	<key>PROJECT_ID</key>
 	<string>faraxda</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:375449913411:ios:57f3f2d8008c9952b0ecf6</string>
+	<string>1:375449913411:ios:6859e6cb3ee6f43fb0ecf6</string>
 </dict>
 </plist>

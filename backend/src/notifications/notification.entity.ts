@@ -3,8 +3,10 @@ export enum NotificationType {
   PROMOTION = 'promotion',
   SYSTEM = 'system',
   PAYMENT = 'payment',
-  MESSAGE = 'message', // ✅ Add this
+  MESSAGE = 'message',
+  ADMIN = 'admin', // ✅ Added for admin notifications
 }
+
 export class Notification {
   id: string;
   userId: string;

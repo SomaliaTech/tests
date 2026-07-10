@@ -1,38 +1,25 @@
-import 'package:equatable/equatable.dart';
-
-class User extends Equatable {
+class User {
   final String id;
   final String phoneNumber;
   final String? name;
-  final String? email;
   final String? profileImage;
-  final String? marketId;
   final bool isVerified;
   final bool hasProfile;
-  final bool isAdmin;
+  final bool? isAdmin;
+  final bool? isSuperAdmin; // ✅ Add this
+  final String? marketId;
+  final String? email;
 
-  const User({
+  User({
     required this.id,
     required this.phoneNumber,
     this.name,
-    this.email,
     this.profileImage,
-    this.marketId,
     required this.isVerified,
     required this.hasProfile,
-    this.isAdmin = false,
+    this.isAdmin,
+    this.isSuperAdmin, // ✅ Add this
+    this.marketId,
+    this.email,
   });
-
-  @override
-  List<Object?> get props => [
-    id,
-    phoneNumber,
-    name,
-    email,
-    profileImage,
-    marketId,
-    isVerified,
-    hasProfile,
-    isAdmin,
-  ];
 }

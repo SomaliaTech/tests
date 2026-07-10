@@ -37,6 +37,7 @@ import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
+import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
 import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
 import 'package:provider/provider.dart';
@@ -46,8 +47,28 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase FIRST
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // ✅ Initialize Firebase FIRST - but check if already initialized
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      print('✅ Firebase initialized successfully');
+    } else {
+      print('⚠️ Firebase already initialized, using existing instance');
+    }
+  } catch (e) {
+    print('❌ Firebase initialization error: $e');
+    // If Firebase fails, try without options
+    if (Firebase.apps.isEmpty) {
+      try {
+        await Firebase.initializeApp();
+        print('✅ Firebase initialized successfully (without options)');
+      } catch (e2) {
+        print('❌ Firebase initialization failed: $e2');
+      }
+    }
+  }
 
   // Initialize dependencies
   await initDependencies();
@@ -146,11 +167,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
           BlocProvider(create: (_) => sl<AdminBloc>()),
 
-          // BlocProvider(create: (_) => sl<FaqBloc>()),
+          BlocProvider(create: (_) => sl<FaqBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
         ],
         child: MaterialApp(
-          title: 'HALDOOR',
+          title: 'FARXADA',
           debugShowCheckedModeBanner: false,
           navigatorKey: NavigationService.navigatorKey,
           theme: AppTheme.lightTheme,
@@ -303,7 +324,7 @@ class SplashScreen extends StatelessWidget {
 
                   // Brand name
                   const Text(
-                    'HALDOOR',
+                    'FARXADA',
                     style: TextStyle(
                       fontSize: 42,
                       fontWeight: FontWeight.bold,

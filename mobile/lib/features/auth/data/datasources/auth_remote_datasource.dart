@@ -11,7 +11,7 @@ abstract class AuthRemoteDataSource {
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-    String email,
+
     String marketId,
     String? profileImageUrl,
   );
@@ -67,7 +67,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-    String email, // ✅ Now required
     String marketId, // ✅ Added
     String? profileImageUrl,
   ) async {
@@ -79,7 +78,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       },
       body: json.encode({
         'name': name,
-        'email': email, // ✅ Always send email
+
         'marketId': marketId, // ✅ Always send marketId
         if (profileImageUrl != null) 'profileImage': profileImageUrl,
       }),
@@ -100,6 +99,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
+        print("user ${response.body}");
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
         // 🚨 Throw specific exception for 401

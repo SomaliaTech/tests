@@ -1,3 +1,4 @@
+// products.controller.ts
 import {
   Controller,
   Get,
@@ -11,6 +12,9 @@ import {
   UseGuards,
   Request,
   Put,
+  DefaultValuePipe,
+  ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,18 +29,49 @@ import {
   CreateProductDto,
   CreateProductVariantDto,
   UploadBase64ImageDto,
+  ProductResponseDto,
+  PaginatedProductsResponseDto,
+  ProductFiltersDto,
 } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
-import { SearchProductDto } from './dto/search-product.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// ✅ Fixed: Import from the correct path
-import { AddProductToCartDto, UpdateCartItemQuantityDto } from './dto/cart.dto';
+import { AddToCartDto, UpdateCartItemQuantityDto } from './dto/cart.dto';
 
 @ApiTags('products')
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
+
+  // ==========================================
+  // HELPER METHOD - Transform product to DTO
+  // ==========================================
+
+  private transformProduct(product: any): ProductResponseDto {
+    return {
+      ...product,
+      slug: product.slug || '',
+      rating: Number(product.rating) || 0,
+      reviewCount: Number(product.reviewCount) || 0,
+    };
+  }
+
+  private transformProducts(products: any[]): ProductResponseDto[] {
+    return products.map((p) => this.transformProduct(p));
+  }
+
+  private transformPaginatedResponse(
+    result: any,
+  ): PaginatedProductsResponseDto {
+    return {
+      ...result,
+      products: this.transformProducts(result.products),
+    };
+  }
+
+  // ==========================================
+  // ADMIN ENDPOINTS
+  // ==========================================
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -60,259 +95,6 @@ export class ProductsController {
   })
   create(@Body() createProductDto: CreateProductDto) {
     return this.productsService.create(createProductDto);
-  }
-
-  @Get()
-  @ApiOperation({
-    summary: 'Get all products',
-    description: 'Returns a list of all products with pagination.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Products retrieved successfully',
-  })
-  findAll() {
-    return this.productsService.findAll();
-  }
-
-  @Get('search')
-  @ApiOperation({
-    summary: 'Search products',
-    description: 'Search products with filters, sorting, and pagination.',
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    description: 'Search term',
-    example: 'iphone',
-  })
-  @ApiQuery({
-    name: 'categoryId',
-    required: false,
-    description: 'Filter by category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiQuery({
-    name: 'minPrice',
-    required: false,
-    description: 'Minimum price filter',
-    example: '100',
-  })
-  @ApiQuery({
-    name: 'maxPrice',
-    required: false,
-    description: 'Maximum price filter',
-    example: '2000',
-  })
-  @ApiQuery({
-    name: 'brand',
-    required: false,
-    description: 'Filter by brand',
-    example: 'Apple',
-  })
-  @ApiQuery({
-    name: 'sortBy',
-    required: false,
-    description: 'Sort by field',
-    enum: ['price_asc', 'price_desc', 'newest', 'popular'],
-    example: 'price_asc',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: 'Page number for pagination',
-    example: '1',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Number of items per page',
-    example: '10',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Products found',
-  })
-  async searchProducts(@Query() searchDto: SearchProductDto) {
-    return this.productsService.searchProducts(searchDto.search || '', {
-      categoryId: searchDto.categoryId,
-      minPrice: searchDto.minPrice,
-      maxPrice: searchDto.maxPrice,
-      brand: searchDto.brand,
-      sortBy: searchDto.sortBy,
-      page: searchDto.page,
-      limit: searchDto.limit,
-    });
-  }
-
-  @Get('filters')
-  @ApiOperation({
-    summary: 'Get product filters',
-    description:
-      'Returns available product filters including price range and categories.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Filters retrieved successfully',
-    schema: {
-      example: {
-        priceRange: {
-          min: 10,
-          max: 2000,
-        },
-        categories: [
-          {
-            id: '550e8400-e29b-41d4-a716-446655440000',
-            name: 'Electronics',
-            count: 25,
-          },
-        ],
-      },
-    },
-  })
-  async getFilters() {
-    return this.productsService.getProductFilters();
-  }
-
-  @Get('featured')
-  @ApiOperation({
-    summary: 'Get featured products',
-    description: 'Returns a list of featured products.',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Number of featured products to return',
-    example: '10',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Featured products retrieved successfully',
-  })
-  async getFeatured(@Query('limit') limit?: string) {
-    return this.productsService.getFeaturedProducts(
-      limit ? parseInt(limit) : 10,
-    );
-  }
-
-  @Get('debug/category/:categoryId')
-  @ApiOperation({
-    summary: 'Debug category products',
-    description: 'Returns debug information about products in a category.',
-  })
-  @ApiParam({
-    name: 'categoryId',
-    description: 'Category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Debug information retrieved',
-    schema: {
-      example: {
-        directSubcategoriesCount: 2,
-        totalProducts: 100,
-      },
-    },
-  })
-  async debugCategory(@Param('categoryId', ParseUUIDPipe) categoryId: string) {
-    return this.productsService.debugCategory(categoryId);
-  }
-
-  @Get('slug/:slug')
-  @ApiOperation({
-    summary: 'Get product by slug',
-    description: 'Returns a product by its unique slug.',
-  })
-  @ApiParam({
-    name: 'slug',
-    description: 'Product slug',
-    example: 'iphone-15-pro-max',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Product found',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Product not found',
-  })
-  findBySlug(@Param('slug') slug: string) {
-    return this.productsService.findBySlug(slug);
-  }
-
-  @Get('category/:categoryId')
-  @ApiOperation({
-    summary: 'Get products by category',
-    description:
-      'Returns products belonging to a specific category with filters.',
-  })
-  @ApiParam({
-    name: 'categoryId',
-    description: 'Category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    description: 'Page number',
-    example: '1',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    description: 'Items per page',
-    example: '10',
-  })
-  @ApiQuery({
-    name: 'sortBy',
-    required: false,
-    description: 'Sort by',
-    enum: ['price_asc', 'price_desc', 'newest', 'popular'],
-  })
-  @ApiQuery({
-    name: 'minPrice',
-    required: false,
-    description: 'Minimum price',
-    example: '100',
-  })
-  @ApiQuery({
-    name: 'maxPrice',
-    required: false,
-    description: 'Maximum price',
-    example: '2000',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Products retrieved successfully',
-  })
-  async getByCategory(
-    @Param('categoryId', ParseUUIDPipe) categoryId: string,
-    @Query() filters: any,
-  ) {
-    return this.productsService.getProductsByCategory(categoryId, filters);
-  }
-
-  @Get(':id')
-  @ApiOperation({
-    summary: 'Get product by ID',
-    description: 'Returns a product by its UUID.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Product UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Product found',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Product not found',
-  })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.productsService.findOne(id);
   }
 
   @Post(':id/images/urls')
@@ -354,6 +136,13 @@ export class ProductsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { imageUrls: string[] },
   ) {
+    if (
+      !body.imageUrls ||
+      !Array.isArray(body.imageUrls) ||
+      body.imageUrls.length === 0
+    ) {
+      throw new BadRequestException('imageUrls array is required');
+    }
     return this.productsService.uploadImagesFromUrls(id, body.imageUrls);
   }
 
@@ -525,6 +314,7 @@ export class ProductsController {
           type: 'number',
           description: 'New stock quantity',
           example: 50,
+          minimum: 0,
         },
       },
     },
@@ -545,7 +335,308 @@ export class ProductsController {
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body('quantity') quantity: number,
   ) {
+    if (quantity < 0) {
+      throw new BadRequestException('Quantity cannot be negative');
+    }
     return this.productsService.updateVariantStock(variantId, quantity);
+  }
+
+  // ==========================================
+  // PUBLIC ENDPOINTS - ✅ WITH DTO TRANSFORMATION
+  // ==========================================
+
+  @Get()
+  @ApiOperation({
+    summary: 'Get all products',
+    description: 'Returns a list of all products with pagination.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['price_asc', 'price_desc', 'newest', 'discount_desc'],
+  })
+  @ApiQuery({ name: 'minPrice', required: false, type: Number })
+  @ApiQuery({ name: 'maxPrice', required: false, type: Number })
+  @ApiQuery({ name: 'categoryId', required: false })
+  @ApiResponse({
+    status: 200,
+    description: 'Products retrieved successfully',
+    type: PaginatedProductsResponseDto,
+  })
+  async findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('sortBy') sortBy?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('categoryId') categoryId?: string,
+  ): Promise<PaginatedProductsResponseDto> {
+    const result = await this.productsService.findAll({
+      page: Math.max(1, page),
+      limit: Math.min(50, limit),
+      sortBy,
+      minPrice: minPrice ? parseFloat(minPrice) : undefined,
+      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+      categoryId,
+    });
+
+    return this.transformPaginatedResponse(result);
+  }
+
+  @Get('search')
+  @ApiOperation({
+    summary: 'Search products',
+    description: 'Search products with filters, sorting, and pagination.',
+  })
+  @ApiQuery({
+    name: 'q',
+    required: false,
+    description: 'Search term',
+    example: 'iphone',
+  })
+  @ApiQuery({
+    name: 'categoryId',
+    required: false,
+    description: 'Filter by category UUID',
+  })
+  @ApiQuery({
+    name: 'minPrice',
+    required: false,
+    description: 'Minimum price filter',
+    example: '100',
+  })
+  @ApiQuery({
+    name: 'maxPrice',
+    required: false,
+    description: 'Maximum price filter',
+    example: '2000',
+  })
+  @ApiQuery({
+    name: 'brand',
+    required: false,
+    description: 'Filter by brand',
+    example: 'Apple',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    description: 'Sort by field',
+    enum: ['price_asc', 'price_desc', 'newest', 'popular'],
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of items per page',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Products found',
+    type: PaginatedProductsResponseDto,
+  })
+  async searchProducts(
+    @Query('q') searchTerm?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('brand') brand?: string,
+    @Query('sortBy') sortBy?: 'price_asc' | 'price_desc' | 'newest' | 'popular',
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+  ): Promise<PaginatedProductsResponseDto> {
+    const result = await this.productsService.searchProducts(searchTerm || '', {
+      categoryId,
+      minPrice: minPrice ? parseFloat(minPrice) : undefined,
+      maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+      brand,
+      sortBy,
+      page: Math.max(1, page),
+      limit: Math.min(50, limit),
+    });
+
+    return this.transformPaginatedResponse(result);
+  }
+
+  @Get('filters')
+  @ApiOperation({
+    summary: 'Get product filters',
+    description:
+      'Returns available product filters including price range and categories.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Filters retrieved successfully',
+  })
+  async getFilters() {
+    return this.productsService.getProductFilters();
+  }
+
+  @Get('featured')
+  @ApiOperation({
+    summary: 'Get featured products',
+    description: 'Returns a list of featured products.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of featured products to return',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Featured products retrieved successfully',
+    type: [ProductResponseDto],
+  })
+  async getFeatured(
+    @Query('limit', new DefaultValuePipe(6), ParseIntPipe) limit: number = 6,
+  ): Promise<ProductResponseDto[]> {
+    const products = await this.productsService.getFeaturedProducts(
+      Math.min(limit, 20),
+    );
+    return this.transformProducts(products);
+  }
+
+  @Get('debug/category/:categoryId')
+  @ApiOperation({
+    summary: 'Debug category products',
+    description: 'Returns debug information about products in a category.',
+  })
+  @ApiParam({
+    name: 'categoryId',
+    description: 'Category UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Debug information retrieved',
+  })
+  async debugCategory(@Param('categoryId', ParseUUIDPipe) categoryId: string) {
+    return this.productsService.debugCategory(categoryId);
+  }
+
+  @Get('slug/:slug')
+  @ApiOperation({
+    summary: 'Get product by slug',
+    description: 'Returns a product by its unique slug.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Product slug',
+    example: 'iphone-15-pro-max',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Product found',
+    type: ProductResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Product not found',
+  })
+  async findBySlug(@Param('slug') slug: string): Promise<ProductResponseDto> {
+    const product = await this.productsService.findBySlug(slug);
+    return this.transformProduct(product);
+  }
+
+  @Get('category/:categoryId')
+  @ApiOperation({
+    summary: 'Get products by category',
+    description:
+      'Returns products belonging to a specific category with filters.',
+  })
+  @ApiParam({
+    name: 'categoryId',
+    description: 'Category UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page',
+  })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['price_asc', 'price_desc', 'newest', 'popular'],
+  })
+  @ApiQuery({
+    name: 'minPrice',
+    required: false,
+    type: Number,
+    description: 'Minimum price',
+  })
+  @ApiQuery({
+    name: 'maxPrice',
+    required: false,
+    type: Number,
+    description: 'Maximum price',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Products retrieved successfully',
+    type: PaginatedProductsResponseDto,
+  })
+  async getByCategory(
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('sortBy') sortBy?: string,
+    @Query('minPrice') minPrice?: string,
+    @Query('maxPrice') maxPrice?: string,
+  ): Promise<PaginatedProductsResponseDto> {
+    const result = await this.productsService.getProductsByCategory(
+      categoryId,
+      {
+        page: Math.max(1, page),
+        limit: Math.min(50, limit),
+        sortBy,
+        minPrice: minPrice ? parseFloat(minPrice) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+      },
+    );
+
+    return this.transformPaginatedResponse(result);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get product by ID',
+    description: 'Returns a product by its UUID.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Product UUID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Product found',
+    type: ProductResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Product not found',
+  })
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ProductResponseDto> {
+    const product = await this.productsService.findOne(id);
+    return this.transformProduct(product);
   }
 
   // ==========================================
@@ -559,7 +650,7 @@ export class ProductsController {
     summary: 'Add item to cart',
     description: "Adds a product variant to the user's cart.",
   })
-  @ApiBody({ type: AddProductToCartDto })
+  @ApiBody({ type: AddToCartDto })
   @ApiResponse({
     status: 200,
     description: 'Item added to cart successfully',
@@ -572,9 +663,8 @@ export class ProductsController {
     status: 401,
     description: 'Unauthorized',
   })
-  async addToCart(@Request() req, @Body() addToCartDto: AddProductToCartDto) {
-    const userId = req.user.id;
-    // ✅ FIXED: Pass the entire DTO, not individual fields
+  async addToCart(@Request() req, @Body() addToCartDto: AddToCartDto) {
+    const userId = req.user.userId || req.user.sub;
     return this.productsService.addToCart(userId, addToCartDto);
   }
 
@@ -612,11 +702,83 @@ export class ProductsController {
     @Param('itemId', ParseUUIDPipe) itemId: string,
     @Body() updateCartItemDto: UpdateCartItemQuantityDto,
   ) {
-    const userId = req.user.id;
+    const userId = req.user.userId || req.user.sub;
     return this.productsService.updateCartItem(
       userId,
       itemId,
       updateCartItemDto.quantity,
     );
+  }
+
+  @Delete('cart/:itemId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Remove item from cart',
+    description: 'Removes a specific item from the cart.',
+  })
+  @ApiParam({
+    name: 'itemId',
+    description: 'Cart item ID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Item removed from cart',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Cart item not found',
+  })
+  async removeCartItem(
+    @Request() req,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+  ) {
+    const userId = req.user.userId || req.user.sub;
+    return this.productsService.removeCartItem(userId, itemId);
+  }
+
+  @Get('cart')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Get cart',
+    description: "Retrieves the current user's cart.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cart retrieved successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async getCart(@Request() req) {
+    const userId = req.user.userId || req.user.sub;
+    return this.productsService.getCartItems(userId);
+  }
+
+  @Delete('cart')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Clear cart',
+    description: "Removes all items from the user's cart.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cart cleared successfully',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async clearCart(@Request() req) {
+    const userId = req.user.userId || req.user.sub;
+    return this.productsService.clearCart(userId);
   }
 }

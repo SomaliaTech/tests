@@ -117,6 +117,12 @@ class ChatSocketService {
       _socket!.onReconnectError(_onReconnectError);
 
       _socket!.connect();
+
+      _socket?.on('heartbeat', (data) {
+        // Heartbeat response - just log it, no need to parse as List
+        _logger.d('💓 [WS] Heartbeat acknowledged');
+        // Note: Don't try to iterate this as a List
+      });
     } catch (e) {
       _logger.e('❌ [WS] Connection setup failed: $e');
       _errorController.add('Connection setup failed: $e');

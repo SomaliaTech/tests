@@ -435,6 +435,28 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                       isAdmin: _isAdmin,
                       onFavoriteTap: () => _toggleWishlist(product!),
                       onAddToCartTap: () => _addToCart(product!),
+                      onBuyNowTap: () => _proceedToCheckout(),
+                      // ✅ Optional: Add chat callback if needed
+                      onChatTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => const AdminChatBottomSheet(),
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: BottomActionBar(
+                      productName: product.name,
+                      isInWishlist: _isInWishlist,
+                      isAdmin: _isAdmin,
+                      onFavoriteTap: () => _toggleWishlist(product!),
+                      onAddToCartTap: () => _addToCart(product!),
                       onBuyNowTap: () {
                         _proceedToCheckout();
                       },

@@ -322,7 +322,7 @@ class _ProfileViewState extends State<ProfileView> {
                               profile: _currentProfile!,
                               selectedMarket: _selectedMarket,
                               onNameChanged: (name) => _name = name,
-                              onEmailChanged: (email) => _email = email,
+
                               onMarketTap: () {
                                 setState(() => _isMarketDropdownOpen = true);
                               },
