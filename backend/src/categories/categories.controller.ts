@@ -5,7 +5,9 @@ import {
   Body,
   Param,
   Delete,
+  Query,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,9 +16,10 @@ import {
   ApiResponse,
   ApiBody,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { DrizzleService } from '../drizzle/drizzle.service';
-import { categories, mediaAssets } from '../drizzle/schema';
+import { categories, products, mediaAssets } from '../drizzle/schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { eq, isNull, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
@@ -33,10 +36,7 @@ export class CategoriesController {
     description: 'Creates a new product category. Requires authentication.',
   })
   @ApiBody({ type: CreateCategoryDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Category created successfully',
-  })
+  @ApiResponse({ status: 201, description: 'Category created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid category data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async create(@Body() createCategoryDto: CreateCategoryDto) {
@@ -52,7 +52,6 @@ export class CategoriesController {
         iconId: createCategoryDto.iconId || null,
       })
       .returning();
-
     return category;
   }
 
@@ -94,11 +93,7 @@ export class CategoriesController {
     summary: 'Get subcategories',
     description: 'Returns all subcategories belonging to a parent category.',
   })
-  @ApiParam({
-    name: 'parentId',
-    description: 'Parent category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiParam({ name: 'parentId', description: 'Parent category UUID' })
   @ApiResponse({
     status: 200,
     description: 'Subcategories retrieved successfully',
@@ -117,11 +112,7 @@ export class CategoriesController {
     summary: 'Get category by ID',
     description: 'Returns a category by its UUID.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'Category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiParam({ name: 'id', description: 'Category UUID' })
   @ApiResponse({ status: 200, description: 'Category found' })
   @ApiResponse({ status: 404, description: 'Category not found' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
@@ -129,42 +120,125 @@ export class CategoriesController {
       .select()
       .from(categories)
       .where(eq(categories.id, id));
-
     if (!category) return null;
-
-    // Format single category with icon
     const [formatted] = await this._formatCategoriesWithIcons([category]);
     return formatted;
   }
 
+  // ✅ UPDATED: Delete with optional transfer
   @Delete(':id')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Delete category',
-    description: 'Permanently deletes a category. Requires authentication.',
+    description:
+      'Deletes a category. Use transferToId query param to move products first.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'Category UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
+  @ApiParam({ name: 'id', description: 'Category UUID' })
+  @ApiQuery({
+    name: 'transferToId',
+    required: false,
+    description: 'Target category ID to transfer products to',
   })
   @ApiResponse({ status: 200, description: 'Category deleted successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot delete category with products',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Category not found' })
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    const [deletedCategory] = await this.drizzle.db
-      .delete(categories)
-      .where(eq(categories.id, id))
-      .returning();
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('transferToId') transferToId?: string,
+  ) {
+    // ✅ Check if category exists
+    const [category] = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, id));
 
-    return deletedCategory;
+    if (!category) {
+      throw new BadRequestException('Category not found');
+    }
+
+    // ✅ Check if category has subcategories
+    const subcategories = await this.drizzle.db
+      .select()
+      .from(categories)
+      .where(eq(categories.parentId, id));
+
+    // ✅ Check if category has products
+    const categoryProducts = await this.drizzle.db
+      .select()
+      .from(products)
+      .where(eq(products.categoryId, id));
+
+    const hasSubcategories = subcategories.length > 0;
+    const hasProducts = categoryProducts.length > 0;
+
+    // ✅ If no products and no subcategories, just delete
+    if (!hasProducts && !hasSubcategories) {
+      const [deleted] = await this.drizzle.db
+        .delete(categories)
+        .where(eq(categories.id, id))
+        .returning();
+      return { message: 'Category deleted successfully', category: deleted };
+    }
+
+    // ✅ If has products/subcategories AND transferToId is provided, do the transfer
+    if (transferToId) {
+      // Validate target category exists
+      const [targetCategory] = await this.drizzle.db
+        .select()
+        .from(categories)
+        .where(eq(categories.id, transferToId));
+
+      if (!targetCategory) {
+        throw new BadRequestException('Target category not found');
+      }
+
+      // Prevent transferring to itself
+      if (transferToId === id) {
+        throw new BadRequestException('Cannot transfer to the same category');
+      }
+
+      // ✅ Transfer products to target category
+      if (hasProducts) {
+        await this.drizzle.db
+          .update(products)
+          .set({ categoryId: transferToId })
+          .where(eq(products.categoryId, id));
+      }
+
+      // ✅ Transfer subcategories to target category
+      if (hasSubcategories) {
+        await this.drizzle.db
+          .update(categories)
+          .set({ parentId: transferToId })
+          .where(eq(categories.parentId, id));
+      }
+
+      // ✅ Now delete the category
+      const [deleted] = await this.drizzle.db
+        .delete(categories)
+        .where(eq(categories.id, id))
+        .returning();
+
+      return {
+        message: `Category deleted. ${hasProducts ? categoryProducts.length : 0} products and ${hasSubcategories ? subcategories.length : 0} subcategories transferred.`,
+        category: deleted,
+      };
+    }
+
+    // ✅ If has products/subcategories but no transferToId, reject
+    throw new BadRequestException(
+      `Cannot delete category with ${hasProducts ? categoryProducts.length : 0} products and ${hasSubcategories ? subcategories.length : 0} subcategories. Use transferToId query parameter to move them first.`,
+    );
   }
 
   // ✅ Helper method to attach iconUrl to categories
   private async _formatCategoriesWithIcons(categoryList: any[]) {
     if (!categoryList || categoryList.length === 0) return categoryList;
 
-    // Collect all icon IDs
     const iconIds = categoryList.filter((c) => c.iconId).map((c) => c.iconId);
 
     let iconMap = new Map<string, string>();

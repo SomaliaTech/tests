@@ -280,6 +280,10 @@ export class ChatController {
   // SEARCH CONVERSATIONS
   // ==========================================
 
+  // ==========================================
+  // SEARCH CONVERSATIONS
+  // ==========================================
+
   @Get('search')
   @ApiOperation({ summary: 'Search conversations by name, phone, or message' })
   @ApiQuery({
@@ -299,14 +303,18 @@ export class ChatController {
     @Query('q') query: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
   ) {
-    if (!query || query.trim().length < 2) return [];
-    return this.chatService.searchConversations(
+    if (!query || query.trim().length < 2) {
+      return [];
+    }
+
+    const results = await this.chatService.searchConversations(
       this.getUserId(req),
       query.trim(),
       Math.min(limit, 50),
     );
-  }
 
+    return results;
+  }
   // ==========================================
   // MEDIA UPLOAD (SUPABASE)
   // ==========================================

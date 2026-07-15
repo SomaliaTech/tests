@@ -639,29 +639,6 @@ export class AdminService {
     );
   }
 
-  private fillDateGaps(
-    data: Array<{ date: string; count: number; value?: number }>,
-    start: Date,
-    end: Date,
-  ) {
-    const result: Array<{ date: string; value: number; count: number }> = [];
-    const dataMap = new Map(data.map((d) => [d.date, d]));
-
-    const current = new Date(start);
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0];
-      const existing = dataMap.get(dateStr);
-      result.push({
-        date: dateStr,
-        value: existing ? (existing.value ?? existing.count) : 0,
-        count: existing ? existing.count : 0,
-      });
-      current.setDate(current.getDate() + 1);
-    }
-
-    return result;
-  }
-
   getDeviceTraffic() {
     return [
       { device: 'Mobile', value: 58, color: '#2ED573' },
@@ -915,6 +892,327 @@ export class AdminService {
       orderBy: [desc(products.createdAt)],
       with: { images: true, category: true },
     });
+  }
+
+  // Add to admin.service.ts
+
+  async getAnalyticsForCustomDates(dates: Date[]) {
+    console.log('📊 [Admin] Fetching analytics for custom dates:', dates);
+
+    try {
+      const [
+        topProducts,
+        revenueByCategory,
+        orderStatusDistribution,
+        dailyRevenue,
+        dailyOrders,
+      ] = await Promise.all([
+        this.getTopSellingProductsForDates(dates, 10),
+        this.getRevenueByCategoryForDates(dates),
+        this.getOrderStatusDistributionForDates(dates),
+        this.getDailyRevenueForDates(dates),
+        this.getDailyOrdersForDates(dates),
+      ]);
+
+      return {
+        topProducts,
+        revenueByCategory,
+        orderStatusDistribution,
+        dailyRevenue,
+        dailyOrders,
+        selectedDates: dates.map((d) => d.toISOString().split('T')[0]),
+      };
+    } catch (error) {
+      console.error('❌ [Admin] Custom dates analytics failed:', error);
+      throw error;
+    }
+  }
+
+  async getRevenueForCustomDates(dates: Date[]) {
+    console.log('💰 [Admin] Fetching revenue for custom dates:', dates);
+
+    try {
+      // Get revenue for each selected date
+      const revenueByDate = await Promise.all(
+        dates.map(async (date) => {
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const [result] = await this.drizzle.db
+            .select({
+              date: sql<string>`DATE(${orders.createdAt})`,
+              totalRevenue: sql<string>`COALESCE(SUM(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+              orderCount: sql<number>`COUNT(*)::int`,
+              averageOrder: sql<string>`COALESCE(AVG(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+            })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.paymentStatus, 'PAID'),
+                gte(orders.createdAt, startOfDay),
+                lte(orders.createdAt, endOfDay),
+              ),
+            )
+            .groupBy(sql`DATE(${orders.createdAt})`);
+
+          return {
+            date: date.toISOString().split('T')[0],
+            totalRevenue: Number(result?.totalRevenue) || 0,
+            orderCount: Number(result?.orderCount) || 0,
+            averageOrder: Number(result?.averageOrder) || 0,
+          };
+        }),
+      );
+
+      // Calculate totals
+      const totalRevenue = revenueByDate.reduce(
+        (sum, d) => sum + d.totalRevenue,
+        0,
+      );
+      const totalOrders = revenueByDate.reduce(
+        (sum, d) => sum + d.orderCount,
+        0,
+      );
+      const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      return {
+        revenueByDate,
+        summary: {
+          totalRevenue,
+          totalOrders,
+          averageOrderValue: Number(avgOrderValue.toFixed(2)),
+          daysSelected: dates.length,
+        },
+      };
+    } catch (error) {
+      console.error('❌ [Admin] Custom dates revenue failed:', error);
+      throw error;
+    }
+  }
+
+  async getTopSellingProductsForDates(dates: Date[], limit: number = 10) {
+    const startOfDay = new Date(Math.min(...dates.map((d) => d.getTime())));
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(Math.max(...dates.map((d) => d.getTime())));
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const topProducts = await this.drizzle.db
+        .select({
+          productId: products.id,
+          productName: products.name,
+          productImage: sql<string>`MAX(${mediaAssets.url})`,
+          totalSold: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)::int`,
+          totalRevenue: sql<string>`COALESCE(SUM(CAST(${orderItems.totalPrice} AS DECIMAL)), 0)`,
+          orderCount: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
+        })
+        .from(orderItems)
+        .leftJoin(orders, eq(orders.id, orderItems.orderId))
+        .leftJoin(products, eq(products.id, orderItems.productId))
+        .leftJoin(
+          mediaAssets,
+          and(
+            eq(mediaAssets.productId, products.id),
+            eq(mediaAssets.isMain, true),
+          ),
+        )
+        .where(
+          and(
+            eq(orders.paymentStatus, 'PAID'),
+            gte(orders.createdAt, startOfDay),
+            lte(orders.createdAt, endOfDay),
+            sql`${orders.createdAt}::date IN (${sql.join(
+              dates.map((d) => sql`${d.toISOString().split('T')[0]}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .groupBy(products.id, products.name)
+        .orderBy(sql`SUM(${orderItems.quantity}) DESC`)
+        .limit(limit);
+
+      return topProducts.map((p) => ({
+        id: p.productId,
+        name: p.productName || 'Unknown',
+        imageUrl: p.productImage || null,
+        totalSold: Number(p.totalSold) || 0,
+        totalRevenue: Number(p.totalRevenue) || 0,
+        orderCount: Number(p.orderCount) || 0,
+      }));
+    } catch (error) {
+      console.error(' [Admin] Top products for dates error:', error);
+      return [];
+    }
+  }
+
+  async getRevenueByCategoryForDates(dates: Date[]) {
+    const startOfDay = new Date(Math.min(...dates.map((d) => d.getTime())));
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(Math.max(...dates.map((d) => d.getTime())));
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const categoryRevenue = await this.drizzle.db
+        .select({
+          categoryId: categories.id,
+          categoryName: categories.name,
+          totalRevenue: sql<string>`COALESCE(SUM(CAST(${orderItems.totalPrice} AS DECIMAL)), 0)`,
+          orderCount: sql<number>`COUNT(DISTINCT ${orders.id})::int`,
+        })
+        .from(orderItems)
+        .leftJoin(orders, eq(orders.id, orderItems.orderId))
+        .leftJoin(products, eq(products.id, orderItems.productId))
+        .leftJoin(categories, eq(categories.id, products.categoryId))
+        .where(
+          and(
+            eq(orders.paymentStatus, 'PAID'),
+            gte(orders.createdAt, startOfDay),
+            lte(orders.createdAt, endOfDay),
+            sql`${orders.createdAt}::date IN (${sql.join(
+              dates.map((d) => sql`${d.toISOString().split('T')[0]}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .groupBy(categories.id, categories.name)
+        .orderBy(sql`SUM(CAST(${orderItems.totalPrice} AS DECIMAL)) DESC`);
+
+      return categoryRevenue.map((c) => ({
+        id: c.categoryId,
+        name: c.categoryName || 'Uncategorized',
+        totalRevenue: Number(c.totalRevenue) || 0,
+        orderCount: Number(c.orderCount) || 0,
+      }));
+    } catch (error) {
+      console.error('❌ [Admin] Revenue by category for dates error:', error);
+      return [];
+    }
+  }
+
+  async getOrderStatusDistributionForDates(dates: Date[]) {
+    const startOfDay = new Date(Math.min(...dates.map((d) => d.getTime())));
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(Math.max(...dates.map((d) => d.getTime())));
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+      const statusDistribution = await this.drizzle.db
+        .select({
+          status: orders.status,
+          count: sql<number>`COUNT(*)::int`,
+          totalRevenue: sql<string>`COALESCE(SUM(CASE WHEN ${orders.paymentStatus} = 'PAID' THEN CAST(${orders.totalAmount} AS DECIMAL) ELSE 0 END), 0)`,
+        })
+        .from(orders)
+        .where(
+          and(
+            gte(orders.createdAt, startOfDay),
+            lte(orders.createdAt, endOfDay),
+            sql`${orders.createdAt}::date IN (${sql.join(
+              dates.map((d) => sql`${d.toISOString().split('T')[0]}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .groupBy(orders.status);
+
+      return statusDistribution.map((s) => ({
+        status: s.status,
+        count: Number(s.count) || 0,
+        totalRevenue: Number(s.totalRevenue) || 0,
+      }));
+    } catch (error) {
+      console.error('❌ [Admin] Order status for dates error:', error);
+      return [];
+    }
+  }
+
+  async getDailyRevenueForDates(dates: Date[]) {
+    try {
+      const dailyData = await Promise.all(
+        dates.map(async (date) => {
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const [result] = await this.drizzle.db
+            .select({
+              date: sql<string>`DATE(${orders.createdAt})`,
+              revenue: sql<number>`COALESCE(SUM(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+              orders: sql<number>`COUNT(*)::int`,
+            })
+            .from(orders)
+            .where(
+              and(
+                eq(orders.paymentStatus, 'PAID'),
+                gte(orders.createdAt, startOfDay),
+                lte(orders.createdAt, endOfDay),
+              ),
+            )
+            .groupBy(sql`DATE(${orders.createdAt})`);
+
+          return {
+            date: date.toISOString().split('T')[0],
+            revenue: Number(result?.revenue) || 0,
+            orders: Number(result?.orders) || 0,
+          };
+        }),
+      );
+
+      return dailyData;
+    } catch (error) {
+      console.error('❌ [Admin] Daily revenue for dates error:', error);
+      return [];
+    }
+  }
+
+  async getDailyOrdersForDates(dates: Date[]) {
+    try {
+      const dailyData = await Promise.all(
+        dates.map(async (date) => {
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const [result] = await this.drizzle.db
+            .select({
+              date: sql<string>`DATE(${orders.createdAt})`,
+              total: sql<number>`COUNT(*)::int`,
+              completed: sql<number>`COUNT(CASE WHEN ${orders.status} = 'DELIVERED' THEN 1 END)::int`,
+              pending: sql<number>`COUNT(CASE WHEN ${orders.status} IN ('PENDING', 'PROCESSING') THEN 1 END)::int`,
+            })
+            .from(orders)
+            .where(
+              and(
+                gte(orders.createdAt, startOfDay),
+                lte(orders.createdAt, endOfDay),
+              ),
+            )
+            .groupBy(sql`DATE(${orders.createdAt})`);
+
+          return {
+            date: date.toISOString().split('T')[0],
+            total: Number(result?.total) || 0,
+            completed: Number(result?.completed) || 0,
+            pending: Number(result?.pending) || 0,
+          };
+        }),
+      );
+
+      return dailyData;
+    } catch (error) {
+      console.error('❌ [Admin] Daily orders for dates error:', error);
+      return [];
+    }
   }
   async getAllProductsAdmin(
     page: number = 1,
@@ -1386,9 +1684,14 @@ export class AdminService {
 
     return insertedImages;
   }
+  // In admin.service.ts, find and replace the getCategoriesTree method
 
   async getCategoriesTree() {
-    const allCategories = await this.drizzle.db.select().from(categories);
+    // ✅ STEP 1: Get all categories sorted by newest first
+    const allCategories = await this.drizzle.db
+      .select()
+      .from(categories)
+      .orderBy(desc(categories.createdAt)); // ✅ Sort by newest first
 
     const iconIds = allCategories.filter((c) => c.iconId).map((c) => c.iconId!);
 
@@ -1405,6 +1708,7 @@ export class AdminService {
     const categoryMap = new Map<string, Record<string, unknown>>();
     const roots: Record<string, unknown>[] = [];
 
+    // ✅ STEP 2: Create map with empty children arrays
     allCategories.forEach((category) => {
       categoryMap.set(category.id, {
         ...category,
@@ -1413,6 +1717,7 @@ export class AdminService {
       });
     });
 
+    // ✅ STEP 3: Build the tree structure
     allCategories.forEach((category) => {
       const node = categoryMap.get(category.id);
       if (!node) return;
@@ -1428,9 +1733,53 @@ export class AdminService {
       }
     });
 
+    // ✅ STEP 4: CRITICAL - Sort children recursively by createdAt (newest first)
+    const sortChildrenByNewest = (nodes: any[]) => {
+      // Sort current level
+      nodes.sort((a, b) => {
+        const dateA = a.createdAt
+          ? new Date(a.createdAt as string).getTime()
+          : 0;
+        const dateB = b.createdAt
+          ? new Date(b.createdAt as string).getTime()
+          : 0;
+        return dateB - dateA; // Descending = newest first
+      });
+
+      // Recursively sort children of children
+      nodes.forEach((node) => {
+        if (
+          node.children &&
+          Array.isArray(node.children) &&
+          node.children.length > 0
+        ) {
+          sortChildrenByNewest(node.children as any[]);
+        }
+      });
+    };
+
+    // ✅ STEP 5: Apply sorting to roots and all nested children
+    sortChildrenByNewest(roots);
+
+    console.log('📊 [Admin] Categories tree sorted (newest first):');
+    const logTree = (items: any[], level: number = 0) => {
+      items.forEach((item) => {
+        const indent = '  '.repeat(level);
+        const date = item.createdAt
+          ? new Date(item.createdAt as string).toISOString().split('T')[0]
+          : 'no date';
+        console.log(
+          `${indent}${level === 0 ? '📁' : '└─'} ${item.name} (${date})`,
+        );
+        if (item.children && item.children.length > 0) {
+          logTree(item.children as any[], level + 1);
+        }
+      });
+    };
+    logTree(roots);
+
     return roots;
   }
-
   // ==========================================
   // COLORS & SIZES - Simple queries (no pagination needed)
   // ==========================================
@@ -1600,28 +1949,66 @@ export class AdminService {
     return this._formatCategoryWithIcon(category);
   }
 
-  async deleteCategory(categoryId: string) {
+  // In admin.service.ts, find the deleteCategory method and replace it:
+
+  async deleteCategory(categoryId: string, transferToId?: string) {
+    // Check for subcategories
     const children = await this.drizzle.db
       .select()
       .from(categories)
       .where(eq(categories.parentId, categoryId));
 
-    if (children.length > 0) {
-      throw new BadRequestException(
-        'Cannot delete category with subcategories',
-      );
-    }
-
-    const productsCount = await this.drizzle.db
+    // Check for products
+    const categoryProducts = await this.drizzle.db
       .select()
       .from(products)
-      .where(eq(products.categoryId, categoryId))
-      .limit(1);
+      .where(eq(products.categoryId, categoryId));
 
-    if (productsCount.length > 0) {
-      throw new BadRequestException('Cannot delete category with products');
+    // ✅ If transferToId is provided, do the transfer first
+    if (transferToId) {
+      // Validate target category exists
+      const [targetCategory] = await this.drizzle.db
+        .select()
+        .from(categories)
+        .where(eq(categories.id, transferToId));
+
+      if (!targetCategory) {
+        throw new BadRequestException('Target category not found');
+      }
+
+      if (transferToId === categoryId) {
+        throw new BadRequestException('Cannot transfer to the same category');
+      }
+
+      // Transfer products
+      if (categoryProducts.length > 0) {
+        await this.drizzle.db
+          .update(products)
+          .set({ categoryId: transferToId })
+          .where(eq(products.categoryId, categoryId));
+      }
+
+      // Transfer subcategories
+      if (children.length > 0) {
+        await this.drizzle.db
+          .update(categories)
+          .set({ parentId: transferToId })
+          .where(eq(categories.parentId, categoryId));
+      }
+    } else {
+      // No transfer - check if we can safely delete
+      if (children.length > 0) {
+        throw new BadRequestException(
+          'Cannot delete category with subcategories',
+        );
+      }
+
+      if (categoryProducts.length > 0) {
+        throw new BadRequestException('Cannot delete category with products');
+      }
     }
 
+    // Delete category icon if exists
     const [category] = await this.drizzle.db
       .select()
       .from(categories)
@@ -1641,13 +2028,17 @@ export class AdminService {
       }
     }
 
+    // Delete the category
     await this.drizzle.db
       .delete(categories)
       .where(eq(categories.id, categoryId));
 
-    return { message: 'Category deleted successfully' };
+    return {
+      message: transferToId
+        ? `Category deleted. ${categoryProducts.length} products transferred.`
+        : 'Category deleted successfully',
+    };
   }
-
   private async _formatCategoryWithIcon(category: Record<string, unknown>) {
     if (!category.iconId) {
       return { ...category, iconUrl: null };
@@ -2019,8 +2410,25 @@ export class AdminService {
   // ==========================================
   // ANALYTICS - Top Selling Products
   // ==========================================
-  async getTopSellingProducts(limit: number = 5, period: string = 'week') {
-    const dateRange = this.getDateRangeForPeriod(period);
+  // In admin.service.ts, update the getTopSellingProducts method
+
+  async getTopSellingProducts(
+    limit: number = 5,
+    period: string = 'week',
+    startDate?: string, // Add optional custom date range
+    endDate?: string, // Add optional custom date range
+  ) {
+    let dateRange: { start: Date; end: Date };
+
+    // If custom date range is provided, use it; otherwise use the period
+    if (startDate && endDate) {
+      dateRange = {
+        start: new Date(startDate),
+        end: new Date(endDate),
+      };
+    } else {
+      dateRange = this.getDateRangeForPeriod(period);
+    }
 
     try {
       const topProducts = await this.drizzle.db
@@ -2213,6 +2621,272 @@ export class AdminService {
       console.error('❌ [Admin] Recent signups error:', error);
       return [];
     }
+  }
+
+  // Add to admin.service.ts
+
+  // ==========================================
+  // ENHANCED ANALYTICS WITH DATE RANGE
+  // ==========================================
+  async getRevenueByDateRange(
+    startDate: string,
+    endDate: string,
+    granularity: 'day' | 'week' | 'month' = 'day',
+  ) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const results = await this.drizzle.db
+      .select({
+        date: sql<string>`date_trunc(${granularity}, ${orders.createdAt})::date::text`,
+        revenue: sql<number>`COALESCE(SUM(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+        orders: sql<number>`COUNT(*)::int`,
+        averageOrder: sql<number>`COALESCE(AVG(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.paymentStatus, 'PAID'),
+          gte(orders.createdAt, start),
+          lte(orders.createdAt, end),
+        ),
+      )
+      .groupBy(sql`date_trunc(${granularity}, ${orders.createdAt})`)
+      .orderBy(sql`date_trunc(${granularity}, ${orders.createdAt})`);
+
+    return this.fillDateGaps(results, start, end, granularity);
+  }
+
+  async getEnhancedAnalytics(startDate: string, endDate: string) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const [
+      revenueData,
+      orderStats,
+      customerMetrics,
+      paymentMethods,
+      hourlySales,
+      topProducts,
+      customerRetention,
+    ] = await Promise.all([
+      this.getRevenueByDateRange(startDate, endDate),
+      this.getOrderStatsByDateRange(start, end),
+      this.getCustomerMetricsByDateRange(start, end),
+      this.getPaymentMethodDistribution(start, end),
+      this.getHourlySalesDistribution(start, end),
+      this.getTopSellingProducts(10, 'custom', startDate, endDate),
+      this.getCustomerRetentionRate(start, end),
+    ]);
+
+    return {
+      revenueData,
+      orderStats,
+      customerMetrics,
+      paymentMethods,
+      hourlySales,
+      topProducts,
+      customerRetention,
+    };
+  }
+
+  private async getOrderStatsByDateRange(start: Date, end: Date) {
+    const stats = await this.drizzle.db
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        completed: sql<number>`COUNT(CASE WHEN ${orders.status} = 'DELIVERED' THEN 1 END)::int`,
+        cancelled: sql<number>`COUNT(CASE WHEN ${orders.status} = 'CANCELLED' THEN 1 END)::int`,
+        pending: sql<number>`COUNT(CASE WHEN ${orders.status} = 'PENDING' THEN 1 END)::int`,
+        averageFulfillment: sql<number>`AVG(EXTRACT(EPOCH FROM (${orders.updatedAt} - ${orders.createdAt}))/3600)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, start),
+          lte(orders.createdAt, end),
+          eq(orders.paymentStatus, 'PAID'),
+        ),
+      );
+
+    return {
+      total: Number(stats[0]?.total) || 0,
+      completed: Number(stats[0]?.completed) || 0,
+      cancelled: Number(stats[0]?.cancelled) || 0,
+      pending: Number(stats[0]?.pending) || 0,
+      averageFulfillmentHours: Number(stats[0]?.averageFulfillment) || 0,
+      completionRate:
+        stats[0]?.total > 0
+          ? (
+              (Number(stats[0]?.completed) / Number(stats[0]?.total)) *
+              100
+            ).toFixed(1)
+          : '0',
+    };
+  }
+
+  private async getCustomerMetricsByDateRange(start: Date, end: Date) {
+    const metrics = await this.drizzle.db
+      .select({
+        newCustomers: sql<number>`COUNT(DISTINCT ${users.id})::int`,
+        returningCustomers: sql<number>`COUNT(DISTINCT CASE WHEN ${orders.createdAt} < ${start} THEN ${users.id} END)::int`,
+        averageOrderValue: sql<number>`COALESCE(AVG(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+        customersWithOrders: sql<number>`COUNT(DISTINCT ${orders.userId})::int`,
+      })
+      .from(users)
+      .leftJoin(orders, eq(users.id, orders.userId))
+      .where(and(gte(users.createdAt, start), lte(users.createdAt, end)));
+
+    const totalCustomers = await this.drizzle.db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(users);
+
+    return {
+      newCustomers: Number(metrics[0]?.newCustomers) || 0,
+      returningCustomers: Number(metrics[0]?.returningCustomers) || 0,
+      averageOrderValue: Number(metrics[0]?.averageOrderValue) || 0,
+      totalCustomers: Number(totalCustomers[0]?.count) || 0,
+      conversionRate:
+        totalCustomers[0]?.count > 0
+          ? (
+              (Number(metrics[0]?.customersWithOrders) /
+                Number(totalCustomers[0]?.count)) *
+              100
+            ).toFixed(1)
+          : '0',
+    };
+  }
+
+  private async getPaymentMethodDistribution(start: Date, end: Date) {
+    const distribution = await this.drizzle.db
+      .select({
+        method: orders.paymentMethod,
+        count: sql<number>`COUNT(*)::int`,
+        total: sql<number>`COALESCE(SUM(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+        percentage: sql<number>`ROUND((COUNT(*)::decimal / SUM(COUNT(*)) OVER()) * 100, 1)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, start),
+          lte(orders.createdAt, end),
+          eq(orders.paymentStatus, 'PAID'),
+        ),
+      )
+      .groupBy(orders.paymentMethod);
+
+    return distribution;
+  }
+
+  private async getHourlySalesDistribution(start: Date, end: Date) {
+    const hourlyData = await this.drizzle.db
+      .select({
+        hour: sql<number>`EXTRACT(HOUR FROM ${orders.createdAt})::int`,
+        orders: sql<number>`COUNT(*)::int`,
+        revenue: sql<number>`COALESCE(SUM(CAST(${orders.totalAmount} AS DECIMAL)), 0)`,
+      })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, start),
+          lte(orders.createdAt, end),
+          eq(orders.paymentStatus, 'PAID'),
+        ),
+      )
+      .groupBy(sql`EXTRACT(HOUR FROM ${orders.createdAt})`)
+      .orderBy(sql`EXTRACT(HOUR FROM ${orders.createdAt})`);
+
+    // Fill all 24 hours
+    const result = Array.from({ length: 24 }, (_, i) => ({
+      hour: i,
+      orders: 0,
+      revenue: 0,
+    }));
+
+    hourlyData.forEach((data) => {
+      result[data.hour] = {
+        hour: data.hour,
+        orders: Number(data.orders),
+        revenue: Number(data.revenue),
+      };
+    });
+
+    return result;
+  }
+
+  private async getCustomerRetentionRate(start: Date, end: Date) {
+    const periodStart = new Date(start);
+    const periodEnd = new Date(end);
+    const periodDuration = periodEnd.getTime() - periodStart.getTime();
+    const previousStart = new Date(periodStart.getTime() - periodDuration);
+
+    // Customers who ordered in previous period
+    const previousCustomers = await this.drizzle.db
+      .select({ userId: orders.userId })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, previousStart),
+          lt(orders.createdAt, periodStart),
+          eq(orders.paymentStatus, 'PAID'),
+        ),
+      )
+      .groupBy(orders.userId);
+
+    // Customers who ordered in current period
+    const currentCustomers = await this.drizzle.db
+      .select({ userId: orders.userId })
+      .from(orders)
+      .where(
+        and(
+          gte(orders.createdAt, periodStart),
+          lte(orders.createdAt, periodEnd),
+          eq(orders.paymentStatus, 'PAID'),
+        ),
+      )
+      .groupBy(orders.userId);
+
+    const previousIds = new Set(previousCustomers.map((c) => c.userId));
+    const retained = currentCustomers.filter((c) => previousIds.has(c.userId));
+
+    return {
+      rate:
+        previousCustomers.length > 0
+          ? ((retained.length / previousCustomers.length) * 100).toFixed(1)
+          : '0',
+      previousPeriodCustomers: previousCustomers.length,
+      retainedCustomers: retained.length,
+      newCustomers: currentCustomers.length - retained.length,
+    };
+  }
+
+  private fillDateGaps(
+    data: any[],
+    start: Date,
+    end: Date,
+    granularity: 'day' | 'week' | 'month' = 'day',
+  ) {
+    const result: any[] = [];
+    const dataMap = new Map(data.map((d) => [d.date, d]));
+    const current = new Date(start);
+
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      const existing = dataMap.get(dateStr);
+      result.push({
+        date: dateStr,
+        revenue: existing ? Number(existing.revenue) : 0,
+        orders: existing ? Number(existing.orders) : 0,
+        averageOrder: existing ? Number(existing.averageOrder) : 0,
+      });
+
+      if (granularity === 'day') current.setDate(current.getDate() + 1);
+      else if (granularity === 'week') current.setDate(current.getDate() + 7);
+      else current.setMonth(current.getMonth() + 1);
+    }
+
+    return result;
   }
   // ==========================================
   // ANALYTICS - All Analytics Combined

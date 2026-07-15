@@ -14,6 +14,7 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -429,6 +430,95 @@ export class AdminController {
     return this.adminService.deleteMarket(marketId);
   }
 
+  // Add to admin.controller.ts
+
+  @Get('analytics/enhanced')
+  @ApiOperation({ summary: 'Get enhanced analytics with date range' })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  getEnhancedAnalytics(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.adminService.getEnhancedAnalytics(startDate, endDate);
+  }
+
+  @Get('revenue/by-date-range')
+  @ApiOperation({ summary: 'Get revenue by date range' })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  @ApiQuery({
+    name: 'granularity',
+    required: false,
+    enum: ['day', 'week', 'month'],
+  })
+  getRevenueByDateRange(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Query('granularity') granularity: 'day' | 'week' | 'month' = 'day',
+  ) {
+    return this.adminService.getRevenueByDateRange(
+      startDate,
+      endDate,
+      granularity,
+    );
+  }
+
+  // Add to admin.controller.ts
+
+  @Get('analytics/custom-dates')
+  @ApiOperation({
+    summary: 'Get analytics for specific dates',
+    description: 'Allows selecting individual days for analytics',
+  })
+  @ApiQuery({
+    name: 'dates',
+    required: true,
+    type: String,
+    description: 'Comma-separated ISO date strings (YYYY-MM-DD)',
+  })
+  async getAnalyticsForCustomDates(@Query('dates') datesString: string) {
+    try {
+      const dates = datesString.split(',').map((d) => new Date(d));
+
+      // Validate dates
+      const invalidDates = dates.filter((d) => isNaN(d.getTime()));
+      if (invalidDates.length > 0) {
+        throw new BadRequestException('Invalid date format');
+      }
+
+      return this.adminService.getAnalyticsForCustomDates(dates);
+    } catch (error) {
+      throw new BadRequestException('Error parsing dates');
+    }
+  }
+
+  @Get('revenue/custom-dates')
+  @ApiOperation({
+    summary: 'Get revenue data for specific dates',
+    description: 'Revenue breakdown for selected individual days',
+  })
+  @ApiQuery({
+    name: 'dates',
+    required: true,
+    type: String,
+    description: 'Comma-separated ISO date strings (YYYY-MM-DD)',
+  })
+  async getRevenueForCustomDates(@Query('dates') datesString: string) {
+    try {
+      const dates = datesString.split(',').map((d) => new Date(d));
+
+      const invalidDates = dates.filter((d) => isNaN(d.getTime()));
+      if (invalidDates.length > 0) {
+        throw new BadRequestException('Invalid date format');
+      }
+
+      return this.adminService.getRevenueForCustomDates(dates);
+    } catch (error) {
+      throw new BadRequestException('Error parsing dates');
+    }
+  }
+
   // ==========================================
   // PRODUCTS - ✅ GET ALL (No Pagination)
   // ==========================================
@@ -674,10 +764,13 @@ export class AdminController {
   ) {
     return this.adminService.updateCategory(categoryId, data);
   }
-
   @Delete('categories/:categoryId')
-  @ApiOperation({ summary: 'Delete category' })
-  deleteCategory(@Param('categoryId', ParseUUIDPipe) categoryId: string) {
-    return this.adminService.deleteCategory(categoryId);
+  @ApiOperation({ summary: 'Delete category with optional product transfer' })
+  @ApiQuery({ name: 'transferToId', required: false })
+  deleteCategory(
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Query('transferToId') transferToId?: string, // ✅ Read query param
+  ) {
+    return this.adminService.deleteCategory(categoryId, transferToId);
   }
 }
