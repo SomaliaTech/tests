@@ -1,14 +1,20 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:mobile/features/cart/presentation/widgets/checkout_payment_modal.dart';
+import 'package:mobile/core/common/widgets/shared/checkout_payment_modal.dart';
+import 'package:mobile/core/network/api_client.dart';
+import 'package:mobile/core/services/injection_container.dart';
+import 'package:mobile/features/admin/domain/entities/market_entity.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/address_event.dart';
 import 'package:mobile/features/product/presentation/blocs/address_state.dart';
+import 'package:mobile/features/product/presentation/widgets/address/address_selection_modal.dart';
 import '../../../product/domain/entities/address.dart';
-
-import '../../../product/presentation/widgets/address/address_selection_modal.dart';
-
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
 import '../bloc/cart_state.dart';
@@ -28,22 +34,92 @@ class _CartViewState extends State<CartView> {
   Address? _selectedAddress;
   bool _addressesLoaded = false;
 
+  List<MarketEntity> _availableMarkets = [];
+  String? _userMarketId;
+
   @override
   void initState() {
     super.initState();
-    // ✅ Load addresses when cart view opens
     _loadAddresses();
+    _loadMarketsAndUserMarket();
   }
 
   void _loadAddresses() {
     context.read<AddressBloc>().add(LoadAddressesEvent());
   }
 
+  Future<void> _loadMarketsAndUserMarket() async {
+    try {
+      final authState = context.read<AuthBloc>().state;
+      if (authState is Authenticated) {
+        _userMarketId = authState.user.marketId;
+      } else if (authState is OtpVerified) {
+        _userMarketId = authState.user.marketId;
+      } else if (authState is ProfileCompleted) {
+        _userMarketId = authState.user.marketId;
+      }
+
+      final apiClient = sl<ApiClient>();
+      final http.Response response = await apiClient.get('/markets');
+
+      if (response.statusCode == 200) {
+        final decodedData = jsonDecode(response.body);
+        final List<dynamic> marketsList;
+
+        if (decodedData is List) {
+          marketsList = decodedData;
+        } else if (decodedData is Map && decodedData.containsKey('items')) {
+          marketsList = decodedData['items'] as List<dynamic>;
+        } else if (decodedData is Map && decodedData.containsKey('data')) {
+          marketsList = decodedData['data'] as List<dynamic>;
+        } else {
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            _availableMarkets = marketsList.map((json) {
+              final deliveryPriceStr =
+                  json['deliveryPrice']?.toString() ?? '0.0';
+              final parsedPrice = double.tryParse(deliveryPriceStr) ?? 0.0;
+              final freeDeliveryQty = json['freeDeliveryMinQuantity'];
+
+              return MarketEntity(
+                id: json['id'] ?? '',
+                name: json['name'] ?? '',
+                slug: json['slug'] ?? '',
+                city: json['city'],
+                isActive: json['isActive'] ?? true,
+                userCount: json['userCount'] ?? 0,
+                deliveryPrice: parsedPrice,
+                freeDeliveryMinQuantity: freeDeliveryQty is int
+                    ? freeDeliveryQty
+                    : (freeDeliveryQty != null
+                          ? int.tryParse(freeDeliveryQty.toString())
+                          : null),
+                deliveryEstimationMinutes:
+                    json['deliveryEstimationMinutes'] ?? 90,
+                createdAt: json['createdAt'] != null
+                    ? DateTime.parse(json['createdAt'])
+                    : DateTime.now(),
+                updatedAt: json['updatedAt'] != null
+                    ? DateTime.parse(json['updatedAt'])
+                    : DateTime.now(),
+              );
+            }).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading markets in cart: $e');
+    }
+  }
+
   void _proceedToCheckout() {
     if (_selectedAddress == null) {
       _showAddressSelection();
     } else {
-      _showPaymentOptions();
+      _showCheckoutScreen();
     }
   }
 
@@ -58,29 +134,81 @@ class _CartViewState extends State<CartView> {
             _selectedAddress = address;
           });
           Future.delayed(const Duration(milliseconds: 100), () {
-            _showPaymentOptions();
+            if (mounted) _showCheckoutScreen();
           });
         },
       ),
     );
   }
 
-  void _showPaymentOptions() {
+  void _showCheckoutScreen() {
     final state = context.read<CartBloc>().state;
     if (state is CartLoaded && _selectedAddress != null) {
-      final totalAmount = state.total;
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => CheckoutPaymentModal(
-          cartItems: state.items,
-          address: _selectedAddress!,
-          totalAmount: totalAmount,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckoutScreen.fromCart(
+            cartItems: state.items,
+            availableMarkets: _availableMarkets,
+            userMarketId: _userMarketId,
+            savedAddress: _selectedAddress,
+          ),
         ),
       );
     }
+  }
+
+  double get _dynamicShippingFee {
+    if (_availableMarkets.isEmpty || _userMarketId == null) return 0.0;
+
+    final userMarket = _availableMarkets.firstWhere(
+      (m) => m.id == _userMarketId,
+      orElse: () => _availableMarkets.first,
+    );
+
+    final state = context.read<CartBloc>().state;
+    if (state is CartLoaded) {
+      final totalItems = state.items.fold(
+        0,
+        (sum, item) => sum + item.quantity,
+      );
+      final minQty = userMarket.freeDeliveryMinQuantity;
+
+      if (minQty != null && minQty > 0 && totalItems >= minQty) {
+        return 0.0;
+      }
+    }
+
+    return userMarket.deliveryPrice;
+  }
+
+  double get _dynamicTotal {
+    final state = context.read<CartBloc>().state;
+    if (state is CartLoaded) {
+      return state.subtotal + _dynamicShippingFee - state.discount;
+    }
+    return 0;
+  }
+
+  // ✅ Check for stock issues - ignores unrealistic maxStock values
+  List<CartItem> _getStockIssues(List<CartItem> items) {
+    return items.where((item) {
+      // Out of stock
+      if (!item.inStock) {
+        debugPrint('🔴 Stock issue: ${item.name} - out of stock');
+        return true;
+      }
+      // Check if quantity exceeds real maxStock (not default 999)
+      if (item.maxStock > 0 &&
+          item.maxStock < 500 &&
+          item.quantity > item.maxStock) {
+        debugPrint(
+          '🔴 Stock issue: ${item.name} - qty ${item.quantity} > max ${item.maxStock}',
+        );
+        return true;
+      }
+      return false;
+    }).toList();
   }
 
   @override
@@ -112,12 +240,10 @@ class _CartViewState extends State<CartView> {
       ),
       body: MultiBlocListener(
         listeners: [
-          // ✅ Listen to address changes
           BlocListener<AddressBloc, AddressState>(
             listener: (context, state) {
               if (state is AddressesLoaded && !_addressesLoaded) {
                 _addressesLoaded = true;
-                // ✅ Auto-select default address
                 if (state.addresses.isNotEmpty) {
                   final defaultAddress = state.addresses.firstWhere(
                     (addr) => addr.isDefault,
@@ -167,9 +293,15 @@ class _CartViewState extends State<CartView> {
                 );
               }
 
+              final stockIssues = _getStockIssues(state.items);
+              final hasIssues = stockIssues.isNotEmpty;
+
               return Column(
                 children: [
-                  // ✅ Show selected address info
+                  // ✅ Stock warning banner
+                  if (hasIssues)
+                    _buildStockWarningBanner(stockIssues, state.items),
+
                   if (_selectedAddress != null)
                     Container(
                       margin: const EdgeInsets.all(15),
@@ -187,7 +319,9 @@ class _CartViewState extends State<CartView> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF2ED573).withOpacity(0.1),
+                              color: const Color(
+                                0xFF2ED573,
+                              ).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
@@ -243,7 +377,25 @@ class _CartViewState extends State<CartView> {
                           ...state.items.map(
                             (item) => CartItemCard(
                               item: item,
+                              showStockWarning:
+                                  item.inStock == false ||
+                                  (item.maxStock > 0 &&
+                                      item.maxStock < 500 &&
+                                      item.quantity > item.maxStock),
                               onIncrement: () {
+                                if (item.quantity >= item.maxStock &&
+                                    item.maxStock < 500) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Maximum stock (${item.maxStock}) reached',
+                                      ),
+                                      backgroundColor: Colors.orange,
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                  return;
+                                }
                                 if (item.canIncrease) {
                                   context.read<CartBloc>().add(
                                     UpdateQuantityEvent(
@@ -274,9 +426,9 @@ class _CartViewState extends State<CartView> {
                           const SizedBox(height: 20),
                           PriceSummary(
                             subtotal: state.subtotal,
-                            shippingFee: state.shippingFee,
+                            shippingFee: _dynamicShippingFee,
                             discount: state.discount,
-                            total: state.total,
+                            total: _dynamicTotal,
                           ),
                           const SizedBox(height: 100),
                         ],
@@ -285,9 +437,9 @@ class _CartViewState extends State<CartView> {
                   ),
                   BottomCheckoutBar(
                     itemCount: state.itemCount,
-                    total: state.total,
-                    isEnabled: state.isCheckoutEnabled,
-                    onCheckout: _proceedToCheckout,
+                    total: _dynamicTotal,
+                    isEnabled: state.isCheckoutEnabled && !hasIssues,
+                    onCheckout: hasIssues ? null : _proceedToCheckout,
                   ),
                 ],
               );
@@ -296,6 +448,190 @@ class _CartViewState extends State<CartView> {
             return const SizedBox.shrink();
           },
         ),
+      ),
+    );
+  }
+
+  // ✅ Stock warning banner
+  Widget _buildStockWarningBanner(
+    List<CartItem> issues,
+    List<CartItem> allItems,
+  ) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(15, 10, 15, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Iconsax.warning_2, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Stock Issues Detected',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  for (final item in issues) {
+                    context.read<CartBloc>().add(
+                      RemoveItemEvent(item.productVariantId),
+                    );
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('All problematic items removed'),
+                      backgroundColor: Color(0xFF2ED573),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Remove All',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...issues.map((item) {
+            final isOutOfStock = !item.inStock;
+            final exceedsStock =
+                item.maxStock > 0 &&
+                item.maxStock < 500 &&
+                item.quantity > item.maxStock;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  // Product image
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      color: Colors.grey[200],
+                    ),
+                    child: item.imageUrl.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Iconsax.image,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Iconsax.box_1,
+                            size: 16,
+                            color: Colors.grey,
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1F2937),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          isOutOfStock
+                              ? '⚠️ Out of stock'
+                              : '⚠️ Qty ${item.quantity} exceeds max stock (${item.maxStock})',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF92400E),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Individual remove button
+                  GestureDetector(
+                    onTap: () {
+                      context.read<CartBloc>().add(
+                        RemoveItemEvent(item.productVariantId),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${item.name} removed'),
+                          backgroundColor: const Color(0xFF2ED573),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Iconsax.trash,
+                        size: 16,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          const SizedBox(height: 4),
+          Text(
+            'Please remove or adjust these items before checkout.',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.orange[700],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
       ),
     );
   }

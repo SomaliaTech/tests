@@ -26,6 +26,17 @@ abstract class ChatRemoteDataSource {
   Future<List<Map<String, dynamic>>> getAvailableAdmins();
   Future<Map<String, dynamic>> createConversation(String participantId);
   Future<Map<String, dynamic>> getUnreadCount();
+
+  Future<Map<String, dynamic>> getAllConversations({
+    int page = 1,
+    String? search,
+  });
+  Future<List<ChatMessage>> getConversationMessages(
+    String conversationId, {
+    int limit = 50,
+  });
+
+  Future<List<dynamic>> getUsersForAdmin(String adminId, {String? search});
 }
 
 class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
@@ -83,6 +94,45 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       return List<Map<String, dynamic>>.from(json.decode(response.body));
     } else {
       throw ServerException('Failed to load admins: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getAllConversations({
+    int page = 1,
+    String? search,
+  }) async {
+    final headers = await _getHeaders();
+    String url =
+        '${ApiConstants.baseUrl}/chat/admin/all-conversations?page=$page&limit=20';
+    if (search != null && search.isNotEmpty) {
+      url += '&search=${Uri.encodeComponent(search)}';
+    }
+    final response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw ServerException('Failed: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<List<ChatMessage>> getConversationMessages(
+    String conversationId, {
+    int limit = 50,
+  }) async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse(
+        '${ApiConstants.baseUrl}/chat/admin/conversation/$conversationId/messages?limit=$limit',
+      ),
+      headers: headers,
+    );
+    if (response.statusCode == 200) {
+      final List<dynamic> jsonList = json.decode(response.body);
+      return jsonList.map((json) => ChatMessageModel.fromJson(json)).toList();
+    } else {
+      throw ServerException('Failed: ${response.statusCode}');
     }
   }
 
@@ -219,6 +269,24 @@ class ChatRemoteDataSourceImpl implements ChatRemoteDataSource {
       return jsonList.map((json) => ChatUser.fromJson(json)).toList();
     } else {
       throw ServerException('Failed to load admins: ${response.statusCode}');
+    }
+  }
+
+  @override
+  Future<List<dynamic>> getUsersForAdmin(
+    String adminId, {
+    String? search,
+  }) async {
+    final headers = await _getHeaders();
+    String url = '${ApiConstants.baseUrl}/chat/admin/$adminId/users';
+    if (search != null && search.isNotEmpty) {
+      url += '?search=${Uri.encodeComponent(search)}';
+    }
+    final response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as List<dynamic>;
+    } else {
+      throw ServerException('Failed: ${response.statusCode}');
     }
   }
 }

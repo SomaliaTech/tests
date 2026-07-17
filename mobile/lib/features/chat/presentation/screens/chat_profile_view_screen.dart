@@ -557,21 +557,6 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                   ),
 
                   const SizedBox(height: 24),
-
-                  // Report Card
-                  _buildModernCard(
-                    color: Colors.red.shade50,
-                    children: [
-                      _buildModernActionTile(
-                        icon: Iconsax.warning_2,
-                        title: 'Report ${_displayName.split(' ').first}',
-                        iconColor: Colors.red,
-                        onTap: () => _showReportDialog(context),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 32),
                 ],
               ),
             ),

@@ -72,7 +72,7 @@ Future<void> initDependencies() async {
   addressRegisterDependencies(sl); // ✅ ONCE
   registerMarketDependencies(sl); // ✅ ONCE
   orderRegisterDependencies(sl); // ✅ ONCE
-  cartRegisterDependencies(sl); // ✅ ONCE
+  registerCartDependencies(sl); // ✅ ONCE
   registerAdminDependencies(sl); // ✅ ONCE
   registerDashboardDependencies(sl); // ✅ ONCE
   trackingRegisterDependencies(sl); // ✅ ONCE

@@ -389,6 +389,10 @@ export class AdminController {
   // ==========================================
   // MARKETS - ✅ PAGINATED
   // ==========================================
+
+  // ==========================================
+  // MARKETS - ✅ PAGINATED
+  // ==========================================
   @Get('markets/all')
   @ApiOperation({ summary: 'Get all markets with user count' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -402,16 +406,63 @@ export class AdminController {
 
   @Post('markets')
   @ApiOperation({ summary: 'Create a new market' })
-  createMarket(@Body() data: { name: string; slug?: string; city?: string }) {
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', example: 'Hodon Market' },
+        slug: { type: 'string', example: 'hodon-market' },
+        city: { type: 'string', example: 'Mogadishu' },
+        deliveryPrice: { type: 'number', example: 10.0 },
+        freeDeliveryMinQuantity: { type: 'number', example: 5 },
+        deliveryEstimationMinutes: { type: 'number', example: 90 },
+      },
+      required: ['name', 'deliveryPrice'],
+    },
+  })
+  createMarket(
+    @Body()
+    data: {
+      name: string;
+      slug?: string;
+      city?: string;
+      deliveryPrice: number; // ✅ REQUIRED
+      freeDeliveryMinQuantity?: number; // ✅ OPTIONAL
+      deliveryEstimationMinutes?: number; // ✅ OPTIONAL
+    },
+  ) {
     return this.adminService.createMarket(data);
   }
 
   @Put('markets/:marketId')
   @ApiOperation({ summary: 'Update market' })
+  @ApiParam({ name: 'marketId', description: 'Market UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        slug: { type: 'string' },
+        city: { type: 'string' },
+        isActive: { type: 'boolean' },
+        deliveryPrice: { type: 'number' },
+        freeDeliveryMinQuantity: { type: 'number' },
+        deliveryEstimationMinutes: { type: 'number' },
+      },
+    },
+  })
   updateMarket(
     @Param('marketId', ParseUUIDPipe) marketId: string,
     @Body()
-    data: { name?: string; slug?: string; city?: string; isActive?: boolean },
+    data: {
+      name?: string;
+      slug?: string;
+      city?: string;
+      isActive?: boolean;
+      deliveryPrice?: number; // ✅ NEW
+      freeDeliveryMinQuantity?: number; // ✅ NEW
+      deliveryEstimationMinutes?: number; // ✅ NEW
+    },
   ) {
     return this.adminService.updateMarket(marketId, data);
   }
@@ -678,8 +729,6 @@ export class AdminController {
   }
 
   // Fix the updateProduct method in admin.controller.ts
-
-  // In admin.controller.ts
 
   // In admin.controller.ts - updateProduct method
   @Put('products/:productId')

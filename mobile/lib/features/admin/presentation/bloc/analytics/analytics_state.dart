@@ -15,11 +15,16 @@ class AnalyticsLoading extends AnalyticsState {}
 class AnalyticsLoaded extends AnalyticsState {
   final AnalyticsDataEntity data;
   final String period;
+  final bool isCustomDates;
 
-  const AnalyticsLoaded({required this.data, this.period = 'week'});
+  const AnalyticsLoaded({
+    required this.data,
+    this.period = 'week',
+    this.isCustomDates = false,
+  });
 
   @override
-  List<Object?> get props => [data, period];
+  List<Object?> get props => [data, period, isCustomDates];
 }
 
 class AnalyticsError extends AnalyticsState {

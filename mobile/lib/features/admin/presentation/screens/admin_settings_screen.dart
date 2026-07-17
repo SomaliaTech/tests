@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/admin/presentation/screens/chat/super_admin_chat_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/chat/super_admin_list_screen.dart';
 import 'package:mobile/features/profile/presentation/screens/profile_screen.dart';
 import 'package:toastification/toastification.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -483,6 +485,36 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
             },
           ),
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
+
+          // ✅ Super Admin Chat - only show for super admins
+          BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) {
+              if (state is Authenticated && state.user.isSuperAdmin == true) {
+                return Column(
+                  children: [
+                    _buildMenuItem(
+                      icon: Iconsax.message_text,
+                      title: 'All Conversations',
+                      subtitle: 'Monitor all admin-user chats',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SuperAdminListScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                  ],
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+
           _buildMenuItem(
             icon: Iconsax.info_circle,
             title: 'Help Center',

@@ -1,10 +1,12 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
+import 'package:provider/provider.dart';
+import 'package:toastification/toastification.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:mobile/core/common/widgets/main_navigation_screen.dart';
 import 'package:mobile/core/common/widgets/no_internet_screen.dart';
+import 'package:mobile/core/services/connectivity_service.dart';
 import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/core/services/navigation_service.dart';
 import 'package:mobile/core/services/push_notification_service.dart';
@@ -40,14 +42,12 @@ import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
 import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
-import 'package:provider/provider.dart';
-import 'package:toastification/toastification.dart';
 import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Initialize Firebase FIRST - but check if already initialized
+  // Initialize Firebase
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
@@ -59,7 +59,6 @@ void main() async {
     }
   } catch (e) {
     print('❌ Firebase initialization error: $e');
-    // If Firebase fails, try without options
     if (Firebase.apps.isEmpty) {
       try {
         await Firebase.initializeApp();
@@ -72,6 +71,10 @@ void main() async {
 
   // Initialize dependencies
   await initDependencies();
+
+  // Initialize connectivity service BEFORE other services
+  final connectivityService = ConnectivityService();
+  connectivityService.initialize();
 
   // Initialize push notifications
   try {
@@ -89,24 +92,23 @@ void main() async {
     print('⚠️ Sound manager init failed: $e');
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(connectivityService: connectivityService));
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final ConnectivityService connectivityService;
+
+  const MyApp({super.key, required this.connectivityService});
+
   @override
   State<MyApp> createState() => _MyAppState();
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  final InternetConnection _internetConnection = InternetConnection();
-  late Future<bool> _initialConnectionCheck;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initialConnectionCheck = _internetConnection.hasInternetAccess;
   }
 
   @override
@@ -122,26 +124,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (authState is Authenticated ||
           authState is OtpVerified ||
           authState is ProfileCompleted) {
-        sl<ChatSocketService>().connect();
+        // Only connect socket if we have internet
+        if (widget.connectivityService.status != ConnectionStatus.offline) {
+          sl<ChatSocketService>().connect();
+        }
       }
     }
-  }
-
-  void _checkConnection() {
-    setState(() {
-      _initialConnectionCheck = _internetConnection.hasInternetAccess;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return ToastificationWrapper(
-      child: MultiBlocProvider(
+      child: MultiProvider(
         providers: [
+          // Connectivity Service - must be first
+          ChangeNotifierProvider.value(value: widget.connectivityService),
+
+          // Auth Bloc
           BlocProvider(
             create: (context) =>
                 sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
           ),
+
+          // All other Blocs
           BlocProvider(create: (context) => sl<CartBloc>()),
           BlocProvider(create: (context) => sl<OrderBloc>()),
           BlocProvider(create: (context) => sl<ProductBloc>()),
@@ -161,64 +166,52 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<NotificationsBloc>()),
           BlocProvider(create: (context) => sl<ConversationsBloc>()),
           BlocProvider(create: (context) => sl<ChatRoomBloc>()),
-          Provider<StorageService>.value(value: sl<StorageService>()),
           BlocProvider(create: (context) => sl<AdminCategoryBloc>()),
           BlocProvider(create: (context) => sl<AdminColorSizeBloc>()),
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
           BlocProvider(create: (_) => sl<AdminBloc>()),
-
           BlocProvider(create: (_) => sl<FaqBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
+
+          // Storage Service
+          Provider<StorageService>.value(value: sl<StorageService>()),
         ],
         child: MaterialApp(
           title: 'FARXADA',
           debugShowCheckedModeBanner: false,
           navigatorKey: NavigationService.navigatorKey,
           theme: AppTheme.lightTheme,
-          home: FutureBuilder<bool>(
-            future: _initialConnectionCheck,
-            builder: (context, snapshot) {
-              // ✅ Show Splash Screen while checking initial internet connection
-              if (snapshot.connectionState == ConnectionState.waiting) {
+          // Use AnimatedSwitcher for smooth transitions
+          home: Consumer<ConnectivityService>(
+            builder: (context, connectivity, _) {
+              // Show splash while initial connection check
+              if (connectivity.isInitialCheck) {
                 return const SplashScreen();
               }
 
-              final hasInternet = snapshot.data ?? false;
-
-              if (!hasInternet) {
-                return NoInternetScreen(onRetry: _checkConnection);
+              // Show no internet screen when offline
+              if (connectivity.status == ConnectionStatus.offline) {
+                return NoInternetScreen(
+                  onRetry: () => connectivity.manualRetry(),
+                );
               }
 
-              return StreamBuilder<InternetStatus>(
-                stream: _internetConnection.onStatusChange,
-                builder: (context, streamSnapshot) {
-                  final currentStatus = streamSnapshot.data;
-
-                  if (currentStatus == InternetStatus.disconnected) {
-                    return NoInternetScreen(onRetry: _checkConnection);
+              // Normal app flow when online
+              return BlocBuilder<AuthBloc, AuthState>(
+                buildWhen: (previous, current) =>
+                    current is AuthChecking ||
+                    current is Authenticated ||
+                    current is Unauthenticated,
+                builder: (context, state) {
+                  if (state is AuthChecking) {
+                    return const SplashScreen();
+                  } else if (state is Authenticated) {
+                    return const MainNavigationScreen();
+                  } else if (state is Unauthenticated) {
+                    return const PhoneInputScreen();
+                  } else {
+                    return const SplashScreen();
                   }
-
-                  return BlocBuilder<AuthBloc, AuthState>(
-                    // ✅ Kept buildWhen to prevent unnecessary rebuilds
-                    // when intermediate states (like OtpSent) are emitted.
-                    buildWhen: (previous, current) =>
-                        current is AuthChecking ||
-                        current is Authenticated ||
-                        current is Unauthenticated,
-                    builder: (context, state) {
-                      if (state is AuthChecking) {
-                        return const SplashScreen();
-                      } else if (state is Authenticated) {
-                        return const MainNavigationScreen();
-                      } else if (state is Unauthenticated) {
-                        return const PhoneInputScreen();
-                      } else {
-                        // ✅ This catches the initial 'AuthInitial' state on app startup,
-                        // preventing the flash to PhoneInputScreen.
-                        return const SplashScreen();
-                      }
-                    },
-                  );
                 },
               );
             },

@@ -41,24 +41,19 @@ class CartLocalDataSourceImpl implements CartLocalDataSource {
   @override
   Future<void> addToCache(CartItem item) async {
     final items = await getCachedCartItems();
-    final existingIndex = items.indexWhere(
-      (i) => i.productVariantId == item.productVariantId,
-    );
+
+    final existingIndex = items.indexWhere((i) {
+      // Same matching logic as bloc
+      if (i.productVariantId.isNotEmpty && item.productVariantId.isNotEmpty) {
+        return i.productVariantId == item.productVariantId;
+      }
+      return i.productId == item.productId;
+    });
 
     if (existingIndex != -1) {
       final existingItem = items[existingIndex];
-      final updatedItem = CartItem(
-        id: existingItem.id,
-        productId: existingItem.productId,
-        productVariantId: existingItem.productVariantId,
-        name: existingItem.name,
-        imageUrl: existingItem.imageUrl,
-        price: existingItem.price,
+      final updatedItem = existingItem.copyWith(
         quantity: existingItem.quantity + item.quantity,
-        maxStock: existingItem.maxStock,
-        inStock: existingItem.inStock,
-        color: existingItem.color,
-        size: existingItem.size,
       );
       final updatedItems = List<CartItem>.from(items);
       updatedItems[existingIndex] = updatedItem;

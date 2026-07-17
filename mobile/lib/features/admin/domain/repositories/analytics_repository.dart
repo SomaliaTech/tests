@@ -6,4 +6,8 @@ abstract class AnalyticsRepository {
   Future<Either<Failure, AnalyticsDataEntity>> getAllAnalytics({
     String period = 'week',
   });
+
+  Future<Either<Failure, AnalyticsDataEntity>> getAnalyticsForCustomDates({
+    required List<DateTime> dates,
+  });
 }

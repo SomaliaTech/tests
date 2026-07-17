@@ -32,6 +32,27 @@ class CartLoaded extends CartState {
 
   bool get isCartEmpty => items.isEmpty;
 
+  // ✅ Add copyWith method
+  CartLoaded copyWith({
+    List<CartItem>? items,
+    double? subtotal,
+    double? shippingFee,
+    double? discount,
+    double? total,
+    int? itemCount,
+    bool? isCheckoutEnabled,
+  }) {
+    return CartLoaded(
+      items: items ?? this.items,
+      subtotal: subtotal ?? this.subtotal,
+      shippingFee: shippingFee ?? this.shippingFee,
+      discount: discount ?? this.discount,
+      total: total ?? this.total,
+      itemCount: itemCount ?? this.itemCount,
+      isCheckoutEnabled: isCheckoutEnabled ?? this.isCheckoutEnabled,
+    );
+  }
+
   @override
   List<Object?> get props => [
     items,

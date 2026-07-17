@@ -98,14 +98,23 @@ class _HeaderState extends State<Header> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "FARXADA",
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 1,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(color: Color(0xFF2ED573)),
+                        child: Icon(Iconsax.shopping_bag, color: Colors.white),
+                      ),
+                      const Text(
+                        "FARXADA",
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
                   ),
                   Row(
                     children: [

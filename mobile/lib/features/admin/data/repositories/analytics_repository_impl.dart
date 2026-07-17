@@ -21,4 +21,18 @@ class AnalyticsRepositoryImpl implements AnalyticsRepository {
       return Left(ServerFailure(e.message));
     }
   }
+
+  @override
+  Future<Either<Failure, AnalyticsDataEntity>> getAnalyticsForCustomDates({
+    required List<DateTime> dates,
+  }) async {
+    try {
+      final data = await remoteDataSource.getAnalyticsForCustomDates(
+        dates: dates,
+      );
+      return Right(data);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
 }

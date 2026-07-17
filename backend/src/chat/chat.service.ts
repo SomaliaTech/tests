@@ -424,7 +424,157 @@ export class ChatService {
       throw new ForbiddenException('You can only message administrators');
     }
   }
+  // Add these methods to ChatService class
 
+  async getAllConversationsForSuperAdmin(
+    superAdminId: string,
+    page: number = 1,
+    limit: number = 20,
+    search?: string,
+  ) {
+    const offset = (page - 1) * limit;
+
+    let query = sql`
+    SELECT DISTINCT ON (c.id)
+      c.id as "conversationId",
+      u1.id as "adminId",
+      u1.name as "adminName",
+      u1.phone_number as "adminPhone",
+      u1.profile_image as "adminImage",
+      u1.is_online as "adminOnline",
+      u2.id as "userId",
+      u2.name as "userName",
+      u2.phone_number as "userPhone",
+      u2.profile_image as "userImage",
+      u2.is_online as "userOnline",
+      c.last_message as "lastMessage",
+      c.last_message_type as "lastMessageType",
+      c.last_message_at as "lastMessageTime",
+      c.created_at as "createdAt"
+    FROM conversations c
+    JOIN users u1 ON u1.id = c.participant1
+    JOIN users u2 ON u2.id = c.participant2
+    WHERE 
+      (u1.is_admin = true OR u1.is_super_admin = true)
+      OR (u2.is_admin = true OR u2.is_super_admin = true)
+  `;
+
+    // Add search filter
+    if (search && search.trim().length >= 2) {
+      const searchPattern = `%${search.trim()}%`;
+      query = sql`${query} AND (
+      u1.name ILIKE ${searchPattern}
+      OR u1.phone_number ILIKE ${searchPattern}
+      OR u2.name ILIKE ${searchPattern}
+      OR u2.phone_number ILIKE ${searchPattern}
+    )`;
+    }
+
+    // Add ordering and pagination
+    const countQuery = sql`SELECT COUNT(*)::int FROM (${query}) as subquery`;
+
+    query = sql`${query} ORDER BY c.id, c.last_message_at DESC NULLS LAST LIMIT ${Math.min(limit, 50)} OFFSET ${offset}`;
+
+    const [result, countResult] = await Promise.all([
+      this.drizzle.db.execute(query),
+      this.drizzle.db.execute(countQuery),
+    ]);
+
+    const rows = (result.rows || []) as any[];
+    const total = (countResult.rows?.[0] as any)?.count || 0;
+
+    return {
+      conversations: rows.map((row: any) => ({
+        conversationId: row.conversationId,
+        admin: {
+          id: row.adminId,
+          name: row.adminName || 'Unknown Admin',
+          phone: row.adminPhone || '',
+          image: row.adminImage || null,
+          isOnline: row.adminOnline || false,
+        },
+        user: {
+          id: row.userId,
+          name: row.userName || 'Unknown User',
+          phone: row.userPhone || '',
+          image: row.userImage || null,
+          isOnline: row.userOnline || false,
+        },
+        lastMessage: row.lastMessage || '',
+        lastMessageType: row.lastMessageType || 'text',
+        lastMessageTime: this.toISOString(row.lastMessageTime),
+        createdAt: this.toISOString(row.createdAt),
+      })),
+      pagination: {
+        page,
+        limit: Math.min(limit, 50),
+        total,
+        totalPages: Math.ceil(total / Math.min(limit, 50)),
+      },
+    };
+  }
+
+  // In chat.service.ts - add this method:
+
+  async getUsersForAdmin(adminId: string, search?: string) {
+    let query = sql`
+    SELECT DISTINCT ON (u.id)
+      c.id as "conversationId",
+      u.id as "userId",
+      u.name as "userName",
+      u.phone_number as "userPhone",
+      u.profile_image as "userImage",
+      u.is_online as "isOnline",
+      c.last_message as "lastMessage",
+      c.last_message_type as "lastMessageType",
+      c.last_message_at as "lastMessageTime",
+      c.created_at as "createdAt"
+    FROM conversations c
+    JOIN users u ON (
+      (u.id = c.participant1 AND c.participant2 = ${adminId})
+      OR (u.id = c.participant2 AND c.participant1 = ${adminId})
+    )
+    WHERE u.id != ${adminId}
+  `;
+
+    if (search && search.trim().length >= 2) {
+      const pattern = `%${search.trim()}%`;
+      query = sql`${query} AND (u.name ILIKE ${pattern} OR u.phone_number ILIKE ${pattern})`;
+    }
+
+    query = sql`${query} ORDER BY u.id, c.last_message_at DESC NULLS LAST`;
+
+    const result = await this.drizzle.db.execute(query);
+    const rows = (result.rows || []) as any[];
+
+    return rows.map((row: any) => ({
+      conversationId: row.conversationId,
+      userId: row.userId,
+      userName: row.userName || 'Unknown',
+      userPhone: row.userPhone || '',
+      userImage: row.userImage || null,
+      isOnline: row.isOnline || false,
+      lastMessage: row.lastMessage || '',
+      lastMessageType: row.lastMessageType || 'text',
+      lastMessageTime: this.toISOString(row.lastMessageTime),
+      createdAt: this.toISOString(row.createdAt),
+    }));
+  }
+  async getConversationMessages(conversationId: string, limit: number = 50) {
+    const msgs = await this.drizzle.db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(Math.min(limit, 100));
+
+    return msgs.map((msg) => ({
+      ...msg,
+      createdAt: this.toISOString(msg.createdAt),
+      updatedAt: this.toISOString(msg.updatedAt),
+      readAt: this.toISOString(msg.readAt),
+    }));
+  }
   async getMessages(
     userId: string,
     partnerId: string,

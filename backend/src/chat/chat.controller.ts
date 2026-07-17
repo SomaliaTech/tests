@@ -17,6 +17,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -40,7 +41,6 @@ interface RequestUser {
   sub?: string;
   id?: string;
 }
-
 interface AuthenticatedRequest {
   user: RequestUser;
 }
@@ -61,27 +61,87 @@ export class ChatController {
   }
 
   // ==========================================
+  // SUPER ADMIN - ALL CONVERSATIONS
+  // ==========================================
+
+  @Get('admin/all-conversations')
+  @ApiOperation({ summary: 'Get ALL conversations (Super Admin only)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false })
+  async getAllConversations(
+    @Request() req: AuthenticatedRequest,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('search') search?: string,
+  ) {
+    const userId = this.getUserId(req);
+    const user = await this.chatService.getUserById(userId);
+    if (!user?.isSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super admins can access this endpoint',
+      );
+    }
+    return this.chatService.getAllConversationsForSuperAdmin(
+      userId,
+      page,
+      limit,
+      search,
+    );
+  }
+  @Get('admin/:adminId/users')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Get all users a specific admin has conversations with',
+  })
+  @ApiParam({ name: 'adminId', description: 'Admin user ID' })
+  @ApiQuery({ name: 'search', required: false })
+  async getAdminUsers(
+    @Request() req: AuthenticatedRequest,
+    @Param('adminId') adminId: string,
+    @Query('search') search?: string,
+  ) {
+    const userId = this.getUserId(req);
+    const user = await this.chatService.getUserById(userId);
+    if (!user?.isSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super admins can access this endpoint',
+      );
+    }
+    return this.chatService.getUsersForAdmin(adminId, search);
+  }
+  @Get('admin/conversation/:conversationId/messages')
+  @ApiOperation({
+    summary: 'Get messages from any conversation (Super Admin only)',
+  })
+  @ApiParam({ name: 'conversationId', description: 'Conversation ID' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getConversationMessages(
+    @Request() req: AuthenticatedRequest,
+    @Param('conversationId') conversationId: string,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number = 50,
+  ) {
+    const userId = this.getUserId(req);
+    const user = await this.chatService.getUserById(userId);
+    if (!user?.isSuperAdmin) {
+      throw new ForbiddenException(
+        'Only super admins can access this endpoint',
+      );
+    }
+    return this.chatService.getConversationMessages(conversationId, limit);
+  }
+
+  // ==========================================
   // USER SEARCH
   // ==========================================
 
   @Get('users/search')
   @ApiOperation({ summary: 'Search users by name, phone, or email' })
-  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  @ApiQuery({ name: 'q', required: true })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'offset', required: false, type: Number })
-  @ApiQuery({
-    name: 'role',
-    required: false,
-    enum: ['user', 'admin'],
-    description: 'Filter by role',
-  })
-  @ApiQuery({
-    name: 'isOnline',
-    required: false,
-    type: Boolean,
-    description: 'Filter by online status',
-  })
-  @ApiResponse({ status: 200, description: 'Search results with pagination' })
+  @ApiQuery({ name: 'role', required: false, enum: ['user', 'admin'] })
+  @ApiQuery({ name: 'isOnline', required: false, type: Boolean })
   async searchUsers(
     @Query('q') query: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
@@ -99,17 +159,19 @@ export class ChatController {
   }
 
   @Get('users/chat-search')
-  @ApiOperation({ summary: 'Search users for chat (excludes current user)' })
-  @ApiQuery({ name: 'q', required: true, description: 'Search query' })
+  @ApiOperation({ summary: 'Search users for chat' })
+  @ApiQuery({ name: 'q', required: true })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'List of users available for chat' })
   async searchChatUsers(
     @Request() req: AuthenticatedRequest,
     @Query('q') query: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
   ) {
-    const userId = this.getUserId(req);
-    return this.chatService.searchChatUsers(userId, query, Math.min(limit, 50));
+    return this.chatService.searchChatUsers(
+      this.getUserId(req),
+      query,
+      Math.min(limit, 50),
+    );
   }
 
   // ==========================================
@@ -118,20 +180,14 @@ export class ChatController {
 
   @Get('admins')
   @ApiOperation({ summary: 'Get available admin users for chat' })
-  @ApiResponse({ status: 200, description: 'List of available admins' })
   async getAvailableAdmins() {
     return this.chatService.getAvailableAdmins();
   }
 
   @Get('admins/chat')
   @ApiOperation({ summary: 'Get admin/super admin users available for chat' })
-  @ApiResponse({
-    status: 200,
-    description: 'List of available admin users for chat',
-  })
   async getAdminUsersForChat(@Request() req: AuthenticatedRequest) {
-    const userId = this.getUserId(req);
-    return this.chatService.getAdminUsersForChat(userId);
+    return this.chatService.getAdminUsersForChat(this.getUserId(req));
   }
 
   // ==========================================
@@ -144,12 +200,7 @@ export class ChatController {
   @ApiBody({
     schema: {
       type: 'object',
-      properties: {
-        participantId: {
-          type: 'string',
-          description: 'ID of the user to chat with',
-        },
-      },
+      properties: { participantId: { type: 'string' } },
       required: ['participantId'],
     },
   })
@@ -179,7 +230,7 @@ export class ChatController {
 
   @Get('messages/:partnerId')
   @ApiOperation({ summary: 'Get messages with a specific user' })
-  @ApiParam({ name: 'partnerId', description: 'Partner user ID' })
+  @ApiParam({ name: 'partnerId' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'before', required: false, type: String })
   async getMessages(
@@ -218,22 +269,12 @@ export class ChatController {
 
   @Post('device-token')
   @ApiOperation({ summary: 'Register device token for push notifications' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        token: { type: 'string' },
-        platform: { type: 'string', enum: ['ios', 'android', 'web'] },
-      },
-    },
-  })
   async registerDeviceToken(
     @Request() req: AuthenticatedRequest,
     @Body() body: { token: string; platform: string },
   ) {
-    const userId = this.getUserId(req);
     await this.chatService.registerDeviceToken(
-      userId,
+      this.getUserId(req),
       body.token,
       body.platform,
     );
@@ -242,15 +283,14 @@ export class ChatController {
 
   @Delete('device-token')
   @ApiOperation({ summary: 'Unregister device token' })
-  @ApiBody({
-    schema: { type: 'object', properties: { token: { type: 'string' } } },
-  })
   async unregisterDeviceToken(
     @Request() req: AuthenticatedRequest,
     @Body() body: { token: string },
   ) {
-    const userId = this.getUserId(req);
-    await this.chatService.unregisterDeviceToken(userId, body.token);
+    await this.chatService.unregisterDeviceToken(
+      this.getUserId(req),
+      body.token,
+    );
     return { success: true };
   }
 
@@ -265,86 +305,53 @@ export class ChatController {
       this.chatGateway.isUserOnline(userId),
       this.chatService.getUserById(userId),
     ]);
-
-    // ✅ Return full user info
     return {
       userId,
       isOnline,
       lastSeen: isOnline ? null : user?.lastSeen,
-      name: user?.name || null, // ✅ Add name
-      phoneNumber: user?.phoneNumber || null, // ✅ Add phone
-      profileImage: user?.profileImage || null, // ✅ Add profile image
+      name: user?.name || null,
+      phoneNumber: user?.phoneNumber || null,
+      profileImage: user?.profileImage || null,
     };
   }
-  // ==========================================
-  // SEARCH CONVERSATIONS
-  // ==========================================
 
   // ==========================================
   // SEARCH CONVERSATIONS
   // ==========================================
 
   @Get('search')
-  @ApiOperation({ summary: 'Search conversations by name, phone, or message' })
-  @ApiQuery({
-    name: 'q',
-    required: true,
-    description: 'Search query (min 2 characters)',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Maximum results to return (default: 20)',
-  })
-  @ApiResponse({ status: 200, description: 'List of matching conversations' })
+  @ApiOperation({ summary: 'Search conversations' })
+  @ApiQuery({ name: 'q', required: true })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   async searchConversations(
     @Request() req: AuthenticatedRequest,
     @Query('q') query: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
   ) {
-    if (!query || query.trim().length < 2) {
-      return [];
-    }
-
-    const results = await this.chatService.searchConversations(
+    if (!query || query.trim().length < 2) return [];
+    return this.chatService.searchConversations(
       this.getUserId(req),
       query.trim(),
       Math.min(limit, 50),
     );
-
-    return results;
   }
+
   // ==========================================
-  // MEDIA UPLOAD (SUPABASE)
+  // MEDIA UPLOAD
   // ==========================================
 
   @Post('upload-media')
-  @ApiOperation({ summary: 'Upload chat media (image/file) to Supabase' })
+  @ApiOperation({ summary: 'Upload chat media to Supabase' })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: { file: { type: 'string', format: 'binary' } },
-    },
-  })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  async uploadChatMedia(
-    @UploadedFile() file: Express.Multer.File,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    if (!file) {
-      throw new BadRequestException('No file uploaded');
-    }
-
-    // Upload to Supabase Storage in the 'chat_images' folder
+  async uploadChatMedia(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
     const result = await this.supabaseService.uploadFile(file, 'chat_images');
-
     return {
       success: true,
       url: result.secure_url,

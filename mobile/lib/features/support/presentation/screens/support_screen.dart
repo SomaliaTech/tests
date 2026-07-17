@@ -58,8 +58,8 @@ class _SupportScreenState extends State<SupportScreen>
     );
   }
 
-  static const String _phoneNumber = '+252686330033';
-  static const String _email = 'support@haldoor.so';
+  static const String _phoneNumber = '2701';
+  static const String _email = 'support@farxada.com';
 
   Future<void> _makePhoneCall() async {
     final Uri phoneUri = Uri(scheme: 'tel', path: _phoneNumber);
@@ -84,7 +84,7 @@ class _SupportScreenState extends State<SupportScreen>
     final Uri emailUri = Uri(
       scheme: 'mailto',
       path: _email,
-      queryParameters: {'subject': 'Support Request - Haldoor'},
+      queryParameters: {'subject': 'Support Request - Faraxada'},
     );
 
     try {
@@ -364,7 +364,7 @@ class _SupportScreenState extends State<SupportScreen>
                       child: Column(
                         children: [
                           Text(
-                            'HALDOOR Support',
+                            'FARXADA Support',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -474,7 +474,7 @@ class _SupportScreenState extends State<SupportScreen>
           child: _buildContactButton(
             icon: Iconsax.call,
             title: 'Call Us',
-            subtitle: '+252 61 532 8654',
+            subtitle: '2701',
             color: const Color(0xFF3B82F6),
             onTap: _makePhoneCall,
           ),
@@ -484,7 +484,7 @@ class _SupportScreenState extends State<SupportScreen>
           child: _buildContactButton(
             icon: Iconsax.message,
             title: 'Email Us',
-            subtitle: 'support@haldoor.com',
+            subtitle: 'support@farxada.com',
             color: const Color(0xFFF59E0B),
             onTap: _sendEmail,
           ),

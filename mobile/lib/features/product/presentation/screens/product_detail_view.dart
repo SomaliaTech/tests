@@ -1,8 +1,16 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/core/common/widgets/shared/checkout_payment_modal.dart';
+import 'package:mobile/core/network/api_client.dart';
+import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/features/admin/domain/entities/market_entity.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
 import 'package:mobile/features/chat/presentation/widgets/admin_chat_bottom_sheet.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
@@ -18,30 +26,20 @@ import 'package:mobile/features/product/presentation/widgets/loading/loading_pro
 import 'package:mobile/features/product/presentation/widgets/product/bottom_action_bar.dart';
 import 'package:mobile/features/product/presentation/widgets/product/description_tab.dart';
 import 'package:mobile/features/product/presentation/widgets/product/image_carousel.dart';
-import 'package:mobile/features/product/presentation/widgets/product/payment_options_modal.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_header.dart';
 import 'package:mobile/features/product/presentation/widgets/product/product_info.dart';
 import 'package:mobile/features/product/presentation/widgets/product/related_products.dart';
-import 'package:mobile/features/product/presentation/widgets/product/you_may_also_like.dart';
 import 'package:toastification/toastification.dart';
-
-// Order bloc import
-import '../../../order/presentation/bloc/order_bloc.dart';
-
-// Wishlist imports
 import '../../../wishlist/presentation/bloc/wishlist_bloc.dart';
 import '../../../wishlist/presentation/bloc/wishlist_event.dart';
 import '../../../wishlist/presentation/bloc/wishlist_state.dart';
 import '../../../wishlist/domain/entities/wishlist_item.dart';
-
-// Cart imports
 import '../../../cart/presentation/bloc/cart_bloc.dart';
 import '../../../cart/presentation/bloc/cart_event.dart';
 import '../../../cart/domain/entities/cart_item.dart';
 
 class ProductDetailView extends StatefulWidget {
   final String productId;
-
   const ProductDetailView({super.key, required this.productId});
 
   @override
@@ -56,26 +54,95 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   Address? _selectedAddress;
   bool _isInWishlist = false;
   bool _isAdmin = false;
-  bool _addressesLoaded = false;
+  bool _isLoadingAddresses = false;
 
-  // ✅ NEW: Store product locally so we don't need to read bloc state later
   Product? _currentProduct;
+  List<MarketEntity> _availableMarkets = [];
+  String? _userMarketId;
 
   @override
   void initState() {
     super.initState();
     _checkAdminStatus();
+    _loadMarketsAndUserMarket();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
       context.read<ProductBloc>().add(GetProductByIdEvent(widget.productId));
       _checkWishlistStatus();
       _loadAddresses();
     });
   }
 
+  Future<void> _loadMarketsAndUserMarket() async {
+    try {
+      final authState = context.read<AuthBloc>().state;
+      if (authState is Authenticated) {
+        _userMarketId = authState.user.marketId;
+      } else if (authState is OtpVerified) {
+        _userMarketId = authState.user.marketId;
+      } else if (authState is ProfileCompleted) {
+        _userMarketId = authState.user.marketId;
+      }
+
+      final apiClient = sl<ApiClient>();
+      final http.Response response = await apiClient.get('/markets');
+
+      if (response.statusCode == 200) {
+        final decodedData = jsonDecode(response.body);
+        final List<dynamic> marketsList;
+
+        if (decodedData is List) {
+          marketsList = decodedData;
+        } else if (decodedData is Map && decodedData.containsKey('items')) {
+          marketsList = decodedData['items'] as List<dynamic>;
+        } else if (decodedData is Map && decodedData.containsKey('data')) {
+          marketsList = decodedData['data'] as List<dynamic>;
+        } else {
+          return;
+        }
+
+        if (mounted) {
+          setState(() {
+            _availableMarkets = marketsList.map((json) {
+              final deliveryPriceStr =
+                  json['deliveryPrice']?.toString() ?? '0.0';
+              final parsedPrice = double.tryParse(deliveryPriceStr) ?? 0.0;
+              final freeDeliveryQty = json['freeDeliveryMinQuantity'];
+
+              return MarketEntity(
+                id: json['id'] ?? '',
+                name: json['name'] ?? '',
+                slug: json['slug'] ?? '',
+                city: json['city'],
+                isActive: json['isActive'] ?? true,
+                userCount: json['userCount'] ?? 0,
+                deliveryPrice: parsedPrice,
+                freeDeliveryMinQuantity: freeDeliveryQty is int
+                    ? freeDeliveryQty
+                    : (freeDeliveryQty != null
+                          ? int.tryParse(freeDeliveryQty.toString())
+                          : null),
+                deliveryEstimationMinutes:
+                    json['deliveryEstimationMinutes'] ?? 90,
+                createdAt: json['createdAt'] != null
+                    ? DateTime.parse(json['createdAt'])
+                    : DateTime.now(),
+                updatedAt: json['updatedAt'] != null
+                    ? DateTime.parse(json['updatedAt'])
+                    : DateTime.now(),
+              );
+            }).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading markets: $e');
+    }
+  }
+
   void _loadAddresses() {
+    setState(() => _isLoadingAddresses = true);
     context.read<AddressBloc>().add(LoadAddressesEvent());
   }
 
@@ -83,9 +150,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     try {
       final storageService = GetIt.instance<StorageService>();
       final isAdmin = await storageService.getIsAdmin();
-      if (mounted) {
-        setState(() => _isAdmin = isAdmin);
-      }
+      if (mounted) setState(() => _isAdmin = isAdmin);
     } catch (e) {
       _isAdmin = false;
     }
@@ -99,10 +164,32 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     }
   }
 
+  void _autoSelectVariants(Product product) {
+    if (product.variants.isEmpty) return;
+
+    bool changed = false;
+    if (selectedColor == null &&
+        product.colors != null &&
+        product.colors.isNotEmpty) {
+      selectedColor = product.colors.first;
+      changed = true;
+    }
+    if (selectedSize == null &&
+        product.sizes != null &&
+        product.sizes.isNotEmpty) {
+      selectedSize = product.sizes.first;
+      changed = true;
+    }
+    if (changed) {
+      setState(() {}); // Rebuild to show the chip
+    }
+  }
+
   void _toggleWishlist(Product product) {
     if (_isInWishlist) {
       context.read<WishlistBloc>().add(RemoveFromWishlistEvent(product.id));
       toastification.show(
+        context: context,
         title: const Text('Removed from Wishlist'),
         description: Text('${product.name} removed from wishlist'),
         type: ToastificationType.success,
@@ -119,7 +206,6 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         );
         variantId = variant.id;
       }
-
       final wishlistItem = WishlistItem(
         id: product.id,
         name: product.name,
@@ -132,6 +218,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       );
       context.read<WishlistBloc>().add(AddToWishlistEvent(wishlistItem));
       toastification.show(
+        context: context,
         title: const Text('Added to Wishlist'),
         description: Text('${product.name} added to wishlist'),
         type: ToastificationType.success,
@@ -142,14 +229,106 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     }
   }
 
+  bool _isProductInStock(Product product) {
+    if (product.variants.isEmpty) return product.stock > 0;
+    if (selectedColor != null || selectedSize != null) {
+      try {
+        final variant = product.variants.firstWhere(
+          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
+        );
+        return (variant.stock ?? 0) > 0;
+      } catch (_) {
+        return product.variants.any((v) => (v.stock ?? 0) > 0);
+      }
+    }
+    return product.variants.any((v) => (v.stock ?? 0) > 0) || product.stock > 0;
+  }
+
+  String _getSelectedVariantLabel(Product product) {
+    if (product.variants.isEmpty) return '';
+    if (selectedColor != null || selectedSize != null) {
+      return '${selectedColor ?? ''} ${selectedSize ?? ''}'.trim();
+    }
+    return '';
+  }
+
   void _addToCart(Product product) {
     ProductVariant? variant;
+    int availableStock = product.stock;
+    double price = product.price;
+    bool autoSelected = false;
 
     if (product.variants.isNotEmpty) {
-      variant = product.variants.firstWhere(
-        (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
-        orElse: () => product.variants.first,
+      if (selectedColor == null &&
+          product.colors != null &&
+          product.colors.isNotEmpty) {
+        selectedColor = product.colors.first;
+        autoSelected = true;
+      }
+      if (selectedSize == null &&
+          product.sizes != null &&
+          product.sizes.isNotEmpty) {
+        selectedSize = product.sizes.first;
+        autoSelected = true;
+      }
+
+      try {
+        variant = product.variants.firstWhere(
+          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
+        );
+        availableStock = variant.stock ?? 0;
+        price = variant.price ?? product.price;
+      } catch (_) {
+        if (product.variants.isNotEmpty) {
+          variant = product.variants.first;
+          availableStock = variant.stock ?? 0;
+          price = variant.price ?? product.price;
+          selectedColor = variant.colorName;
+          selectedSize = variant.sizeName;
+          autoSelected = true;
+        }
+      }
+
+      if (autoSelected) {
+        toastification.show(
+          context: context,
+          title: const Text('Auto-Selected'),
+          description: Text(
+            'Selected: ${variant?.colorName ?? selectedColor} ${variant?.sizeName ?? selectedSize}',
+          ),
+          type: ToastificationType.info,
+          style: ToastificationStyle.fillColored,
+          autoCloseDuration: const Duration(seconds: 2),
+        );
+      }
+    }
+
+    if (availableStock <= 0) {
+      toastification.show(
+        context: context,
+        title: const Text('Out of Stock'),
+        description: Text(
+          variant != null
+              ? '${product.name} (${variant.colorName} ${variant.sizeName}) is out of stock'
+              : '${product.name} is currently out of stock',
+        ),
+        type: ToastificationType.warning,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 2),
       );
+      return;
+    }
+
+    if (quantity > availableStock) {
+      toastification.show(
+        context: context,
+        title: const Text('Insufficient Stock'),
+        description: Text('Only $availableStock available'),
+        type: ToastificationType.warning,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 2),
+      );
+      return;
     }
 
     final cartItem = CartItem(
@@ -158,17 +337,18 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       productVariantId: variant?.id ?? '',
       name: product.name,
       imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
-      price: variant?.price ?? product.price,
+      price: price,
       quantity: quantity,
-      maxStock: variant?.stock ?? product.stock,
-      inStock: (variant?.stock ?? product.stock) > 0,
-      color: variant?.colorName,
-      size: variant?.sizeName,
+      maxStock: availableStock,
+      inStock: availableStock > 0,
+      color: variant?.colorName ?? selectedColor,
+      size: variant?.sizeName ?? selectedSize,
     );
 
     context.read<CartBloc>().add(AddToCartEvent(cartItem));
 
     toastification.show(
+      context: context,
       title: const Text('Added to Cart'),
       description: Text('${product.name} added to your cart'),
       type: ToastificationType.success,
@@ -177,18 +357,36 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     );
   }
 
-  void _proceedToCheckout() {
-    print('🔍 _proceedToCheckout called');
-    print('📍 _selectedAddress: $_selectedAddress');
-    print('📍 _currentProduct: ${_currentProduct?.name}');
-
-    if (_selectedAddress == null) {
-      print('📍 No address selected, showing address selection');
-      _showAddressSelection();
-    } else {
-      print('📍 Address exists, showing payment options');
-      _showPaymentOptions();
+  void _proceedToCheckout() async {
+    if (_selectedAddress != null) {
+      _showCheckoutScreen();
+      return;
     }
+    if (_isLoadingAddresses) {
+      _showLoadingDialog();
+      final startTime = DateTime.now();
+      while (_isLoadingAddresses &&
+          DateTime.now().difference(startTime).inSeconds < 3) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (!mounted) return;
+      }
+      if (mounted) Navigator.of(context).pop();
+      if (_selectedAddress != null) {
+        _showCheckoutScreen();
+        return;
+      }
+    }
+    _showAddressSelection();
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+      ),
+    );
   }
 
   void _showAddressSelection() {
@@ -199,58 +397,39 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       builder: (modalContext) => AddressSelectionModal(
         onAddressSelected: (address) {
           Navigator.pop(modalContext);
-
           if (!mounted) return;
-
-          setState(() {
-            _selectedAddress = address;
-          });
-
+          setState(() => _selectedAddress = address);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            _showPaymentOptions();
+            if (mounted) _showCheckoutScreen();
           });
         },
       ),
     );
   }
 
-  // ✅ FIXED: Use locally stored product instead of reading bloc state
-  void _showPaymentOptions() {
-    print('🔍 _showPaymentOptions called');
-
-    if (!mounted) {
-      print('❌ Widget not mounted');
+  void _showCheckoutScreen() {
+    if (!mounted || _currentProduct == null || _selectedAddress == null) return;
+    if (_availableMarkets.isEmpty) {
+      _loadMarketsAndUserMarket().then((_) {
+        if (mounted) _navigateToCheckout();
+      });
       return;
     }
+    _navigateToCheckout();
+  }
 
-    // ✅ Use locally stored product
-    if (_currentProduct == null) {
-      print('❌ No product stored locally');
-      return;
-    }
-
-    if (_selectedAddress == null) {
-      print('❌ No address selected');
-      return;
-    }
-
-    print('✅ Showing payment modal with product: ${_currentProduct!.name}');
-
-    final orderBloc = GetIt.instance<OrderBloc>();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (modalContext) => BlocProvider.value(
-        value: orderBloc,
-        child: PaymentOptionsModal(
-          product: _currentProduct!, // ✅ Use locally stored product
-          address: _selectedAddress!,
+  void _navigateToCheckout() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CheckoutScreen(
+          product: _currentProduct!,
           selectedColor: selectedColor,
           selectedSize: selectedSize,
           quantity: quantity,
+          availableMarkets: _availableMarkets,
+          userMarketId: _userMarketId,
+          savedAddress: _selectedAddress,
         ),
       ),
     );
@@ -264,31 +443,29 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         listeners: [
           BlocListener<AddressBloc, AddressState>(
             listener: (context, state) {
-              if (state is AddressesLoaded && !_addressesLoaded) {
-                _addressesLoaded = true;
-                if (state.addresses.isNotEmpty) {
+              if (state is AddressesLoaded) {
+                setState(() => _isLoadingAddresses = false);
+                if (_selectedAddress == null && state.addresses.isNotEmpty) {
                   final defaultAddress = state.addresses.firstWhere(
                     (addr) => addr.isDefault,
                     orElse: () => state.addresses.first,
                   );
-                  setState(() {
-                    _selectedAddress = defaultAddress;
-                  });
+                  setState(() => _selectedAddress = defaultAddress);
                 }
+              } else if (state is AddressError) {
+                setState(() => _isLoadingAddresses = false);
               }
             },
           ),
           BlocListener<ProductBloc, ProductState>(
             listener: (context, state) {
-              // ✅ Only handle ProductDetailLoaded
               if (state is ProductDetailLoaded) {
-                setState(() {
-                  _currentProduct = state.product;
-                });
+                setState(() => _currentProduct = state.product);
+                _autoSelectVariants(state.product); // ✅ Auto-select on load
               }
-
               if (state is ProductDetailError) {
                 toastification.show(
+                  context: context,
                   title: const Text('Error'),
                   description: Text(state.message),
                   type: ToastificationType.error,
@@ -311,24 +488,17 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         ],
         child: BlocBuilder<ProductBloc, ProductState>(
           builder: (context, state) {
-            // ✅ Only handle ProductDetailLoaded - ignore other states
             Product? product;
-
             if (state is ProductDetailLoaded) {
               product = state.product;
-              // ✅ Store it locally immediately
               _currentProduct = product;
             }
-
-            // ✅ Fallback to locally stored product
             if (product == null && _currentProduct != null) {
               product = _currentProduct;
             }
 
-            // ✅ Check for loading state
             final isLoading = state is ProductDetailLoading;
 
-            // ✅ Check for error state
             if (state is ProductDetailError) {
               return Center(
                 child: Column(
@@ -343,11 +513,9 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                     Text(state.message, style: const TextStyle(fontSize: 16)),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () {
-                        context.read<ProductBloc>().add(
-                          GetProductByIdEvent(widget.productId),
-                        );
-                      },
+                      onPressed: () => context.read<ProductBloc>().add(
+                        GetProductByIdEvent(widget.productId),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2ED573),
                       ),
@@ -358,13 +526,13 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               );
             }
 
-            // ✅ Render product if available
             if (product != null) {
+              final p = product;
               return Stack(
                 children: [
                   Column(
                     children: [
-                      ProductHeader(productName: product.name),
+                      ProductHeader(productName: p.name),
                       Expanded(
                         child: SingleChildScrollView(
                           physics: const BouncingScrollPhysics(),
@@ -372,51 +540,43 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               ImageCarousel(
-                                images: product.imageUrls,
-                                onImageChanged: (index) {
-                                  setState(() {
-                                    selectedImageIndex = index;
-                                  });
-                                },
+                                images: p.imageUrls,
+                                onImageChanged: (index) =>
+                                    setState(() => selectedImageIndex = index),
                               ),
-                              ProductInfo(product: product),
+                              ProductInfo(product: p),
                               const SizedBox(height: 8),
+                              if (p.variants.isNotEmpty &&
+                                  (selectedColor != null ||
+                                      selectedSize != null))
+                                _buildSelectedVariantChip(p),
                               if (_selectedAddress != null)
                                 _buildAddressDisplay(),
-                              if (product.colors != null &&
-                                  product.colors!.isNotEmpty)
+                              if (p.colors != null && p.colors.isNotEmpty)
                                 SelectionOptions(
                                   title: "Select Color:",
-                                  options: product.colors!,
+                                  options: p.colors,
                                   selectedOption: selectedColor,
-                                  onOptionSelected: (color) {
-                                    setState(() {
-                                      selectedColor = color;
-                                    });
-                                  },
+                                  onOptionSelected: (color) =>
+                                      setState(() => selectedColor = color),
                                   optionType: OptionType.color,
                                 ),
-                              if (product.sizes != null &&
-                                  product.sizes!.isNotEmpty)
+                              if (p.sizes != null && p.sizes.isNotEmpty)
                                 SelectionOptions(
                                   title: "Select Size:",
-                                  options: product.sizes!,
+                                  options: p.sizes,
                                   selectedOption: selectedSize,
-                                  onOptionSelected: (size) {
-                                    setState(() {
-                                      selectedSize = size;
-                                    });
-                                  },
+                                  onOptionSelected: (size) =>
+                                      setState(() => selectedSize = size),
                                   optionType: OptionType.size,
                                 ),
                               DescriptionTab(
-                                description: product.description,
-                                features: product.features ?? [],
+                                description: p.description,
+                                features: p.features ?? [],
                               ),
-
                               RelatedProducts(
-                                categoryId: product.categoryId,
-                                currentProductId: product.id,
+                                categoryId: p.categoryId,
+                                currentProductId: p.id,
                               ),
                               const SizedBox(height: 120),
                             ],
@@ -430,13 +590,13 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                     left: 0,
                     right: 0,
                     child: BottomActionBar(
-                      productName: product.name,
+                      productName: p.name,
+                      isInStock: _isProductInStock(p),
                       isInWishlist: _isInWishlist,
                       isAdmin: _isAdmin,
-                      onFavoriteTap: () => _toggleWishlist(product!),
-                      onAddToCartTap: () => _addToCart(product!),
+                      onFavoriteTap: () => _toggleWishlist(p),
+                      onAddToCartTap: () => _addToCart(p),
                       onBuyNowTap: () => _proceedToCheckout(),
-                      // ✅ Optional: Add chat callback if needed
                       onChatTap: () {
                         showModalBottomSheet(
                           context: context,
@@ -447,28 +607,12 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                       },
                     ),
                   ),
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: BottomActionBar(
-                      productName: product.name,
-                      isInWishlist: _isInWishlist,
-                      isAdmin: _isAdmin,
-                      onFavoriteTap: () => _toggleWishlist(product!),
-                      onAddToCartTap: () => _addToCart(product!),
-                      onBuyNowTap: () {
-                        _proceedToCheckout();
-                      },
-                    ),
-                  ),
                 ],
               );
             } else if (isLoading) {
               return const LoadingProductDetail();
             }
 
-            // Default: show loading
             return const LoadingProductDetail();
           },
         ),
@@ -491,7 +635,50 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     );
   }
 
+  Widget _buildSelectedVariantChip(Product product) {
+    final label = _getSelectedVariantLabel(product);
+    if (label.isEmpty) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Iconsax.verify, size: 16, color: Color(0xFF2ED573)),
+          const SizedBox(width: 6),
+          Text(
+            'Selected: $label',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2ED573),
+            ),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => setState(() {
+              selectedColor = null;
+              selectedSize = null;
+            }),
+            child: const Icon(
+              Iconsax.close_circle,
+              size: 16,
+              color: Color(0xFF2ED573),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAddressDisplay() {
+    final address = _selectedAddress!;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -527,7 +714,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _selectedAddress!.label,
+                  address.label,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -536,7 +723,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _selectedAddress!.fullAddress,
+                  address.fullAddress,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF666666),

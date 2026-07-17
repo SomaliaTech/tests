@@ -9,6 +9,7 @@ class AnalyticsBloc extends Bloc<AnalyticsEvent, AnalyticsState> {
   AnalyticsBloc({required this.repository}) : super(AnalyticsInitial()) {
     on<LoadAnalyticsEvent>(_onLoad);
     on<ChangeAnalyticsPeriodEvent>(_onChangePeriod);
+    on<LoadCustomDatesAnalyticsEvent>(_onLoadCustomDates);
   }
 
   Future<void> _onLoad(
@@ -19,7 +20,9 @@ class AnalyticsBloc extends Bloc<AnalyticsEvent, AnalyticsState> {
     final result = await repository.getAllAnalytics(period: event.period);
     result.fold(
       (failure) => emit(AnalyticsError(failure.message)),
-      (data) => emit(AnalyticsLoaded(data: data, period: event.period)),
+      (data) => emit(
+        AnalyticsLoaded(data: data, period: event.period, isCustomDates: false),
+      ),
     );
   }
 
@@ -31,7 +34,25 @@ class AnalyticsBloc extends Bloc<AnalyticsEvent, AnalyticsState> {
     final result = await repository.getAllAnalytics(period: event.period);
     result.fold(
       (failure) => emit(AnalyticsError(failure.message)),
-      (data) => emit(AnalyticsLoaded(data: data, period: event.period)),
+      (data) => emit(
+        AnalyticsLoaded(data: data, period: event.period, isCustomDates: false),
+      ),
+    );
+  }
+
+  Future<void> _onLoadCustomDates(
+    LoadCustomDatesAnalyticsEvent event,
+    Emitter<AnalyticsState> emit,
+  ) async {
+    emit(AnalyticsLoading());
+    final result = await repository.getAnalyticsForCustomDates(
+      dates: event.dates,
+    );
+    result.fold(
+      (failure) => emit(AnalyticsError(failure.message)),
+      (data) => emit(
+        AnalyticsLoaded(data: data, period: 'custom', isCustomDates: true),
+      ),
     );
   }
 }

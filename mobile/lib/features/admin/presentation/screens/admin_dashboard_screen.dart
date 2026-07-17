@@ -24,6 +24,7 @@ import 'package:mobile/features/admin/presentation/screens/admin_sizes_screen.da
 import 'package:mobile/features/admin/presentation/screens/admin_users_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_revenue_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/modern_analytics_screen.dart';
 import 'package:mobile/features/admin/presentation/widgets/dashboard_widgets.dart';
 import 'package:mobile/features/admin/presentation/widgets/skeleton_widgets.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
@@ -481,7 +482,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => AdminRevenueScreen(),
+                            builder: (context) => ModernAnalyticsScreen(),
                           ),
                         );
                       },

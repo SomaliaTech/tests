@@ -52,7 +52,9 @@ void orderRegisterDependencies(GetIt sl) {
   );
 
   sl.registerLazySingleton(() => GetOrderDetails(sl()));
-  sl.registerFactory(() => OrderDetailsBloc(getOrderDetails: sl()));
+  sl.registerFactory(
+    () => OrderDetailsBloc(getOrderDetails: sl(), storageService: sl()),
+  );
   sl.registerLazySingleton(() => CreateOrder(sl()));
   sl.registerLazySingleton(() => ProcessPayment(sl()));
 

@@ -175,9 +175,10 @@ export class OrdersService {
       throw new NotFoundException(`Product with ID ${productId} not found`);
     }
 
-    let variant: any = null;
+    // ✅ Get available stock
+    let availableStock = product.stock;
     if (productVariantId) {
-      variant = await this.drizzle.db.query.productVariants.findFirst({
+      const variant = await this.drizzle.db.query.productVariants.findFirst({
         where: and(
           eq(productVariants.id, productVariantId),
           eq(productVariants.productId, productId),
@@ -188,9 +189,7 @@ export class OrdersService {
           `Variant with ID ${productVariantId} not found`,
         );
       }
-      if (variant.stock < quantity) {
-        throw new BadRequestException('Insufficient stock');
-      }
+      availableStock = variant.stock;
     }
 
     // Check for existing cart item
@@ -209,15 +208,30 @@ export class OrdersService {
       .limit(1);
 
     if (existingItem) {
+      // ✅ Check stock when adding to existing item
+      const newQuantity = existingItem.quantity + quantity;
+      if (newQuantity > availableStock) {
+        throw new BadRequestException(
+          `Cannot add more. Maximum stock (${availableStock}) reached. You already have ${existingItem.quantity} in cart.`,
+        );
+      }
+
       const [updated] = await this.drizzle.db
         .update(cartItems)
         .set({
-          quantity: existingItem.quantity + quantity,
+          quantity: newQuantity,
           updatedAt: new Date(),
         })
         .where(eq(cartItems.id, existingItem.id))
         .returning();
       return updated;
+    }
+
+    // ✅ Check stock for new item too
+    if (quantity > availableStock) {
+      throw new BadRequestException(
+        `Cannot add ${quantity} items. Only ${availableStock} available.`,
+      );
     }
 
     const [newItem] = await this.drizzle.db

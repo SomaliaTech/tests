@@ -7,6 +7,7 @@ class PaymentSuccessPage extends StatelessWidget {
   final double totalAmount;
   final String productName;
   final String? productImage;
+  final int? itemCount; // ✅ Add this
 
   const PaymentSuccessPage({
     super.key,
@@ -14,6 +15,7 @@ class PaymentSuccessPage extends StatelessWidget {
     required this.totalAmount,
     required this.productName,
     this.productImage,
+    this.itemCount, // ✅ Add this
   });
 
   @override

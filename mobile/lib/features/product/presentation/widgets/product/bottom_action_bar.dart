@@ -5,16 +5,18 @@ import 'package:iconsax/iconsax.dart';
 class BottomActionBar extends StatelessWidget {
   final String productName;
   final bool isInWishlist;
+  final bool isInStock; // ✅ Added
   final VoidCallback onFavoriteTap;
   final VoidCallback onAddToCartTap;
   final VoidCallback onBuyNowTap;
-  final VoidCallback? onChatTap; // ✅ Optional chat callback
+  final VoidCallback? onChatTap;
   final bool isAdmin;
 
   const BottomActionBar({
     super.key,
     required this.productName,
     required this.isInWishlist,
+    this.isInStock = true, // ✅ Added with default true
     required this.onFavoriteTap,
     required this.onAddToCartTap,
     required this.onBuyNowTap,
@@ -40,7 +42,7 @@ class BottomActionBar extends StatelessWidget {
         top: false,
         child: Row(
           children: [
-            // ✅ Heart (Favorite) Button
+            // Favorite Button
             GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
@@ -72,46 +74,27 @@ class BottomActionBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // ✅ Chat Button (Optional)
-            if (onChatTap != null && isAdmin) ...[
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  onChatTap!();
-                },
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue[300]!, width: 1.5),
-                  ),
-                  child: Icon(
-                    Iconsax.message,
-                    color: Colors.blue[700],
-                    size: 24,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-
-            // Add to Cart Button (flexible)
+            // Add to Cart Button
             Expanded(
               flex: onChatTap != null && isAdmin ? 1 : 2,
               child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  onAddToCartTap();
-                },
+                onTap:
+                    isInStock // ✅ Disable if out of stock
+                    ? () {
+                        HapticFeedback.mediumImpact();
+                        onAddToCartTap();
+                      }
+                    : null,
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ED573),
+                    color:
+                        isInStock // ✅ Grey if out of stock
+                        ? const Color(0xFF2ED573)
+                        : Colors.grey[400],
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
@@ -119,10 +102,12 @@ class BottomActionBar extends StatelessWidget {
                         color: Colors.white,
                         size: 18,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Text(
-                        'Add to Cart',
-                        style: TextStyle(
+                        isInStock
+                            ? 'Add to Cart'
+                            : 'Out of Stock', // ✅ Show status
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -135,28 +120,40 @@ class BottomActionBar extends StatelessWidget {
             ),
             const SizedBox(width: 8),
 
-            // Buy Now Button (flexible)
+            // Buy Now Button
             Expanded(
               flex: onChatTap != null && isAdmin ? 1 : 2,
               child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  onBuyNowTap();
-                },
+                onTap:
+                    isInStock // ✅ Disable if out of stock
+                    ? () {
+                        HapticFeedback.mediumImpact();
+                        onBuyNowTap();
+                      }
+                    : null,
                 child: Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-                    ),
+                    gradient:
+                        isInStock // ✅ Grey if out of stock
+                        ? const LinearGradient(
+                            colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFFBDBDBD), Color(0xFF9E9E9E)],
+                          ),
                     borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2ED573).withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: isInStock
+                        ? [
+                            BoxShadow(
+                              color: const Color(
+                                0xFF2ED573,
+                              ).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,

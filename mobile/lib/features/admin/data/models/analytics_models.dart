@@ -1,4 +1,22 @@
-import '../../domain/entities/analytics_entities.dart';
+import 'package:mobile/features/admin/domain/entities/analytics_entities.dart';
+
+class DailyRevenueModel extends DailyRevenueEntity {
+  const DailyRevenueModel({
+    required super.date,
+    required super.revenue,
+    required super.orders,
+  });
+
+  factory DailyRevenueModel.fromJson(Map<String, dynamic> json) {
+    return DailyRevenueModel(
+      date: json['date'] as String,
+      revenue: (json['revenue'] is num)
+          ? (json['revenue'] as num).toDouble()
+          : double.parse(json['revenue'].toString()),
+      orders: json['orders'] as int? ?? 0,
+    );
+  }
+}
 
 class TopProductModel extends TopProductEntity {
   const TopProductModel({
@@ -12,21 +30,15 @@ class TopProductModel extends TopProductEntity {
 
   factory TopProductModel.fromJson(Map<String, dynamic> json) {
     return TopProductModel(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Unknown',
-      imageUrl: json['imageUrl'],
-      totalSold: json['totalSold'] ?? 0,
-      totalRevenue: _parseDouble(json['totalRevenue']),
-      orderCount: json['orderCount'] ?? 0,
+      id: json['id'] as String,
+      name: json['name'] as String,
+      imageUrl: json['imageUrl'] as String?,
+      totalSold: json['totalSold'] as int? ?? 0,
+      totalRevenue: (json['totalRevenue'] is num)
+          ? (json['totalRevenue'] as num).toDouble()
+          : double.parse(json['totalRevenue'].toString()),
+      orderCount: json['orderCount'] as int? ?? 0,
     );
-  }
-
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
   }
 }
 
@@ -41,20 +53,14 @@ class CategoryRevenueModel extends CategoryRevenueEntity {
 
   factory CategoryRevenueModel.fromJson(Map<String, dynamic> json) {
     return CategoryRevenueModel(
-      id: json['id'],
-      name: json['name'] ?? 'Uncategorized',
-      totalRevenue: _parseDouble(json['totalRevenue']),
-      orderCount: json['orderCount'] ?? 0,
-      itemCount: json['itemCount'] ?? 0,
+      id: json['id'] as String?,
+      name: json['name'] as String,
+      totalRevenue: (json['totalRevenue'] is num)
+          ? (json['totalRevenue'] as num).toDouble()
+          : double.parse(json['totalRevenue'].toString()),
+      orderCount: json['orderCount'] as int? ?? 0,
+      itemCount: json['itemCount'] as int? ?? 0,
     );
-  }
-
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
   }
 }
 
@@ -67,18 +73,12 @@ class OrderStatusModel extends OrderStatusEntity {
 
   factory OrderStatusModel.fromJson(Map<String, dynamic> json) {
     return OrderStatusModel(
-      status: json['status'] ?? 'UNKNOWN',
-      count: json['count'] ?? 0,
-      totalRevenue: _parseDouble(json['totalRevenue']),
+      status: json['status'] as String,
+      count: json['count'] as int? ?? 0,
+      totalRevenue: (json['totalRevenue'] is num)
+          ? (json['totalRevenue'] as num).toDouble()
+          : double.parse(json['totalRevenue'].toString()),
     );
-  }
-
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
   }
 }
 
@@ -94,21 +94,15 @@ class LowStockProductModel extends LowStockProductEntity {
 
   factory LowStockProductModel.fromJson(Map<String, dynamic> json) {
     return LowStockProductModel(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Unknown',
-      stock: json['stock'] ?? 0,
-      price: _parseDouble(json['price']),
-      imageUrl: json['imageUrl'],
-      categoryName: json['categoryName'],
+      id: json['id'] as String,
+      name: json['name'] as String,
+      stock: json['stock'] as int? ?? 0,
+      price: (json['price'] is num)
+          ? (json['price'] as num).toDouble()
+          : double.parse(json['price'].toString()),
+      imageUrl: json['imageUrl'] as String?,
+      categoryName: json['categoryName'] as String?,
     );
-  }
-
-  static double _parseDouble(dynamic value) {
-    if (value == null) return 0.0;
-    if (value is double) return value;
-    if (value is int) return value.toDouble();
-    if (value is String) return double.tryParse(value) ?? 0.0;
-    return 0.0;
   }
 }
 
@@ -124,14 +118,12 @@ class RecentSignupModel extends RecentSignupEntity {
 
   factory RecentSignupModel.fromJson(Map<String, dynamic> json) {
     return RecentSignupModel(
-      id: json['id'] ?? '',
-      name: json['name'] ?? 'Anonymous',
-      phoneNumber: json['phoneNumber'] ?? '',
-      email: json['email'],
-      joinedAt: json['joinedAt'] != null
-          ? DateTime.parse(json['joinedAt'])
-          : DateTime.now(),
-      isVerified: json['isVerified'] ?? false,
+      id: json['id'] as String,
+      name: json['name'] as String,
+      phoneNumber: json['phoneNumber'] as String,
+      email: json['email'] as String?,
+      joinedAt: DateTime.parse(json['joinedAt'] as String),
+      isVerified: json['isVerified'] as bool? ?? false,
     );
   }
 }
@@ -143,41 +135,37 @@ class AnalyticsDataModel extends AnalyticsDataEntity {
     required super.orderStatusDistribution,
     required super.lowStockProducts,
     required super.recentSignups,
+    super.dailyRevenue,
+    super.selectedDates,
   });
 
   factory AnalyticsDataModel.fromJson(Map<String, dynamic> json) {
     return AnalyticsDataModel(
-      topProducts:
-          (json['topProducts'] as List<dynamic>?)
-              ?.map((p) => TopProductModel.fromJson(p as Map<String, dynamic>))
-              .toList() ??
-          [],
-      revenueByCategory:
-          (json['revenueByCategory'] as List<dynamic>?)
-              ?.map(
-                (c) => CategoryRevenueModel.fromJson(c as Map<String, dynamic>),
-              )
-              .toList() ??
-          [],
-      orderStatusDistribution:
-          (json['orderStatusDistribution'] as List<dynamic>?)
-              ?.map((s) => OrderStatusModel.fromJson(s as Map<String, dynamic>))
-              .toList() ??
-          [],
-      lowStockProducts:
-          (json['lowStockProducts'] as List<dynamic>?)
-              ?.map(
-                (p) => LowStockProductModel.fromJson(p as Map<String, dynamic>),
-              )
-              .toList() ??
-          [],
-      recentSignups:
-          (json['recentSignups'] as List<dynamic>?)
-              ?.map(
-                (u) => RecentSignupModel.fromJson(u as Map<String, dynamic>),
-              )
-              .toList() ??
-          [],
+      topProducts: (json['topProducts'] as List? ?? [])
+          .map((e) => TopProductModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      revenueByCategory: (json['revenueByCategory'] as List? ?? [])
+          .map((e) => CategoryRevenueModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      orderStatusDistribution: (json['orderStatusDistribution'] as List? ?? [])
+          .map((e) => OrderStatusModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      lowStockProducts: (json['lowStockProducts'] as List? ?? [])
+          .map((e) => LowStockProductModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      recentSignups: (json['recentSignups'] as List? ?? [])
+          .map((e) => RecentSignupModel.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      dailyRevenue: json['dailyRevenue'] != null
+          ? (json['dailyRevenue'] as List)
+                .map(
+                  (e) => DailyRevenueModel.fromJson(e as Map<String, dynamic>),
+                )
+                .toList()
+          : null,
+      selectedDates: json['selectedDates'] != null
+          ? (json['selectedDates'] as List).map((e) => e.toString()).toList()
+          : null,
     );
   }
 }

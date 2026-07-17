@@ -110,6 +110,24 @@ interface ProductUpdateData {
   isActive?: boolean;
 }
 
+interface MarketData {
+  name: string;
+  slug?: string;
+  city?: string;
+  deliveryPrice: number; // ✅ NEW
+  freeDeliveryMinQuantity?: number; // ✅ NEW
+  deliveryEstimationMinutes?: number; // ✅ NEW
+}
+
+interface MarketUpdateData {
+  name?: string;
+  slug?: string;
+  city?: string;
+  isActive?: boolean;
+  deliveryPrice?: number; // ✅ NEW
+  freeDeliveryMinQuantity?: number; // ✅ NEW
+  deliveryEstimationMinutes?: number; // ✅ NEW
+}
 @Injectable()
 export class AdminService {
   // ✅ CORRECT - all services properly injected
@@ -2195,6 +2213,10 @@ export class AdminService {
         slug,
         city: data.city || null,
         isActive: true,
+        // ✅ NEW FIELDS
+        deliveryPrice: data.deliveryPrice.toString(),
+        freeDeliveryMinQuantity: data.freeDeliveryMinQuantity || null,
+        deliveryEstimationMinutes: data.deliveryEstimationMinutes ?? 90,
       })
       .returning();
 
@@ -2204,10 +2226,18 @@ export class AdminService {
   async updateMarket(marketId: string, data: MarketUpdateData) {
     const updateValues: Record<string, unknown> = { updatedAt: new Date() };
 
-    if (data.name) updateValues.name = data.name;
-    if (data.slug) updateValues.slug = data.slug;
+    if (data.name !== undefined) updateValues.name = data.name;
+    if (data.slug !== undefined) updateValues.slug = data.slug;
     if (data.city !== undefined) updateValues.city = data.city;
     if (data.isActive !== undefined) updateValues.isActive = data.isActive;
+
+    // ✅ NEW FIELDS
+    if (data.deliveryPrice !== undefined)
+      updateValues.deliveryPrice = data.deliveryPrice.toString();
+    if (data.freeDeliveryMinQuantity !== undefined)
+      updateValues.freeDeliveryMinQuantity = data.freeDeliveryMinQuantity;
+    if (data.deliveryEstimationMinutes !== undefined)
+      updateValues.deliveryEstimationMinutes = data.deliveryEstimationMinutes;
 
     const [market] = await this.drizzle.db
       .update(markets)
@@ -2282,6 +2312,9 @@ export class AdminService {
           slug: markets.slug,
           city: markets.city,
           isActive: markets.isActive,
+          deliveryPrice: markets.deliveryPrice, // ✅ NEW
+          freeDeliveryMinQuantity: markets.freeDeliveryMinQuantity, // ✅ NEW
+          deliveryEstimationMinutes: markets.deliveryEstimationMinutes, // ✅ NEW
           createdAt: markets.createdAt,
           updatedAt: markets.updatedAt,
           userCount: sql<number>`CAST(COUNT(${users.id}) AS INTEGER)`,
@@ -2294,6 +2327,9 @@ export class AdminService {
           markets.slug,
           markets.city,
           markets.isActive,
+          markets.deliveryPrice,
+          markets.freeDeliveryMinQuantity,
+          markets.deliveryEstimationMinutes,
           markets.createdAt,
           markets.updatedAt,
         )
@@ -2315,7 +2351,6 @@ export class AdminService {
       },
     };
   }
-
   // Add a dedicated deactivate endpoint method
   async deactivateMarket(marketId: string) {
     const [updatedMarket] = await this.drizzle.db

@@ -1,5 +1,20 @@
 import 'package:equatable/equatable.dart';
 
+class DailyRevenueEntity extends Equatable {
+  final String date;
+  final double revenue;
+  final int orders;
+
+  const DailyRevenueEntity({
+    required this.date,
+    required this.revenue,
+    required this.orders,
+  });
+
+  @override
+  List<Object?> get props => [date, revenue, orders];
+}
+
 class TopProductEntity extends Equatable {
   final String id;
   final String name;
@@ -118,12 +133,18 @@ class AnalyticsDataEntity extends Equatable {
   final List<LowStockProductEntity> lowStockProducts;
   final List<RecentSignupEntity> recentSignups;
 
+  // New fields for custom dates
+  final List<DailyRevenueEntity>? dailyRevenue;
+  final List<String>? selectedDates;
+
   const AnalyticsDataEntity({
     required this.topProducts,
     required this.revenueByCategory,
     required this.orderStatusDistribution,
     required this.lowStockProducts,
     required this.recentSignups,
+    this.dailyRevenue,
+    this.selectedDates,
   });
 
   @override
@@ -133,5 +154,7 @@ class AnalyticsDataEntity extends Equatable {
     orderStatusDistribution,
     lowStockProducts,
     recentSignups,
+    dailyRevenue,
+    selectedDates,
   ];
 }

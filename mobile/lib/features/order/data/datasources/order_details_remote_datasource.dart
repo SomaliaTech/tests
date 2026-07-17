@@ -6,7 +6,12 @@ import '../../domain/entities/order_details.dart';
 import '../models/order_details_model.dart';
 
 abstract class OrderDetailsRemoteDataSource {
-  Future<OrderDetails> getOrderDetails(String token, String orderId);
+  Future<OrderDetails> getOrderDetails(
+    String token,
+    String orderId, {
+    bool isAdmin = false,
+    bool isSuperAdmin = false,
+  });
 }
 
 class OrderDetailsRemoteDataSourceImpl implements OrderDetailsRemoteDataSource {
@@ -15,19 +20,47 @@ class OrderDetailsRemoteDataSourceImpl implements OrderDetailsRemoteDataSource {
   OrderDetailsRemoteDataSourceImpl({required this.client});
 
   @override
-  Future<OrderDetails> getOrderDetails(String token, String orderId) async {
+  Future<OrderDetails> getOrderDetails(
+    String token,
+    String orderId, {
+    bool isAdmin = false,
+    bool isSuperAdmin = false,
+  }) async {
     try {
-      final response = await client.get(
-        Uri.parse('${ApiConstants.baseUrl}/orders/$orderId'),
-        headers: {'Authorization': 'Bearer $token'},
+      final isAdminUser = isAdmin || isSuperAdmin;
+      final url = isAdminUser
+          ? '${ApiConstants.baseUrl}/admin/revenue/$orderId'
+          : '${ApiConstants.baseUrl}/orders/$orderId';
+
+      print(
+        '🔍 [OrderDetails] Fetching: $url (admin: $isAdmin, superAdmin: $isSuperAdmin)',
       );
 
+      final response = await client.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print('📡 [OrderDetails] Response Status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
-        return OrderDetailsModel.fromJson(json.decode(response.body));
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        return OrderDetailsModel.fromJson(data);
+      } else if (response.statusCode == 403) {
+        throw ServerException('You do not have permission to view this order');
+      } else if (response.statusCode == 404) {
+        throw ServerException('Order not found');
       } else {
-        throw ServerException('Failed to load order details');
+        throw ServerException(
+          'Failed to load order details: ${response.statusCode}',
+        );
       }
     } catch (e) {
+      print('❌ [OrderDetails] Error: $e');
+      if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }
   }

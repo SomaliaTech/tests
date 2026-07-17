@@ -5,14 +5,14 @@ class BottomCheckoutBar extends StatelessWidget {
   final int itemCount;
   final double total;
   final bool isEnabled;
-  final VoidCallback onCheckout;
+  final VoidCallback? onCheckout; // ✅ Make nullable
 
   const BottomCheckoutBar({
     super.key,
     required this.itemCount,
     required this.total,
     required this.isEnabled,
-    required this.onCheckout,
+    required this.onCheckout, // ✅ Can be null now
   });
 
   @override
@@ -50,12 +50,12 @@ class BottomCheckoutBar extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             GestureDetector(
-              onTap: isEnabled ? onCheckout : null,
+              onTap: (isEnabled && onCheckout != null) ? onCheckout : null,
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
-                  color: isEnabled
+                  color: (isEnabled && onCheckout != null)
                       ? const Color(0xFF2ED573)
                       : const Color(0xFFA8E6CF),
                   borderRadius: BorderRadius.circular(12),
@@ -63,9 +63,11 @@ class BottomCheckoutBar extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'Proceed to Checkout',
-                      style: TextStyle(
+                    Text(
+                      onCheckout != null
+                          ? 'Proceed to Checkout'
+                          : 'Fix Stock Issues to Continue',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,

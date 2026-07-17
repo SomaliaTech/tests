@@ -2,5 +2,9 @@ import '../../../../core/utils/typedefs.dart';
 import '../entities/order_details.dart';
 
 abstract class OrderDetailsRepository {
-  ResultFuture<OrderDetails> getOrderDetails(String orderId);
+  ResultFuture<OrderDetails> getOrderDetails(
+    String orderId, {
+    bool isAdmin = false,
+    bool isSuperAdmin = false,
+  });
 }

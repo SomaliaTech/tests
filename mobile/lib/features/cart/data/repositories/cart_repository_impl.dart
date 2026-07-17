@@ -20,6 +20,7 @@ class CartRepositoryImpl implements CartRepository {
     }
   }
 
+  // This is already correct in your code:
   @override
   ResultFuture<void> addToCart(CartItem item) async {
     try {

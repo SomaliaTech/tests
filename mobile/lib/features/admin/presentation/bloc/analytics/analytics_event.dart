@@ -22,3 +22,11 @@ class ChangeAnalyticsPeriodEvent extends AnalyticsEvent {
   @override
   List<Object?> get props => [period];
 }
+
+class LoadCustomDatesAnalyticsEvent extends AnalyticsEvent {
+  final List<DateTime> dates;
+  const LoadCustomDatesAnalyticsEvent(this.dates);
+
+  @override
+  List<Object?> get props => [dates];
+}

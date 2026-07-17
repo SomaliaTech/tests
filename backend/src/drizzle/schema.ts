@@ -314,19 +314,32 @@ export const addresses = pgTable(
 // ==========================================
 // MARKETS TABLE
 // ==========================================
-export const markets = pgTable('markets', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: varchar('name', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
-  city: varchar('city', { length: 255 }),
-  isActive: boolean('is_active').default(true),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const markets = pgTable(
+  'markets',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: varchar('name', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 255 }).notNull().unique(),
+    city: varchar('city', { length: 255 }),
+    isActive: boolean('is_active').default(true),
+
+    // ✅ NEW FIELDS
+    deliveryPrice: decimal('delivery_price', { precision: 10, scale: 2 })
+      .notNull()
+      .default('0.00'),
+    freeDeliveryMinQuantity: integer('free_delivery_min_quantity'), // Optional: min items for free delivery
+    deliveryEstimationMinutes: integer('delivery_estimation_minutes').default(
+      90,
+    ), // Default 90 mins
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    slugIdx: uniqueIndex('market_slug_idx').on(table.slug),
+    activeIdx: index('market_active_idx').on(table.isActive),
+  }),
+);
 
 // ==========================================
 // ORDERS TABLE

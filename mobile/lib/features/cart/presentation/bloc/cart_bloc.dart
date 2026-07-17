@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/cart/domain/usecases/add_to_cart.dart';
@@ -43,10 +44,59 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     AddToCartEvent event,
     Emitter<CartState> emit,
   ) async {
-    // 1. Save to local storage
-    await addToCart(event.item);
-    // 2. Reload local storage and emit
-    add(LoadCartEvent());
+    final currentState = state;
+
+    debugPrint('🛒 CartBloc._onAddToCart: ${event.item.name}');
+    debugPrint('🛒 productId: ${event.item.productId}');
+    debugPrint('🛒 productVariantId: ${event.item.productVariantId}');
+    debugPrint('🛒 quantity: ${event.item.quantity}');
+
+    // ✅ Optimistic update with PROPER merge logic
+    if (currentState is CartLoaded) {
+      final existingIndex = currentState.items.indexWhere(
+        (i) => _isSameItem(i, event.item),
+      );
+
+      List<CartItem> updatedItems;
+      if (existingIndex >= 0) {
+        final existingItem = currentState.items[existingIndex];
+        updatedItems = List<CartItem>.from(currentState.items);
+        updatedItems[existingIndex] = existingItem.copyWith(
+          quantity: existingItem.quantity + event.item.quantity,
+        );
+        debugPrint(
+          '🛒 Merged with existing item: ${existingItem.name}, new qty: ${updatedItems[existingIndex].quantity}',
+        );
+      } else {
+        updatedItems = [...currentState.items, event.item];
+        debugPrint('🛒 Added new item: ${event.item.name}');
+      }
+      _emitCartLoaded(updatedItems, emit);
+    }
+
+    final result = await addToCart(event.item);
+
+    result.fold(
+      (failure) {
+        debugPrint('❌ Add to cart FAILED: ${failure.message}');
+        emit(CartError(failure.message));
+        add(LoadCartEvent());
+      },
+      (_) {
+        debugPrint('✅ Add to cart SUCCESS');
+        add(LoadCartEvent());
+      },
+    );
+  }
+
+  /// ✅ Check if two items are the same product
+  bool _isSameItem(CartItem a, CartItem b) {
+    // If both have variant IDs, match by variant
+    if (a.productVariantId.isNotEmpty && b.productVariantId.isNotEmpty) {
+      return a.productVariantId == b.productVariantId;
+    }
+    // If one or both don't have variants, match by product ID
+    return a.productId == b.productId;
   }
 
   Future<void> _onUpdateQuantity(
