@@ -321,6 +321,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'phoneNumber': _phoneController.text,
       },
       'paymentMethod': _selectedPaymentMethod,
+      'deliveryFee': _deliveryFee, // ✅ Send delivery fee to backend
     };
     context.read<OrderBloc>().add(CreateOrderEvent(orderData));
   }

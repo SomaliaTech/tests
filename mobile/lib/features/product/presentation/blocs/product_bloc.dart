@@ -1,3 +1,4 @@
+// lib/features/product/presentation/blocs/product_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/product/domain/usecases/get_categories.dart';
 import 'package:mobile/features/product/domain/usecases/get_featured_products.dart';
@@ -5,7 +6,6 @@ import 'package:mobile/features/product/domain/usecases/get_product_by_id.dart';
 import 'package:mobile/features/product/domain/usecases/get_products_by_category.dart';
 import 'package:mobile/features/product/domain/usecases/get_subcategories.dart';
 import 'package:mobile/features/product/domain/usecases/search_products.dart';
-
 import 'product_event.dart';
 import 'product_state.dart';
 
@@ -15,7 +15,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final GetFeaturedProducts getFeaturedProducts;
   final GetProductsByCategory getProductsByCategory;
   final SearchProducts searchProducts;
-  final GetProductById getProductById; // Fixed: Use GetProductById
+  final GetProductById getProductById;
 
   ProductBloc({
     required this.getCategories,
@@ -23,60 +23,165 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     required this.getFeaturedProducts,
     required this.getProductsByCategory,
     required this.searchProducts,
-    required this.getProductById, // Fixed parameter name
+    required this.getProductById,
   }) : super(ProductInitial()) {
-    on<GetCategoriesEvent>((event, emit) async {
+    on<GetCategoriesEvent>(_onGetCategories);
+    on<GetSubcategoriesEvent>(_onGetSubcategories);
+    on<GetFeaturedProductsEvent>(_onGetFeaturedProducts);
+    on<GetProductsByCategoryEvent>(_onGetProductsByCategory);
+    on<SearchProductsEvent>(_onSearchProducts);
+    on<GetProductByIdEvent>(_onGetProductById);
+  }
+
+  // ✅ Helper to create user-friendly error messages
+  String _getFriendlyErrorMessage(String originalError) {
+    final error = originalError.toLowerCase();
+
+    if (error.contains('internet') ||
+        error.contains('network') ||
+        error.contains('connection') ||
+        error.contains('socketexception') ||
+        error.contains('unreachable') ||
+        error.contains('timeout')) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    if (error.contains('server') ||
+        error.contains('500') ||
+        error.contains('502')) {
+      return 'Server is temporarily unavailable. Please try again later.';
+    }
+
+    if (error.contains('404') || error.contains('not found')) {
+      return 'The requested item was not found.';
+    }
+
+    if (error.contains('unauthorized') || error.contains('401')) {
+      return 'Your session has expired. Please login again.';
+    }
+
+    return 'Something went wrong. Please try again.';
+  }
+
+  // 🚀 Categories - Show cached first, skip loading if data exists
+  Future<void> _onGetCategories(
+    GetCategoriesEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! CategoriesLoaded) {
       emit(CategoriesLoading());
-      final result = await getCategories();
-      result.fold(
-        (failure) => emit(CategoriesError(failure.message)),
-        (categories) => emit(CategoriesLoaded(categories)),
-      );
-    });
+    }
 
-    on<GetSubcategoriesEvent>((event, emit) async {
-      emit(SubcategoriesLoading());
-      final result = await getSubcategories(event.parentId);
-      result.fold(
-        (failure) => emit(SubcategoriesError(failure.message)),
-        (subcategories) => emit(SubcategoriesLoaded(subcategories)),
-      );
-    });
+    final result = await getCategories();
+    if (emit.isDone) return;
 
-    on<GetFeaturedProductsEvent>((event, emit) async {
+    result.fold((failure) {
+      if (currentState is! CategoriesLoaded) {
+        emit(CategoriesError(_getFriendlyErrorMessage(failure.message)));
+      }
+    }, (categories) => emit(CategoriesLoaded(categories)));
+  }
+
+  Future<void> _onGetSubcategories(
+    GetSubcategoriesEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(SubcategoriesLoading());
+    final result = await getSubcategories(event.parentId);
+    if (emit.isDone) return;
+
+    result.fold(
+      (failure) =>
+          emit(SubcategoriesError(_getFriendlyErrorMessage(failure.message))),
+      (subcategories) => emit(SubcategoriesLoaded(subcategories)),
+    );
+  }
+
+  // In ProductBloc, update _onGetFeaturedProducts
+  Future<void> _onGetFeaturedProducts(
+    GetFeaturedProductsEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    // ✅ If force refresh, always show loading
+    if (event.forceRefresh) {
       emit(FeaturedProductsLoading());
-      final result = await getFeaturedProducts(limit: 10);
-      result.fold(
-        (failure) => emit(FeaturedProductsError(failure.message)),
-        (products) => emit(FeaturedProductsLoaded(products)),
-      );
-    });
+    } else {
+      final currentState = state;
+      if (currentState is! FeaturedProductsLoaded) {
+        emit(FeaturedProductsLoading());
+      }
+    }
 
-    on<GetProductsByCategoryEvent>((event, emit) async {
+    final result = await getFeaturedProducts(limit: event.limit ?? 10);
+    if (emit.isDone) return;
+
+    result.fold((failure) {
+      if (state is! FeaturedProductsLoaded || event.forceRefresh) {
+        emit(FeaturedProductsError(failure.message));
+      }
+    }, (products) => emit(FeaturedProductsLoaded(products)));
+  }
+
+  // 🚀 Products by Category - Show cached first
+  Future<void> _onGetProductsByCategory(
+    GetProductsByCategoryEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! ProductsLoaded) {
       emit(ProductLoading());
-      final result = await getProductsByCategory(event.categoryId);
-      result.fold(
-        (failure) => emit(ProductError(failure.message)),
-        (products) => emit(ProductsLoaded(products)),
-      );
-    });
+    }
 
-    on<SearchProductsEvent>((event, emit) async {
-      emit(ProductLoading());
-      final result = await searchProducts(query: event.query);
-      result.fold(
-        (failure) => emit(ProductError(failure.message)),
-        (products) => emit(ProductsLoaded(products)),
-      );
-    });
+    final result = await getProductsByCategory(event.categoryId);
+    if (emit.isDone) return;
 
-    on<GetProductByIdEvent>((event, emit) async {
+    result.fold((failure) {
+      if (currentState is! ProductsLoaded) {
+        emit(ProductError(_getFriendlyErrorMessage(failure.message)));
+      }
+    }, (products) => emit(ProductsLoaded(products)));
+  }
+
+  // Search - Always show loading (no cache for search)
+  Future<void> _onSearchProducts(
+    SearchProductsEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    emit(ProductLoading());
+    final result = await searchProducts(
+      query: event.query,
+      minPrice: event.minPrice,
+      maxPrice: event.maxPrice,
+      categoryId: event.categoryId,
+      sortBy: event.sortBy,
+    );
+    if (emit.isDone) return;
+
+    result.fold(
+      (failure) =>
+          emit(ProductError(_getFriendlyErrorMessage(failure.message))),
+      (products) => emit(ProductsLoaded(products)),
+    );
+  }
+
+  // 🚀 Product Detail - Show cached first
+  Future<void> _onGetProductById(
+    GetProductByIdEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    final currentState = state;
+    if (currentState is! ProductDetailLoaded) {
       emit(ProductDetailLoading());
-      final result = await getProductById(event.productId);
-      result.fold(
-        (failure) => emit(ProductDetailError(failure.message)),
-        (product) => emit(ProductDetailLoaded(product)),
-      );
-    });
+    }
+
+    final result = await getProductById(event.productId);
+    if (emit.isDone) return;
+
+    result.fold((failure) {
+      if (currentState is! ProductDetailLoaded) {
+        emit(ProductDetailError(_getFriendlyErrorMessage(failure.message)));
+      }
+    }, (product) => emit(ProductDetailLoaded(product)));
   }
 }

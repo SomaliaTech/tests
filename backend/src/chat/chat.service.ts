@@ -426,6 +426,8 @@ export class ChatService {
   }
   // Add these methods to ChatService class
 
+  // In chat.service.ts - getAllConversationsForSuperAdmin
+
   async getAllConversationsForSuperAdmin(
     superAdminId: string,
     page: number = 1,
@@ -434,6 +436,7 @@ export class ChatService {
   ) {
     const offset = (page - 1) * limit;
 
+    // ✅ First, get conversations that have at least one admin participant AND have messages
     let query = sql`
     SELECT DISTINCT ON (c.id)
       c.id as "conversationId",
@@ -450,13 +453,19 @@ export class ChatService {
       c.last_message as "lastMessage",
       c.last_message_type as "lastMessageType",
       c.last_message_at as "lastMessageTime",
-      c.created_at as "createdAt"
+      c.created_at as "createdAt",
+      (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as "messageCount"
     FROM conversations c
     JOIN users u1 ON u1.id = c.participant1
     JOIN users u2 ON u2.id = c.participant2
     WHERE 
-      (u1.is_admin = true OR u1.is_super_admin = true)
-      OR (u2.is_admin = true OR u2.is_super_admin = true)
+      (
+        (u1.is_admin = true OR u1.is_super_admin = true)
+        OR (u2.is_admin = true OR u2.is_super_admin = true)
+      )
+      AND (u1.is_admin = true OR u1.is_super_admin = true OR u2.is_admin = true OR u2.is_super_admin = true)
+      AND u1.is_active = true
+      AND u2.is_active = true
   `;
 
     // Add search filter
@@ -467,6 +476,7 @@ export class ChatService {
       OR u1.phone_number ILIKE ${searchPattern}
       OR u2.name ILIKE ${searchPattern}
       OR u2.phone_number ILIKE ${searchPattern}
+      OR c.last_message ILIKE ${searchPattern}
     )`;
     }
 
@@ -482,6 +492,10 @@ export class ChatService {
 
     const rows = (result.rows || []) as any[];
     const total = (countResult.rows?.[0] as any)?.count || 0;
+
+    this.logger.log(
+      `Found ${rows.length} conversations for super admin (total: ${total})`,
+    );
 
     return {
       conversations: rows.map((row: any) => ({
@@ -504,6 +518,7 @@ export class ChatService {
         lastMessageType: row.lastMessageType || 'text',
         lastMessageTime: this.toISOString(row.lastMessageTime),
         createdAt: this.toISOString(row.createdAt),
+        messageCount: Number(row.messageCount) || 0,
       })),
       pagination: {
         page,

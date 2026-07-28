@@ -1,3 +1,4 @@
+// lib/features/product/presentation/screens/search_results_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -25,9 +26,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     super.initState();
     _searchController.text = widget.initialQuery;
 
-    // Trigger initial search
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProductBloc>().add(SearchProductsEvent(widget.initialQuery));
+      context.read<ProductBloc>().add(
+        SearchProductsEvent(query: widget.initialQuery),
+      );
     });
   }
 
@@ -45,10 +47,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
       if (query.trim().isNotEmpty) {
-        context.read<ProductBloc>().add(SearchProductsEvent(query.trim()));
+        context.read<ProductBloc>().add(
+          SearchProductsEvent(query: query.trim()),
+        );
       } else {
-        // Clear results if search is empty
-        context.read<ProductBloc>().add(SearchProductsEvent(''));
+        context.read<ProductBloc>().add(const SearchProductsEvent(query: ''));
       }
     });
   }
@@ -56,7 +59,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   void _performSearch() {
     final query = _searchController.text.trim();
     if (query.isNotEmpty) {
-      context.read<ProductBloc>().add(SearchProductsEvent(query));
+      context.read<ProductBloc>().add(SearchProductsEvent(query: query));
     }
   }
 
@@ -105,7 +108,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                   ),
                   onPressed: () {
                     _searchController.clear();
-                    context.read<ProductBloc>().add(SearchProductsEvent(''));
+                    context.read<ProductBloc>().add(
+                      const SearchProductsEvent(query: ''),
+                    );
                   },
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -141,7 +146,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                       final query = _searchController.text.trim();
                       if (query.isNotEmpty) {
                         context.read<ProductBloc>().add(
-                          SearchProductsEvent(query),
+                          SearchProductsEvent(query: query),
                         );
                       }
                     },

@@ -91,9 +91,16 @@ class _AddAddressFormState extends State<AddAddressForm> {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.of(context).size.height;
+    final viewInsets = MediaQuery.of(context).viewInsets;
+    final padding = MediaQuery.of(context).padding;
+    final isSmallScreen = screenHeight < 700;
+    final availableHeight = screenHeight - padding.top - padding.bottom;
+    final modalHeight = isSmallScreen
+        ? availableHeight * 0.95
+        : screenHeight * 0.8;
 
     return Container(
-      height: screenHeight * 0.8,
+      height: modalHeight,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -143,7 +150,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
                           color: Color(0xFF1F2937),
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: 20),
                       Text(
                         'Where should we deliver?',
                         style: TextStyle(
@@ -259,8 +266,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
                       _buildInputField(
                         controller: _fullAddressController,
                         label: 'Full Address',
-                        hint:
-                            'Faldan Gali alaabta  Meesha lagu keeni doono alaabta',
+                        hint: 'Faldan gali goobta aad si alaabta lagugu keeno ',
                         icon: Iconsax.location,
                         iconColor: const Color(0xFF3B82F6),
                         maxLines: 3,

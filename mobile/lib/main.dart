@@ -1,11 +1,15 @@
+// lib/main.dart
+import 'dart:io';
+import 'package:hive_flutter/adapters.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/core/network/internet_banner.dart';
 import 'package:provider/provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:mobile/core/common/widgets/main_navigation_screen.dart';
-import 'package:mobile/core/common/widgets/no_internet_screen.dart';
 import 'package:mobile/core/services/connectivity_service.dart';
 import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/core/services/navigation_service.dart';
@@ -46,6 +50,7 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
 
   // Initialize Firebase
   try {
@@ -53,52 +58,115 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      print('✅ Firebase initialized successfully');
-    } else {
-      print('⚠️ Firebase already initialized, using existing instance');
+      debugPrint('✅ Firebase initialized successfully');
     }
   } catch (e) {
-    print('❌ Firebase initialization error: $e');
-    if (Firebase.apps.isEmpty) {
-      try {
-        await Firebase.initializeApp();
-        print('✅ Firebase initialized successfully (without options)');
-      } catch (e2) {
-        print('❌ Firebase initialization failed: $e2');
-      }
-    }
+    debugPrint('❌ Firebase initialization error: $e');
   }
 
-  // Initialize dependencies
+  // ✅ Open ALL Hive boxes FIRST with correct types
+  await Future.wait([
+    Hive.openBox<String>('con6versations_cache'),
+    Hive.openBox<String>('messages_cache'),
+    Hive.openBox<String>('sync_timestamps'),
+    Hive.openBox<String>('product_cache'),
+    Hive.openBox<String>('category_cache'),
+  ]);
+
+  // ✅ Initialize dependencies AFTER boxes are open
   await initDependencies();
 
-  // Initialize connectivity service BEFORE other services
+  // Clear corrupted image cache on app start
+  await clearImageCache();
+
+  // Initialize connectivity service
   final connectivityService = ConnectivityService();
   connectivityService.initialize();
 
-  // Initialize push notifications
-  try {
-    final pushService = PushNotificationService();
-    await pushService.init();
-  } catch (e) {
-    print('⚠️ Push notification init failed (expected on simulator): $e');
-  }
+  // Initialize push notifications in background
+  PushNotificationService().init().catchError((e) {
+    debugPrint('⚠️ Push notification init failed: $e');
+  });
 
-  // Initialize sound manager
-  try {
-    final soundManager = MessageSoundManager();
-    await soundManager.init();
-  } catch (e) {
-    print('⚠️ Sound manager init failed: $e');
-  }
+  // Initialize sound manager in background
+  MessageSoundManager().init().catchError((e) {
+    debugPrint('⚠️ Sound manager init failed: $e');
+  });
 
-  runApp(MyApp(connectivityService: connectivityService));
+  // 🚀 Check if user is already authenticated BEFORE building the app
+  final storageService = sl<StorageService>();
+  final isAuthenticated = await storageService.isAuthenticated();
+  final token = await storageService.getAuthToken();
+
+  runApp(
+    MyApp(
+      connectivityService: connectivityService,
+      isInitiallyAuthenticated:
+          isAuthenticated && token != null && token.isNotEmpty,
+    ),
+  );
+}
+
+/// Clear corrupted/old cached images
+Future<void> clearImageCache() async {
+  try {
+    final cacheDir = await getTemporaryDirectory();
+    final cachePath = '${cacheDir.path}/libCachedImageData';
+    final cacheDirObj = Directory(cachePath);
+
+    if (await cacheDirObj.exists()) {
+      int deletedCount = 0;
+      final now = DateTime.now();
+
+      await for (final entity in cacheDirObj.list(recursive: true)) {
+        if (entity is File) {
+          bool shouldDelete = false;
+
+          try {
+            final stat = await entity.stat();
+            final age = now.difference(stat.modified);
+
+            // Delete if older than 24 hours
+            if (age.inHours > 24) {
+              shouldDelete = true;
+            }
+
+            // Delete if too small (likely corrupted)
+            if (stat.size < 500) {
+              shouldDelete = true;
+            }
+          } catch (e) {
+            // Can't read file info - it's corrupted, delete it
+            shouldDelete = true;
+          }
+
+          if (shouldDelete) {
+            try {
+              await entity.delete();
+              deletedCount++;
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (deletedCount > 0) {
+        debugPrint('🗑️ Cleared $deletedCount cached image files');
+      }
+    }
+  } catch (e) {
+    debugPrint('⚠️ Error clearing image cache: $e');
+  }
 }
 
 class MyApp extends StatefulWidget {
   final ConnectivityService connectivityService;
+  final bool isInitiallyAuthenticated;
 
-  const MyApp({super.key, required this.connectivityService});
+  const MyApp({
+    super.key,
+    required this.connectivityService,
+    required this.isInitiallyAuthenticated,
+  });
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -124,7 +192,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       if (authState is Authenticated ||
           authState is OtpVerified ||
           authState is ProfileCompleted) {
-        // Only connect socket if we have internet
         if (widget.connectivityService.status != ConnectionStatus.offline) {
           sl<ChatSocketService>().connect();
         }
@@ -137,16 +204,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return ToastificationWrapper(
       child: MultiProvider(
         providers: [
-          // Connectivity Service - must be first
           ChangeNotifierProvider.value(value: widget.connectivityService),
-
-          // Auth Bloc
           BlocProvider(
             create: (context) =>
                 sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
           ),
-
-          // All other Blocs
           BlocProvider(create: (context) => sl<CartBloc>()),
           BlocProvider(create: (context) => sl<OrderBloc>()),
           BlocProvider(create: (context) => sl<ProductBloc>()),
@@ -169,11 +231,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<AdminCategoryBloc>()),
           BlocProvider(create: (context) => sl<AdminColorSizeBloc>()),
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
-          BlocProvider(create: (_) => sl<AdminBloc>()),
           BlocProvider(create: (_) => sl<FaqBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
-
-          // Storage Service
           Provider<StorageService>.value(value: sl<StorageService>()),
         ],
         child: MaterialApp(
@@ -181,22 +240,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           debugShowCheckedModeBanner: false,
           navigatorKey: NavigationService.navigatorKey,
           theme: AppTheme.lightTheme,
-          // Use AnimatedSwitcher for smooth transitions
+          builder: (context, child) {
+            return Stack(
+              children: [
+                Positioned.fill(child: child ?? const SizedBox.shrink()),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: const InternetBanner(),
+                  ),
+                ),
+              ],
+            );
+          },
+          // ✅ home property handles the root route
           home: Consumer<ConnectivityService>(
             builder: (context, connectivity, _) {
-              // Show splash while initial connection check
-              if (connectivity.isInitialCheck) {
+              if (connectivity.isInitialCheck &&
+                  !widget.isInitiallyAuthenticated) {
                 return const SplashScreen();
               }
 
-              // Show no internet screen when offline
-              if (connectivity.status == ConnectionStatus.offline) {
-                return NoInternetScreen(
-                  onRetry: () => connectivity.manualRetry(),
-                );
+              if (widget.isInitiallyAuthenticated) {
+                return const MainNavigationScreen();
               }
 
-              // Normal app flow when online
               return BlocBuilder<AuthBloc, AuthState>(
                 buildWhen: (previous, current) =>
                     current is AuthChecking ||
@@ -204,6 +275,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     current is Unauthenticated,
                 builder: (context, state) {
                   if (state is AuthChecking) {
+                    if (widget.isInitiallyAuthenticated) {
+                      return const MainNavigationScreen();
+                    }
                     return const SplashScreen();
                   } else if (state is Authenticated) {
                     return const MainNavigationScreen();
@@ -216,6 +290,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             },
           ),
+          // ✅ Only non-root routes here
           routes: {'/home': (context) => const MainNavigationScreen()},
         ),
       ),
@@ -242,7 +317,6 @@ class SplashScreen extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            // Decorative circles
             Positioned(
               top: -80,
               right: -80,
@@ -279,13 +353,10 @@ class SplashScreen extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Main content
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo container with glow
                   Container(
                     width: 120,
                     height: 120,
@@ -314,8 +385,6 @@ class SplashScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 32),
-
-                  // Brand name
                   const Text(
                     'FARXADA',
                     style: TextStyle(
@@ -333,8 +402,6 @@ class SplashScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // Tagline
                   Text(
                     'Your Shopping Destination',
                     style: TextStyle(
@@ -345,8 +412,6 @@ class SplashScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 60),
-
-                  // Loading indicator
                   SizedBox(
                     width: 40,
                     height: 40,
@@ -360,8 +425,6 @@ class SplashScreen extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Version at bottom
             Positioned(
               bottom: 40,
               left: 0,

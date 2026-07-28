@@ -1,217 +1,43 @@
-// import 'dart:convert';
-// import 'package:http/http.dart' as http;
-// import '../../../../core/constants/api_constants.dart';
-// import '../../../../core/error/exceptions.dart';
-// import '../../domain/entities/category.dart';
-// import '../../domain/entities/product.dart';
-// import '../models/category_model.dart';
-// import '../models/product_model.dart';
-
-// abstract class ProductRemoteDataSource {
-//   Future<List<Category>> getCategories();
-//   Future<List<Category>> getSubcategories(String parentId);
-//   Future<List<Product>> getFeaturedProducts({int limit});
-//   Future<List<Product>> getProductsByCategory(String categoryId);
-//   Future<List<Product>> searchProducts({
-//     String? query,
-//     double? minPrice,
-//     double? maxPrice,
-//     String? categoryId,
-//     String? sortBy,
-//   });
-//   Future<Product> getProductById(String id);
-//   Future<Product> getProductBySlug(String slug);
-// }
-
-// class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
-//   final http.Client client;
-
-//   ProductRemoteDataSourceImpl({required this.client});
-//   //
-
-//   @override
-//   Future<List<Category>> getCategories() async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.categories}'),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         final List<dynamic> jsonList = json.decode(response.body);
-//         // Use CategoryModel.fromJson directly (static method)
-//         return jsonList.map((json) => CategoryModel.fromJson(json)).toList();
-//       } else {
-//         throw ServerException(
-//           'Failed to load categories: ${response.statusCode}',
-//         );
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<List<Category>> getSubcategories(String parentId) async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse(
-//           '${ApiConstants.baseUrl}${ApiConstants.categories}/sub/$parentId',
-//         ),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         final List<dynamic> jsonList = json.decode(response.body);
-//         return jsonList.map((json) => CategoryModel.fromJson(json)).toList();
-//       } else {
-//         throw ServerException(
-//           'Failed to load subcategories: ${response.statusCode}',
-//         );
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<List<Product>> getFeaturedProducts({int limit = 10}) async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse(
-//           '${ApiConstants.baseUrl}${ApiConstants.featured}?limit=$limit',
-//         ),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         final List<dynamic> jsonList = json.decode(response.body);
-//         return jsonList.map((json) => ProductModel.fromJson(json)).toList();
-//       } else {
-//         throw ServerException(
-//           'Failed to load featured products: ${response.statusCode}',
-//         );
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<List<Product>> getProductsByCategory(String categoryId) async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse(
-//           '${ApiConstants.baseUrl}${ApiConstants.products}/category/$categoryId',
-//         ),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         final Map<String, dynamic> result = json.decode(response.body);
-//         final List<dynamic> products = result['products'] ?? [];
-//         return products.map((json) => ProductModel.fromJson(json)).toList();
-//       } else {
-//         throw ServerException(
-//           'Failed to load products by category: ${response.statusCode}',
-//         );
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<List<Product>> searchProducts({
-//     String? query,
-//     double? minPrice,
-//     double? maxPrice,
-//     String? categoryId,
-//     String? sortBy,
-//   }) async {
-//     try {
-//       final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.search}')
-//           .replace(
-//             queryParameters: {
-//               if (query != null) 'search': query,
-//               if (minPrice != null) 'minPrice': minPrice.toString(),
-//               if (maxPrice != null) 'maxPrice': maxPrice.toString(),
-//               if (categoryId != null) 'categoryId': categoryId,
-//               if (sortBy != null) 'sortBy': sortBy,
-//             },
-//           );
-
-//       final response = await client.get(uri, headers: ApiConstants.headers);
-
-//       if (response.statusCode == 200) {
-//         final Map<String, dynamic> result = json.decode(response.body);
-//         final List<dynamic> products = result['products'] ?? [];
-//         return products.map((json) => ProductModel.fromJson(json)).toList();
-//       } else {
-//         throw ServerException(
-//           'Failed to search products: ${response.statusCode}',
-//         );
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<Product> getProductById(String id) async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/$id'),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         return ProductModel.fromJson(json.decode(response.body));
-//       } else {
-//         throw ServerException('Failed to load product: ${response.statusCode}');
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-
-//   @override
-//   Future<Product> getProductBySlug(String slug) async {
-//     try {
-//       final response = await client.get(
-//         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/slug/$slug'),
-//         headers: ApiConstants.headers,
-//       );
-
-//       if (response.statusCode == 200) {
-//         return ProductModel.fromJson(json.decode(response.body));
-//       } else {
-//         throw ServerException('Failed to load product: ${response.statusCode}');
-//       }
-//     } catch (e) {
-//       throw ServerException('Network error: $e');
-//     }
-//   }
-// }
+// lib/features/product/data/repositories/product_repository_impl.dart
 import 'package:fpdart/fpdart.dart';
+import 'package:mobile/features/product/data/datasources/local/category_local_datasource.dart';
+import 'package:mobile/features/product/domain/entities/category.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
-import '../../domain/entities/category.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../datasources/local/product_local_datasource.dart';
 import '../datasources/product_remote_datasource.dart';
 
 class ProductRepositoryImpl implements ProductRepository {
   final ProductRemoteDataSource remoteDataSource;
+  final ProductLocalDataSource localDataSource;
+  final CategoryLocalDataSource categoryLocalDataSource; // ✅ Add this
 
-  const ProductRepositoryImpl({required this.remoteDataSource});
+  const ProductRepositoryImpl({
+    required this.remoteDataSource,
+    required this.localDataSource,
+    required this.categoryLocalDataSource, // ✅ Add this
+  });
 
+  // ✅ Add getCategories implementation
   @override
   ResultFuture<List<Category>> getCategories() async {
     try {
-      final categories = await remoteDataSource.getCategories();
-      return Right(categories);
+      final cachedCategories = await categoryLocalDataSource
+          .getCachedCategories();
+      try {
+        // Fetch from product remote or category remote
+        final remoteCategories = await remoteDataSource.getCategories();
+        await categoryLocalDataSource.cacheCategories(remoteCategories);
+        return Right(remoteCategories);
+      } catch (e) {
+        if (cachedCategories.isNotEmpty) {
+          return Right(cachedCategories);
+        }
+        rethrow;
+      }
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -219,11 +45,23 @@ class ProductRepositoryImpl implements ProductRepository {
     }
   }
 
+  // ✅ Add getSubcategories implementation
   @override
   ResultFuture<List<Category>> getSubcategories(String parentId) async {
     try {
-      final subcategories = await remoteDataSource.getSubcategories(parentId);
-      return Right(subcategories);
+      final cachedSubs = await categoryLocalDataSource.getCachedSubcategories(
+        parentId,
+      );
+      try {
+        final remoteSubs = await remoteDataSource.getSubcategories(parentId);
+        await categoryLocalDataSource.cacheSubcategories(parentId, remoteSubs);
+        return Right(remoteSubs);
+      } catch (e) {
+        if (cachedSubs.isNotEmpty) {
+          return Right(cachedSubs);
+        }
+        rethrow;
+      }
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -234,8 +72,19 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   ResultFuture<List<Product>> getFeaturedProducts({int limit = 10}) async {
     try {
-      final products = await remoteDataSource.getFeaturedProducts(limit: limit);
-      return Right(products);
+      final cachedProducts = await localDataSource.getCachedFeaturedProducts();
+      try {
+        final remoteProducts = await remoteDataSource.getFeaturedProducts(
+          limit: limit,
+        );
+        await localDataSource.cacheFeaturedProducts(remoteProducts);
+        return Right(remoteProducts);
+      } catch (e) {
+        if (cachedProducts.isNotEmpty) {
+          return Right(cachedProducts);
+        }
+        rethrow;
+      }
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -246,8 +95,24 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   ResultFuture<List<Product>> getProductsByCategory(String categoryId) async {
     try {
-      final products = await remoteDataSource.getProductsByCategory(categoryId);
-      return Right(products);
+      final cachedProducts = await localDataSource.getCachedProductsByCategory(
+        categoryId,
+      );
+      try {
+        final remoteProducts = await remoteDataSource.getProductsByCategory(
+          categoryId,
+        );
+        await localDataSource.cacheProductsByCategory(
+          categoryId,
+          remoteProducts,
+        );
+        return Right(remoteProducts);
+      } catch (e) {
+        if (cachedProducts.isNotEmpty) {
+          return Right(cachedProducts);
+        }
+        rethrow;
+      }
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -282,8 +147,17 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   ResultFuture<Product> getProductById(String id) async {
     try {
-      final product = await remoteDataSource.getProductById(id);
-      return Right(product);
+      final cachedProduct = await localDataSource.getCachedProduct(id);
+      try {
+        final remoteProduct = await remoteDataSource.getProductById(id);
+        await localDataSource.cacheProduct(remoteProduct);
+        return Right(remoteProduct);
+      } catch (e) {
+        if (cachedProduct != null) {
+          return Right(cachedProduct);
+        }
+        rethrow;
+      }
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     } catch (e) {
@@ -295,6 +169,7 @@ class ProductRepositoryImpl implements ProductRepository {
   ResultFuture<Product> getProductBySlug(String slug) async {
     try {
       final product = await remoteDataSource.getProductBySlug(slug);
+      await localDataSource.cacheProduct(product);
       return Right(product);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

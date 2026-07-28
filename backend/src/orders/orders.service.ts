@@ -321,10 +321,9 @@ export class OrdersService {
       const [user] = await tx.select().from(users).where(eq(users.id, userId));
       if (!user) throw new NotFoundException('User not found');
 
-      let totalAmount = 0;
+      let itemsTotal = 0; // ✅ Track items total separately
       const orderItemsData: any[] = [];
 
-      // Process items in parallel where possible
       for (const item of orderData.items) {
         if (item.productVariantId) {
           const [variant] = await tx
@@ -364,7 +363,7 @@ export class OrdersService {
           const unitPrice = variant.price
             ? Number(variant.price)
             : Number(variant.productPrice ?? 0);
-          totalAmount += unitPrice * item.quantity;
+          itemsTotal += unitPrice * item.quantity; // ✅ Add to itemsTotal
 
           orderItemsData.push({
             id: uuidv4(),
@@ -396,7 +395,7 @@ export class OrdersService {
           }
 
           const unitPrice = Number(product.price);
-          totalAmount += unitPrice * item.quantity;
+          itemsTotal += unitPrice * item.quantity; // ✅ Add to itemsTotal
 
           orderItemsData.push({
             id: uuidv4(),
@@ -414,6 +413,14 @@ export class OrdersService {
         }
       }
 
+      // ✅ Calculate final total including delivery fee
+      const deliveryFee = orderData.deliveryFee ?? 0;
+      const finalTotalAmount = itemsTotal + deliveryFee;
+
+      this.logger.log(
+        `💰 Order total: Items=${itemsTotal}, Delivery=${deliveryFee}, Final=${finalTotalAmount}`,
+      );
+
       const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const shippingAddress = `${orderData.shippingAddress.fullAddress} (${orderData.shippingAddress.label}) - Phone: ${orderData.shippingAddress.phoneNumber}`;
 
@@ -427,7 +434,7 @@ export class OrdersService {
           customerEmail: user.email || '',
           customerPhone: orderData.shippingAddress.phoneNumber,
           shippingAddress,
-          totalAmount: totalAmount.toString(),
+          totalAmount: finalTotalAmount.toString(), // ✅ Use finalTotalAmount with delivery fee
           status: 'PENDING',
           paymentMethod: orderData.paymentMethod,
           paymentStatus: 'PENDING',
@@ -461,18 +468,21 @@ export class OrdersService {
       // Clear cart
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
-      // Notify admins inside transaction (fire and forget pattern)
       this._notifyAdminsNewOrder(tx, order, user.name || 'Customer').catch(
         () => {},
       );
 
-      return { order, totalAmount, items: orderItemsData, user };
+      return {
+        order,
+        totalAmount: finalTotalAmount,
+        items: orderItemsData,
+        user,
+      };
     });
 
-    // ✅ FIRE AND FORGET - Don't await these! Return response immediately
     const { order, user } = result;
 
-    // Fire-and-forget: WebSocket notification
+    // Fire-and-forget notifications
     this.chatGateway.server.to(`user:${userId}`).emit('new_notification', {
       id: uuidv4(),
       type: 'order',
@@ -488,7 +498,6 @@ export class OrdersService {
       isRead: false,
     });
 
-    // Fire-and-forget: Push notification
     this.notificationsService
       .create({
         userId,
@@ -500,7 +509,6 @@ export class OrdersService {
       })
       .catch(() => {});
 
-    // ✅ Return immediately without waiting for email/notifications
     return {
       order: result.order,
       totalAmount: result.totalAmount,

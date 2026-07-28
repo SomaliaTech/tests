@@ -1,15 +1,15 @@
+// lib/features/support/presentation/screens/support_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:mobile/core/services/chat_admin_service.dart';
-import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
-import 'package:mobile/features/chat/presentation/screens/conversations_screen.dart';
+
 import 'package:mobile/features/chat/presentation/widgets/admin_chat_bottom_sheet.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_event.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_state.dart';
+import 'package:mobile/features/support/presentation/widgets/localization_helper.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -39,7 +39,7 @@ class _SupportScreenState extends State<SupportScreen>
     );
     _animationController.forward();
 
-    // ✅ Load FAQs from backend
+    // Load FAQs from backend
     context.read<FaqBloc>().add(const LoadActiveFaqsEvent());
   }
 
@@ -58,17 +58,15 @@ class _SupportScreenState extends State<SupportScreen>
     );
   }
 
-  static const String _phoneNumber = '2701';
-  static const String _email = 'support@farxada.com';
-
   Future<void> _makePhoneCall() async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: _phoneNumber);
-    final Uri smsUri = Uri(scheme: 'sms', path: _phoneNumber);
+    final l10n = context.supportLocalization;
+    final phoneUri = Uri(scheme: 'tel', path: l10n.phoneNumber);
+    final smsUri = Uri(scheme: 'sms', path: l10n.phoneNumber);
 
     try {
       if (await canLaunchUrl(phoneUri)) {
         await launchUrl(phoneUri);
-        debugPrint('✅ Phone call initiated to: $_phoneNumber');
+        debugPrint('✅ Phone call initiated to: ${l10n.phoneNumber}');
       } else if (await canLaunchUrl(smsUri)) {
         await launchUrl(smsUri);
         debugPrint('✅ Opened SMS instead of call');
@@ -81,16 +79,17 @@ class _SupportScreenState extends State<SupportScreen>
   }
 
   Future<void> _sendEmail() async {
-    final Uri emailUri = Uri(
+    final l10n = context.supportLocalization;
+    final emailUri = Uri(
       scheme: 'mailto',
-      path: _email,
+      path: l10n.email,
       queryParameters: {'subject': 'Support Request - Faraxada'},
     );
 
     try {
       if (await canLaunchUrl(emailUri)) {
         await launchUrl(emailUri);
-        debugPrint('✅ Email client opened for: $_email');
+        debugPrint('✅ Email client opened for: ${l10n.email}');
       } else {
         debugPrint('❌ Could not launch email app');
       }
@@ -101,11 +100,13 @@ class _SupportScreenState extends State<SupportScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.supportLocalization;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: CustomScrollView(
         slivers: [
-          // ✅ Modern App Bar with Green Gradient
+          // Modern App Bar with Green Gradient
           SliverAppBar(
             expandedHeight: 130,
             floating: false,
@@ -136,11 +137,11 @@ class _SupportScreenState extends State<SupportScreen>
               ),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              title: const Padding(
-                padding: EdgeInsets.only(left: 8, bottom: 8),
+              title: Padding(
+                padding: const EdgeInsets.only(left: 8, bottom: 8),
                 child: Text(
-                  'Help & Support',
-                  style: TextStyle(
+                  l10n.title,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
@@ -208,7 +209,7 @@ class _SupportScreenState extends State<SupportScreen>
             ),
           ),
 
-          // ✅ Content
+          // Content
           SliverToBoxAdapter(
             child: FadeTransition(
               opacity: _fadeInAnimation,
@@ -217,9 +218,9 @@ class _SupportScreenState extends State<SupportScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'How can we help you?',
-                      style: TextStyle(
+                    Text(
+                      l10n.subtitle,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1F2937),
@@ -227,26 +228,26 @@ class _SupportScreenState extends State<SupportScreen>
                     ),
                     const SizedBox(height: 16),
 
-                    // ✅ 1. IN-APP CHAT CARD
-                    _buildInAppChatCard(),
+                    // 1. IN-APP CHAT CARD
+                    _buildInAppChatCard(l10n),
 
                     const SizedBox(height: 24),
 
-                    // ✅ 2. OTHER CONTACT OPTIONS
-                    const Text(
-                      'Other Ways to Reach Us',
-                      style: TextStyle(
+                    // 2. OTHER CONTACT OPTIONS
+                    Text(
+                      l10n.otherWays,
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF1F2937),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    _buildContactOptions(),
+                    _buildContactOptions(l10n),
 
                     const SizedBox(height: 32),
 
-                    // ✅ 3. FAQ SECTION (Dynamic from backend)
+                    // 3. FAQ SECTION
                     Row(
                       children: [
                         Container(
@@ -262,9 +263,9 @@ class _SupportScreenState extends State<SupportScreen>
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Text(
-                          'Frequently Asked Questions',
-                          style: TextStyle(
+                        Text(
+                          l10n.faqTitle,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1F2937),
@@ -274,15 +275,27 @@ class _SupportScreenState extends State<SupportScreen>
                     ),
                     const SizedBox(height: 12),
 
-                    // ✅ Dynamic FAQs from BLoC
+                    // Dynamic FAQs from BLoC
                     BlocBuilder<FaqBloc, FaqState>(
                       builder: (context, state) {
                         if (state is FaqsLoading) {
-                          return const Center(
+                          return Center(
                             child: Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF2ED573),
+                              padding: const EdgeInsets.all(24.0),
+                              child: Column(
+                                children: [
+                                  const CircularProgressIndicator(
+                                    color: Color(0xFF2ED573),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    l10n.loadingFaqs,
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -296,10 +309,23 @@ class _SupportScreenState extends State<SupportScreen>
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Center(
-                                child: Text(
-                                  'No FAQs available yet',
-                                  style: TextStyle(color: Colors.grey),
+                              child: Center(
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      Iconsax.document_text,
+                                      size: 48,
+                                      color: Colors.grey[400],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      l10n.noFaqs,
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             );
@@ -311,6 +337,7 @@ class _SupportScreenState extends State<SupportScreen>
                                   (faq) => FaqItem(
                                     question: faq.question,
                                     answer: faq.answer,
+                                    isSomali: l10n.isSomali,
                                   ),
                                 )
                                 .toList(),
@@ -334,8 +361,20 @@ class _SupportScreenState extends State<SupportScreen>
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
+                                    l10n.errorLoadingFaqs,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
                                     state.message,
-                                    style: const TextStyle(color: Colors.red),
+                                    style: TextStyle(
+                                      color: Colors.grey[600],
+                                      fontSize: 12,
+                                    ),
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 12),
@@ -345,7 +384,10 @@ class _SupportScreenState extends State<SupportScreen>
                                         const LoadActiveFaqsEvent(),
                                       );
                                     },
-                                    child: const Text('Retry'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2ED573),
+                                    ),
+                                    child: Text(l10n.retry),
                                   ),
                                 ],
                               ),
@@ -359,12 +401,12 @@ class _SupportScreenState extends State<SupportScreen>
 
                     const SizedBox(height: 40),
 
-                    // ✅ 4. FOOTER
+                    // 4. FOOTER
                     Center(
                       child: Column(
                         children: [
                           Text(
-                            'FARXADA Support',
+                            l10n.supportTeam,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -373,7 +415,7 @@ class _SupportScreenState extends State<SupportScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'We typically reply within 5 minutes',
+                            l10n.replyTime,
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey.shade500,
@@ -393,7 +435,7 @@ class _SupportScreenState extends State<SupportScreen>
     );
   }
 
-  Widget _buildInAppChatCard() {
+  Widget _buildInAppChatCard(SupportLocalization l10n) {
     return GestureDetector(
       onTap: _openInAppChat,
       child: Container(
@@ -430,9 +472,9 @@ class _SupportScreenState extends State<SupportScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Chat with Admin',
-                    style: TextStyle(
+                  Text(
+                    l10n.chatWithAdmin,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -440,7 +482,7 @@ class _SupportScreenState extends State<SupportScreen>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Start an in-app conversation',
+                    l10n.chatDescription,
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.white.withOpacity(0.9),
@@ -467,14 +509,14 @@ class _SupportScreenState extends State<SupportScreen>
     );
   }
 
-  Widget _buildContactOptions() {
+  Widget _buildContactOptions(SupportLocalization l10n) {
     return Row(
       children: [
         Expanded(
           child: _buildContactButton(
             icon: Iconsax.call,
-            title: 'Call Us',
-            subtitle: '2701',
+            title: l10n.callUs,
+            subtitle: l10n.phoneNumber,
             color: const Color(0xFF3B82F6),
             onTap: _makePhoneCall,
           ),
@@ -483,8 +525,8 @@ class _SupportScreenState extends State<SupportScreen>
         Expanded(
           child: _buildContactButton(
             icon: Iconsax.message,
-            title: 'Email Us',
-            subtitle: 'support@farxada.com',
+            title: l10n.emailUs,
+            subtitle: l10n.email,
             color: const Color(0xFFF59E0B),
             onTap: _sendEmail,
           ),
@@ -551,13 +593,19 @@ class _SupportScreenState extends State<SupportScreen>
 }
 
 // ==========================================
-// FAQ ACCORDION WIDGET (Updated to public)
+// FAQ ACCORDION WIDGET with Localization
 // ==========================================
 class FaqItem extends StatefulWidget {
   final String question;
   final String answer;
+  final bool isSomali;
 
-  const FaqItem({super.key, required this.question, required this.answer});
+  const FaqItem({
+    super.key,
+    required this.question,
+    required this.answer,
+    this.isSomali = false,
+  });
 
   @override
   State<FaqItem> createState() => FaqItemState();
@@ -630,6 +678,9 @@ class FaqItemState extends State<FaqItem> with SingleTickerProviderStateMixin {
                   color: Colors.grey.shade700,
                   height: 1.5,
                 ),
+                textDirection: widget.isSomali
+                    ? TextDirection.rtl
+                    : TextDirection.ltr,
               ),
             ),
             firstCurve: Curves.easeInOut,

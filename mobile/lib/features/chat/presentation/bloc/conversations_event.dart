@@ -73,3 +73,8 @@ class ClearSearchEvent extends ConversationsEvent {
   @override
   List<Object?> get props => [];
 }
+
+// In conversations_event.dart
+class ClearConversationsCacheEvent extends ConversationsEvent {
+  const ClearConversationsCacheEvent();
+}

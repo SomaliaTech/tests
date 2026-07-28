@@ -1,3 +1,4 @@
+// lib/features/chat/presentation/bloc/conversations_bloc.dart
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/conversation.dart';
@@ -5,6 +6,7 @@ import '../../data/models/conversation_model.dart';
 import '../../domain/usecases/get_conversations.dart';
 import '../../domain/usecases/search_conversations.dart';
 import '../../../../core/services/chat_socket_service.dart';
+import '../../data/datasources/chat_local_datasource.dart'; // ✅ ADD THIS
 import 'conversations_event.dart';
 import 'conversations_state.dart';
 
@@ -12,6 +14,10 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
   final GetConversations getConversations;
   final SearchConversations searchConversations;
   final ChatSocketService socketService;
+  final ChatLocalDataSource localDataSource; // ✅ ADD THIS
+
+  List<Conversation> get cachedConversations =>
+      List.unmodifiable(_conversations);
 
   List<Conversation> _conversations = [];
   bool _isInitialLoad = true;
@@ -26,6 +32,7 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     required this.getConversations,
     required this.searchConversations,
     required this.socketService,
+    required this.localDataSource, // ✅ ADD THIS
   }) : super(ConversationsInitial()) {
     on<LoadConversationsEvent>(_onLoadConversations);
     on<NewMessageReceivedEvent>(_onNewMessage);
@@ -33,6 +40,7 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     on<UpdateUserStatusEvent>(_onUpdateUserStatus);
     on<SearchConversationsEvent>(_onSearch);
     on<ClearSearchEvent>(_onClearSearch);
+    on<ClearConversationsCacheEvent>(_onClearCache);
 
     _setupSocketListeners();
   }
@@ -90,14 +98,30 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     });
   }
 
+  // ==========================================
+  // LOAD CONVERSATIONS - LOCAL FIRST
+  // ==========================================
+
+  Future<void> _onClearCache(
+    ClearConversationsCacheEvent event,
+    Emitter<ConversationsState> emit,
+  ) async {
+    _conversations.clear();
+    _isInitialLoad = true;
+    emit(ConversationsInitial());
+  }
+
   Future<void> _onLoadConversations(
     LoadConversationsEvent event,
     Emitter<ConversationsState> emit,
   ) async {
     if (isClosed) return;
 
-    // Only show loading indicator on first load
-    if (_isInitialLoad) {
+    // Don't show loading if we already have cached conversations
+    if (_conversations.isNotEmpty && _isInitialLoad) {
+      _isInitialLoad = false;
+      emit(ConversationsLoaded(List.from(_conversations)));
+    } else if (_isInitialLoad && _conversations.isEmpty) {
       emit(ConversationsLoading());
     }
 
@@ -110,6 +134,7 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
         if (_conversations.isEmpty) {
           emit(ConversationsError(failure.message));
         }
+        _isInitialLoad = false;
       },
       (conversations) {
         _conversations = List.from(conversations);
@@ -117,10 +142,27 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
           (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
         );
         _isInitialLoad = false;
+
+        // ✅ Save to cache for next time
+        _saveConversationsToCache();
+
         emit(ConversationsLoaded(List.from(_conversations)));
       },
     );
   }
+
+  // ✅ Add helper to save conversations to cache
+  Future<void> _saveConversationsToCache() async {
+    try {
+      await localDataSource.cacheConversations(_conversations);
+    } catch (e) {
+      // Silently fail - cache update is not critical
+    }
+  }
+
+  // ==========================================
+  // NEW MESSAGE RECEIVED
+  // ==========================================
 
   void _onNewMessage(
     NewMessageReceivedEvent event,
@@ -134,13 +176,12 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     final preview = event.type == 'image' ? '📷 Photo' : (event.content ?? '');
 
     if (index != -1) {
-      // Update existing conversation
       final conv = _conversations[index];
       final updatedConv = ConversationModel(
         partnerId: conv.partnerId,
         partnerName: conv.partnerName,
         partnerImage: conv.partnerImage,
-        isOnline: true, // Sender is online since they just sent a message
+        isOnline: true,
         lastMessage: preview,
         lastMessageType: event.type,
         lastMessageTime: event.createdAt,
@@ -148,15 +189,22 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
       );
       _conversations.removeAt(index);
       _conversations.insert(0, updatedConv);
+
+      // ✅ Save to cache
+      _saveConversationsToCache();
+
       emit(ConversationsLoaded(List.from(_conversations)));
     } else {
-      // ✅ FIX: New conversation - reload from server after a short delay.
-      // This prevents the API from returning the old list before the new conversation is saved to the DB.
+      // New conversation - reload from server
       Future.delayed(const Duration(seconds: 1), () {
         if (!isClosed) add(LoadConversationsEvent());
       });
     }
   }
+
+  // ==========================================
+  // MESSAGE SENT
+  // ==========================================
 
   void _onMessageSent(
     MessageSentEvent event,
@@ -183,14 +231,22 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
       );
       _conversations.removeAt(index);
       _conversations.insert(0, updatedConv);
+
+      // ✅ Save to cache
+      _saveConversationsToCache();
+
       emit(ConversationsLoaded(List.from(_conversations)));
     } else {
-      // ✅ FIX: If we sent a message to a NEW user, reload conversations after a short delay
+      // New conversation - reload
       Future.delayed(const Duration(seconds: 1), () {
         if (!isClosed) add(LoadConversationsEvent());
       });
     }
   }
+
+  // ==========================================
+  // USER STATUS UPDATE
+  // ==========================================
 
   void _onUpdateUserStatus(
     UpdateUserStatusEvent event,
@@ -216,12 +272,18 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     }
   }
 
+  // ==========================================
+  // SEARCH
+  // ==========================================
+
   Future<void> _onSearch(
     SearchConversationsEvent event,
     Emitter<ConversationsState> emit,
   ) async {
     if (event.query.trim().length < 2) {
-      emit(ConversationsLoaded(List.from(_conversations)));
+      if (_conversations.isNotEmpty) {
+        emit(ConversationsLoaded(List.from(_conversations)));
+      }
       return;
     }
 
@@ -230,7 +292,16 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     if (isClosed) return;
 
     result.fold(
-      (failure) => emit(ConversationsError(failure.message)),
+      (failure) {
+        final filtered = _conversations
+            .where(
+              (c) => c.partnerName.toLowerCase().contains(
+                event.query.toLowerCase(),
+              ),
+            )
+            .toList();
+        emit(ConversationsSearchResults(filtered, event.query));
+      },
       (conversations) =>
           emit(ConversationsSearchResults(conversations, event.query)),
     );
@@ -240,7 +311,9 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     ClearSearchEvent event,
     Emitter<ConversationsState> emit,
   ) {
-    emit(ConversationsLoaded(List.from(_conversations)));
+    if (_conversations.isNotEmpty) {
+      emit(ConversationsLoaded(List.from(_conversations)));
+    }
   }
 
   @override

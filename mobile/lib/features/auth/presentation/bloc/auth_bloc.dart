@@ -1,4 +1,10 @@
+// lib/features/auth/presentation/bloc/auth_bloc.dart
+import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:hive/hive.dart';
+import 'package:http/http.dart' as http;
+import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/push_notification_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
@@ -11,11 +17,7 @@ import '../../domain/usecases/upload_profile_image.dart';
 import '../../domain/usecases/verify_otp.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
-import 'dart:developer' as developer;
 import '../../domain/entities/user.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:mobile/core/constants/api_constants.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SendOtp sendOtp;
@@ -47,6 +49,32 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutEvent>(_onLogout);
   }
 
+  // ✅ Clear ALL Hive caches on logout
+  Future<void> _clearAllCaches() async {
+    try {
+      final boxesToClear = [
+        'conversations_cache',
+        'messages_cache',
+        'sync_timestamps',
+      ];
+
+      for (final boxName in boxesToClear) {
+        try {
+          if (Hive.isBoxOpen(boxName)) {
+            final box = Hive.box<String>(boxName);
+            await box.clear();
+          }
+        } catch (e) {
+          developer.log('❌ Error clearing $boxName: $e');
+        }
+      }
+
+      developer.log('🗑️ All chat caches cleared on logout');
+    } catch (e) {
+      developer.log('❌ Error clearing caches: $e');
+    }
+  }
+
   Future<void> _registerDeviceToken(String token) async {
     try {
       final authToken = await storageService.getAuthToken();
@@ -63,8 +91,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         developer.log('📱 Device token registered successfully');
-      } else {
-        developer.log('❌ Failed to register token: ${response.statusCode}');
       }
     } catch (e) {
       developer.log('❌ Failed to register token: $e');
@@ -73,15 +99,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
     developer.log('📞 Sending OTP for: ${event.phoneNumber}');
-    emit(AuthLoading());
+    if (!emit.isDone) emit(AuthLoading());
     try {
       final result = await sendOtp(event.phoneNumber);
+      if (isClosed || emit.isDone) return;
       result.fold(
-        (failure) => emit(AuthError(failure.message)),
-        (debugOtp) => emit(OtpSent(debugOtp)),
+        (failure) {
+          if (!emit.isDone) emit(AuthError(failure.message));
+        },
+        (debugOtp) {
+          if (!emit.isDone) emit(OtpSent(debugOtp));
+        },
       );
     } catch (e) {
-      emit(AuthError('An unexpected error occurred: $e'));
+      if (!emit.isDone) emit(AuthError('An unexpected error occurred: $e'));
     }
   }
 
@@ -89,176 +120,160 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     VerifyOtpEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
+    if (!emit.isDone) emit(AuthLoading());
     final result = await verifyOtp(event.phoneNumber, event.otpCode);
-    await result.fold((failure) async => emit(AuthError(failure.message)), (
-      data,
-    ) async {
-      // Save all user data including super admin
-      await storageService.saveAuthToken(data.token);
-      await storageService.saveUserId(data.user.id);
-      await storageService.saveLoginStatus(true);
-      await storageService.saveUserName(data.user.name ?? '');
-      await storageService.saveUserPhone(data.user.phoneNumber);
-
-      if (data.user.profileImage != null) {
-        await storageService.saveUserProfileImage(data.user.profileImage!);
-      }
-
-      // ✅ Save admin and super admin status
-      await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-      await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
-
-      developer.log(
-        '👑 Saved isSuperAdmin: ${data.user.isSuperAdmin ?? false}',
-      );
-
-      // Register device token after login
-      try {
-        final pushService = PushNotificationService();
-        final token = await pushService.getToken();
-        if (token != null) {
-          await _registerDeviceToken(token);
-          developer.log('📱 Device token registered after login');
+    if (isClosed || emit.isDone) return;
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(AuthError(failure.message));
+      },
+      (data) async {
+        await storageService.saveAuthToken(data.token);
+        await storageService.saveUserId(data.user.id);
+        await storageService.saveLoginStatus(true);
+        await storageService.saveUserName(data.user.name ?? '');
+        await storageService.saveUserPhone(data.user.phoneNumber);
+        if (data.user.profileImage != null) {
+          await storageService.saveUserProfileImage(data.user.profileImage!);
         }
-      } catch (e) {
-        developer.log('⚠️ Could not register token: $e');
-      }
+        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
 
-      // Connect WebSocket after successful login
-      chatSocketService.connect();
-      developer.log('🔌 WebSocket connect() called after login');
+        try {
+          final pushService = PushNotificationService();
+          final token = await pushService.getToken();
+          if (token != null) await _registerDeviceToken(token);
+        } catch (e) {
+          developer.log('⚠️ Could not register token: $e');
+        }
 
-      emit(OtpVerified(data.token, data.user));
-    });
+        chatSocketService.connect();
+        if (!emit.isDone) emit(OtpVerified(data.token, data.user));
+      },
+    );
   }
 
   Future<void> _onCompleteProfile(
     CompleteProfileEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
+    if (!emit.isDone) emit(AuthLoading());
     final result = await completeProfile(
       name: event.name,
       marketId: event.marketId,
       profileImageUrl: event.profileImageUrl,
     );
-    await result.fold((failure) async => emit(AuthError(failure.message)), (
-      data,
-    ) async {
-      // ✅ Save profile data
-      await storageService.saveUserName(event.name);
-      await storageService.saveUserMarketId(event.marketId);
-
-      if (event.profileImageUrl != null) {
-        await storageService.saveUserProfileImage(event.profileImageUrl!);
-      }
-
-      // ✅ CRITICAL: Save is_super_admin from the response
-      // The response should contain the full user object with is_super_admin
-      if (data.user != null) {
-        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
-        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-        developer.log(
-          '👑 CompleteProfile - Saved isSuperAdmin: ${data.user.isSuperAdmin ?? false}',
-        );
-      }
-
-      await storageService.saveLoginStatus(true);
-
-      chatSocketService.connect();
-      developer.log('🔌 WebSocket connect() after profile completion');
-
-      emit(ProfileCompleted(data.token, data.user));
-    });
+    if (isClosed || emit.isDone) return;
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(AuthError(failure.message));
+      },
+      (data) async {
+        await storageService.saveUserName(event.name);
+        await storageService.saveUserMarketId(event.marketId);
+        if (event.profileImageUrl != null) {
+          await storageService.saveUserProfileImage(event.profileImageUrl!);
+        }
+        if (data.user != null) {
+          await storageService.saveIsSuperAdmin(
+            data.user.isSuperAdmin ?? false,
+          );
+          await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+        }
+        await storageService.saveLoginStatus(true);
+        chatSocketService.connect();
+        if (!emit.isDone) emit(ProfileCompleted(data.token, data.user));
+      },
+    );
   }
 
   Future<void> _onUploadProfileImage(
     UploadProfileImageEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
+    if (!emit.isDone) emit(AuthLoading());
     final result = await uploadProfileImage(event.base64Image);
-    await result.fold((failure) async => emit(AuthError(failure.message)), (
-      imageUrl,
-    ) async {
-      await storageService.saveUserProfileImage(imageUrl);
-      emit(ProfileImageUploaded(imageUrl));
-    });
+    if (isClosed || emit.isDone) return;
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(AuthError(failure.message));
+      },
+      (imageUrl) async {
+        await storageService.saveUserProfileImage(imageUrl);
+        if (!emit.isDone) emit(ProfileImageUploaded(imageUrl));
+      },
+    );
   }
 
   Future<void> _onCheckAuthStatus(
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthChecking());
     final isAuthenticated = await storageService.isAuthenticated();
     if (!isAuthenticated) {
-      emit(Unauthenticated());
+      if (!emit.isDone) emit(Unauthenticated());
       return;
     }
-
     final token = await storageService.getAuthToken();
     if (token == null || token.isEmpty) {
-      emit(Unauthenticated());
+      if (!emit.isDone) emit(Unauthenticated());
       return;
     }
 
-    // Connect on app restart (already logged in)
+    final cachedName = await storageService.getUserName() ?? 'User';
+    final cachedPhone = await storageService.getUserPhone() ?? '';
+    final cachedProfileImage = await storageService.getUserProfileImage();
+    final cachedUserId = await storageService.getUserId() ?? '';
+    final cachedIsAdmin = await storageService.getIsAdmin();
+    final cachedIsSuperAdmin = await storageService.getIsSuperAdmin();
+
+    final localUser = User(
+      id: cachedUserId,
+      phoneNumber: cachedPhone,
+      name: cachedName,
+      profileImage: cachedProfileImage,
+      isVerified: true,
+      hasProfile: cachedName.isNotEmpty,
+      isAdmin: cachedIsAdmin,
+      isSuperAdmin: cachedIsSuperAdmin,
+    );
+
+    if (!emit.isDone) emit(Authenticated(localUser, token));
     chatSocketService.connect();
-    developer.log('🔌 WebSocket connect() on app restart');
 
-    final userResult = await getCurrentUser();
-    await userResult.fold(
-      (failure) async {
-        final name = await storageService.getUserName() ?? 'User';
-        final phone = await storageService.getUserPhone() ?? '';
-        final profileImage = await storageService.getUserProfileImage();
-        final userId = await storageService.getUserId() ?? '';
-        final isAdmin = await storageService.getIsAdmin();
-        final isSuperAdmin = await storageService.getIsSuperAdmin();
-
-        final localUser = User(
-          id: userId,
-          phoneNumber: phone,
-          name: name,
-          profileImage: profileImage,
-          isVerified: true,
-          hasProfile: name.isNotEmpty,
-          isAdmin: isAdmin,
-          isSuperAdmin: isSuperAdmin, // ✅ Add this
-        );
-        emit(Authenticated(localUser, token));
-      },
-      (user) async {
-        // ✅ Save all user data from server
+    try {
+      final userResult = await getCurrentUser();
+      if (isClosed || emit.isDone) return;
+      await userResult.fold((failure) async {}, (user) async {
         await storageService.saveUserId(user.id);
         await storageService.saveUserName(user.name ?? '');
         await storageService.saveUserPhone(user.phoneNumber);
-
-        if (user.profileImage != null) {
+        if (user.profileImage != null)
           await storageService.saveUserProfileImage(user.profileImage!);
-        }
-
         await storageService.saveIsAdmin(user.isAdmin ?? false);
         await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
         await storageService.saveLoginStatus(true);
-
-        developer.log(
-          '👑 CheckAuth - Saved isSuperAdmin: ${user.isSuperAdmin ?? false}',
-        );
-        emit(Authenticated(user, token));
-      },
-    );
+        if (!isClosed && !emit.isDone && state is Authenticated) {
+          emit(Authenticated(user, token));
+        }
+      });
+    } catch (e) {}
   }
 
+  // ✅ Fixed logout - clears caches before emitting Unauthenticated
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
     chatSocketService.disconnect();
     developer.log('🔌 WebSocket disconnected on logout');
-    emit(AuthLoading());
+
     await logout.call();
     await storageService.clearAuthData();
-    emit(Unauthenticated());
+
+    // ✅ Clear all Hive caches so old user data doesn't show for new user
+    await _clearAllCaches();
+
+    if (!emit.isDone) {
+      emit(Unauthenticated());
+    }
   }
 
   Future<String?> getCurrentToken() async =>

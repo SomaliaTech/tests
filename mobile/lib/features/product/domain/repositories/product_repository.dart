@@ -1,3 +1,4 @@
+// lib/features/product/domain/repositories/product_repository.dart
 import '../../../../core/utils/typedefs.dart';
 import '../entities/category.dart';
 import '../entities/product.dart';
@@ -6,7 +7,7 @@ abstract class ProductRepository {
   ResultFuture<List<Category>> getCategories();
   ResultFuture<List<Product>> getFeaturedProducts({int limit});
   ResultFuture<List<Product>> getProductsByCategory(String categoryId);
-  ResultFuture<List<Category>> getSubcategories(String parentId); // Add this
+  ResultFuture<List<Category>> getSubcategories(String parentId);
   ResultFuture<List<Product>> searchProducts({
     String? query,
     double? minPrice,

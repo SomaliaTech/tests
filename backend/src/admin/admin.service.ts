@@ -912,6 +912,291 @@ export class AdminService {
     });
   }
 
+  // Add these methods to AdminService
+
+  // ==========================================
+  // PERMISSION MANAGEMENT
+  // ==========================================
+
+  async getUserPermissions(userId: string): Promise<string[]> {
+    // Get user's roles with permissions
+    const userRoles = await this.drizzle.db
+      .select({
+        permissions: roles.permissions,
+      })
+      .from(userRoles)
+      .leftJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, userId));
+
+    // Collect all permissions from all roles
+    const allPermissions = new Set<string>();
+    userRoles.forEach((ur) => {
+      if (ur.permissions && Array.isArray(ur.permissions)) {
+        ur.permissions.forEach((p) => allPermissions.add(p));
+      }
+    });
+
+    return Array.from(allPermissions);
+  }
+
+  async createRole(data: {
+    name: string;
+    description?: string;
+    permissions: string[];
+  }) {
+    const [role] = await this.drizzle.db
+      .insert(roles)
+      .values({
+        id: uuidv4(),
+        name: data.name,
+        description: data.description || null,
+        permissions: data.permissions,
+        isSystem: false,
+      })
+      .returning();
+
+    return role;
+  }
+
+  async updateRole(
+    roleId: string,
+    data: { name?: string; description?: string; permissions?: string[] },
+  ) {
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+    if (data.name) updateData.name = data.name;
+    if (data.description !== undefined)
+      updateData.description = data.description;
+    if (data.permissions) updateData.permissions = data.permissions;
+
+    const [role] = await this.drizzle.db
+      .update(roles)
+      .set(updateData)
+      .where(eq(roles.id, roleId))
+      .returning();
+
+    if (!role) throw new NotFoundException('Role not found');
+    return role;
+  }
+
+  async deleteRole(roleId: string) {
+    // Check if role is system role
+    const [role] = await this.drizzle.db
+      .select()
+      .from(roles)
+      .where(eq(roles.id, roleId));
+
+    if (!role) throw new NotFoundException('Role not found');
+
+    if (role.isSystem) {
+      throw new BadRequestException('Cannot delete system role');
+    }
+
+    // Check if role is assigned to any user
+    const usersWithRole = await this.drizzle.db
+      .select()
+      .from(userRoles)
+      .where(eq(userRoles.roleId, roleId))
+      .limit(1);
+
+    if (usersWithRole.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete role that is assigned to users',
+      );
+    }
+
+    await this.drizzle.db.delete(roles).where(eq(roles.id, roleId));
+    return { message: 'Role deleted successfully' };
+  }
+
+  async getAllRoles() {
+    const allRoles = await this.drizzle.db
+      .select()
+      .from(roles)
+      .orderBy(roles.name);
+
+    // Get user count for each role
+    const rolesWithCount = await Promise.all(
+      allRoles.map(async (role) => {
+        const users = await this.drizzle.db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(userRoles)
+          .where(eq(userRoles.roleId, role.id));
+
+        return {
+          ...role,
+          userCount: Number(users[0]?.count) || 0,
+        };
+      }),
+    );
+
+    return rolesWithCount;
+  }
+
+  async assignRoleToUser(userId: string, roleId: string) {
+    // Check if user exists
+    const user = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!user) throw new NotFoundException('User not found');
+
+    // Check if role exists
+    const role = await this.drizzle.db
+      .select()
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1);
+
+    if (!role) throw new NotFoundException('Role not found');
+
+    // Check if assignment already exists
+    const existing = await this.drizzle.db
+      .select()
+      .from(userRoles)
+      .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      throw new BadRequestException('User already has this role');
+    }
+
+    const [assignment] = await this.drizzle.db
+      .insert(userRoles)
+      .values({
+        id: uuidv4(),
+        userId,
+        roleId,
+      })
+      .returning();
+
+    // Notify user
+    try {
+      this.chatGateway.server.to(`user:${userId}`).emit('role_assigned', {
+        role: role[0].name,
+        message: `You have been assigned the ${role[0].name} role`,
+      });
+    } catch (e) {}
+
+    return assignment;
+  }
+
+  async removeRoleFromUser(userId: string, roleId: string) {
+    // Check if role is system role and user is the only admin
+    const [role] = await this.drizzle.db
+      .select()
+      .from(roles)
+      .where(eq(roles.id, roleId));
+
+    if (role?.isSystem) {
+      // Check if user has other admin roles
+      const userRolesList = await this.drizzle.db
+        .select()
+        .from(userRoles)
+        .where(eq(userRoles.userId, userId));
+
+      if (userRolesList.length === 1) {
+        throw new BadRequestException('Cannot remove the last role from user');
+      }
+    }
+
+    const deleted = await this.drizzle.db
+      .delete(userRoles)
+      .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
+      .returning();
+
+    if (deleted.length === 0) {
+      throw new NotFoundException('Role assignment not found');
+    }
+
+    return { message: 'Role removed successfully' };
+  }
+
+  async getUserRoles(userId: string) {
+    const userRolesList = await this.drizzle.db
+      .select({
+        roleId: roles.id,
+        roleName: roles.name,
+        roleDescription: roles.description,
+        permissions: roles.permissions,
+        isSystem: roles.isSystem,
+        assignedAt: userRoles.createdAt,
+      })
+      .from(userRoles)
+      .leftJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, userId));
+
+    return userRolesList;
+  }
+
+  // ==========================================
+  // SEED DEFAULT ROLES
+  // ==========================================
+
+  async seedDefaultRoles() {
+    const defaultRoles = [
+      {
+        name: 'Super Admin',
+        description: 'Full system access',
+        permissions: PermissionGroups.SUPER_ADMIN,
+        isSystem: true,
+      },
+      {
+        name: 'Product Manager',
+        description: 'Manage products, categories, colors, sizes',
+        permissions: PermissionGroups.PRODUCT_MANAGER,
+        isSystem: true,
+      },
+      {
+        name: 'Order Manager',
+        description: 'Manage orders and view revenue',
+        permissions: PermissionGroups.ORDER_MANAGER,
+        isSystem: true,
+      },
+      {
+        name: 'Content Manager',
+        description: 'Manage FAQs and banners',
+        permissions: PermissionGroups.CONTENT_MANAGER,
+        isSystem: true,
+      },
+      {
+        name: 'Inventory Manager',
+        description: 'Manage product inventory',
+        permissions: PermissionGroups.INVENTORY_MANAGER,
+        isSystem: true,
+      },
+      {
+        name: 'Support Manager',
+        description: 'View users and orders, manage FAQs',
+        permissions: PermissionGroups.SUPPORT_MANAGER,
+        isSystem: true,
+      },
+      {
+        name: 'View Only',
+        description: 'Read-only access',
+        permissions: PermissionGroups.VIEW_ONLY,
+        isSystem: true,
+      },
+    ];
+
+    for (const roleData of defaultRoles) {
+      const existing = await this.drizzle.db
+        .select()
+        .from(roles)
+        .where(eq(roles.name, roleData.name))
+        .limit(1);
+
+      if (existing.length === 0) {
+        await this.drizzle.db.insert(roles).values({
+          id: uuidv4(),
+          ...roleData,
+          permissions: roleData.permissions,
+        });
+      }
+    }
+  }
   // Add to admin.service.ts
 
   async getAnalyticsForCustomDates(dates: Date[]) {

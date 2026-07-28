@@ -9,50 +9,80 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # UI Components
   cupertino_icons: ^1.0.8
   iconsax: ^0.0.8
   google_fonts: ^8.1.0
   cached_network_image: ^3.4.1
-  svg_flutter: ^0.0.1
   flutter_svg: ^2.3.0
+  shimmer: ^3.0.0
+  fl_chart: ^1.2.0
+  flutter_staggered_grid_view: ^0.7.0
+  table_calendar: ^3.2.0
+
+  # State Management
   flutter_bloc: ^9.1.1
   provider: ^6.1.5+1
   equatable: ^2.0.8
-  image_picker: ^1.2.2
-  flutter_staggered_grid_view: ^0.7.0
+
+  # Dependency Injection
   get_it: ^9.2.1
+
+  # Functional Programming
   fpdart: ^1.2.0
-  toastification: ^3.2.0
+
+  # Network & API
   http: ^1.6.0
   internet_connection_checker_plus: ^3.0.1
+  socket_io_client: ^2.0.3+1
+  connectivity_plus: ^6.1.3
+
+  # Local Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
   shared_preferences: ^2.5.5
-  json_serializable: ^6.14.0
   flutter_secure_storage: ^10.3.1
-  jwt_decoder: ^2.0.1
-  shimmer: ^3.0.0
-  printing: ^5.14.3
+
+  # File & Media
+  image_picker: ^1.2.2
+  file_picker: ^8.0.0
   path_provider: ^2.1.5
+
+  # PDF & Printing
+  printing: ^5.14.3
   pdf: ^3.12.0
   open_file: ^3.5.11
-  share_plus: ^10.1.4 # ✅ Downgraded from ^13.1.0 to compatible version
-  fl_chart: ^1.2.0
-  intl: ^0.20.3
-  socket_io_client: ^2.0.3+1
-  logger: ^2.7.0
-  audioplayers: ^6.7.1
+
+  # Sharing & URLs
+  share_plus: ^10.1.4
+  url_launcher: ^6.3.2
+
+  # Notifications
   firebase_core: ^3.6.0
   firebase_messaging: ^15.1.3
   flutter_local_notifications: ^18.0.0
-  url_launcher: ^6.3.2
-  file_picker: ^8.0.0 # ✅ Upgraded to latest compatible version
+
+  # Audio
+  audioplayers: ^6.7.1
+
+  # Utilities
+  intl: ^0.20.3
+  logger: ^2.7.0
+  jwt_decoder: ^2.0.1
   package_info_plus: ^9.0.1
-  connectivity_plus: ^7.2.0
-  table_calendar: ^3.2.0
+  toastification: ^3.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # Linting
   flutter_lints: ^6.0.0
+
+  # Code Generation (only one build_runner entry)
+  build_runner: ^2.4.9
+  hive_generator: ^2.0.1
 
 flutter:
   uses-material-design: true

@@ -7,6 +7,7 @@ import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
+import 'package:mobile/features/chat/data/datasources/chat_local_datasource.dart';
 import '../../domain/entities/chat_message.dart';
 import '../../domain/usecases/get_chat_history.dart';
 import '../../domain/usecases/mark_as_read.dart' as chat;
@@ -31,10 +32,14 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   bool _historyLoaded = false;
   XFile? _selectedImage;
   Timer? _typingTimer;
-  Timer? _minimumLoadTimer;
   bool _isUserTyping = false;
-  String? _partnerName; // ✅ Store partner name
+  String? _partnerName;
+  bool _isFetchingFreshData = false;
+  bool _isFirstLoad = true;
 
+  // Public getter for messages
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  final ChatLocalDataSource localDataSource; // ✅ ADD THIS
   // Subscriptions
   StreamSubscription? _msgSub;
   StreamSubscription? _statusSub;
@@ -43,14 +48,13 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   StreamSubscription? _messageReadSub;
   StreamSubscription? _connectionSub;
 
-  static const Duration _minimumLoadDuration = Duration(seconds: 4);
-
   String? get currentUserId => _currentUserId;
 
   ChatRoomBloc({
     required this.getChatHistory,
     required this.markAsRead,
     required this.socketService,
+    required this.localDataSource, // ✅ ADD THIS
   }) : super(ChatRoomInitial()) {
     _registerEventHandlers();
     _setupSocketListeners();
@@ -79,7 +83,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   // ==========================================
 
   void _emitLoaded(Emitter<ChatRoomState> emit) {
-    if (!isClosed) {
+    if (!isClosed && !emit.isDone) {
       emit(
         ChatRoomLoaded(
           messages: List.unmodifiable(_messages),
@@ -87,7 +91,24 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
           isPartnerTyping: _isPartnerTyping,
           currentUserId: _currentUserId,
           isHistoryLoaded: _historyLoaded,
-          partnerName: _partnerName, // ✅ Include partner name
+          partnerName: _partnerName,
+          isFetchingFreshData: _isFetchingFreshData,
+        ),
+      );
+    }
+  }
+
+  void _emitInitial(Emitter<ChatRoomState> emit) {
+    if (!isClosed && !emit.isDone) {
+      emit(
+        ChatRoomLoaded(
+          messages: const [],
+          isPartnerOnline: _isPartnerOnline,
+          isPartnerTyping: false,
+          currentUserId: _currentUserId,
+          isHistoryLoaded: false,
+          partnerName: _partnerName,
+          isFetchingFreshData: true,
         ),
       );
     }
@@ -136,11 +157,25 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     if (isClosed) return;
     if (message.senderId == _currentPartnerId ||
         message.receiverId == _currentPartnerId) {
-      // ✅ Extract partner name from incoming messages
       if (message.senderId == _currentPartnerId) {
         _partnerName = message.senderName ?? _partnerName;
       }
+
+      // ✅ Save received message to local storage immediately
+      _saveReceivedMessage(message);
+
       add(ReceiveMessageEvent(message));
+    }
+  }
+
+  // Add this helper method
+  Future<void> _saveReceivedMessage(ChatMessage message) async {
+    if (_currentPartnerId == null) return;
+
+    try {
+      await localDataSource.addMessage(_currentPartnerId!, message);
+    } catch (e) {
+      debugPrint('⚠️ [ChatBloc] Error saving received message: $e');
     }
   }
 
@@ -157,9 +192,35 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     if (isClosed) return;
     try {
       final confirmed = ChatMessage.fromJson(Map<String, dynamic>.from(data));
+
+      // ✅ Remove temp message and save confirmed message to local storage
+      _saveConfirmedMessage(confirmed);
+
       add(ReceiveMessageEvent(confirmed));
     } catch (e) {
       debugPrint('⚠️ [ChatBloc] Error parsing sent confirmation: $e');
+    }
+  }
+
+  Future<void> _saveConfirmedMessage(ChatMessage confirmed) async {
+    if (_currentPartnerId == null) return;
+
+    try {
+      // Remove temporary message from cache
+      final messages = await localDataSource.getCachedMessages(
+        _currentPartnerId!,
+      );
+      messages.removeWhere(
+        (m) =>
+            m.id.startsWith('temp_') &&
+            m.content == confirmed.content &&
+            m.senderId == confirmed.senderId,
+      );
+
+      // Add confirmed message
+      await localDataSource.addMessage(_currentPartnerId!, confirmed);
+    } catch (e) {
+      debugPrint('⚠️ [ChatBloc] Error saving confirmed message: $e');
     }
   }
 
@@ -181,9 +242,8 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   }
 
   // ==========================================
-  // EVENT HANDLERS
+  // LOAD HISTORY - LOCAL FIRST, NO LOADING IF CACHED
   // ==========================================
-
   Future<void> _onLoadHistory(
     LoadChatHistoryEvent event,
     Emitter<ChatRoomState> emit,
@@ -194,60 +254,167 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     _isPartnerOnline = event.isOnline;
     _hasMarkedRead = false;
     _historyLoaded = false;
+    _isFetchingFreshData = true;
 
-    final completer = Completer<void>();
-    _minimumLoadTimer?.cancel();
-    _minimumLoadTimer = Timer(_minimumLoadDuration, () {
-      completer.complete();
-    });
+    // 🚀 Try to load cached data FIRST
+    final cachedResult = await getChatHistory(event.partnerId);
 
-    if (_messages.isEmpty) {
-      emit(ChatRoomLoading());
-    }
+    if (isClosed || emit.isDone) return;
 
-    final result = await getChatHistory(event.partnerId);
-    if (isClosed) return;
-
-    await completer.future;
-    if (isClosed) return;
-
-    result.fold(
+    cachedResult.fold(
       (failure) {
-        if (_messages.isNotEmpty) {
-          _historyLoaded = true;
-          _emitLoaded(emit);
-        } else {
-          emit(ChatRoomError(failure.message));
+        // No cache - show loading
+        if (!emit.isDone) {
+          emit(ChatRoomLoading());
         }
       },
-      (history) {
-        final historyIds = history.map((m) => m.id).toSet();
-        final socketMessages = _messages
-            .where((m) => !historyIds.contains(m.id))
-            .toList();
+      (cachedMessages) {
+        if (cachedMessages.isNotEmpty) {
+          _messages = List.from(cachedMessages);
+          _historyLoaded = true;
+          _isFirstLoad = false;
 
-        _messages = List.from(history);
-        _messages.insertAll(0, socketMessages);
-
-        _historyLoaded = true;
-
-        // ✅ Extract partner name from the first message sent by the partner
-        if (_partnerName == null || _partnerName!.isEmpty) {
-          for (final msg in history) {
-            if (msg.senderId == event.partnerId &&
-                msg.senderName != null &&
-                msg.senderName!.isNotEmpty) {
-              _partnerName = msg.senderName;
-              break;
+          // Extract partner name
+          if (_partnerName == null || _partnerName!.isEmpty) {
+            for (final msg in cachedMessages) {
+              if (msg.senderId == event.partnerId &&
+                  msg.senderName != null &&
+                  msg.senderName!.isNotEmpty) {
+                _partnerName = msg.senderName;
+                break;
+              }
             }
           }
-        }
 
-        _emitLoaded(emit);
-        _triggerMarkAsRead();
+          // 🎯 EMIT IMMEDIATELY with cached data
+          if (!emit.isDone) {
+            emit(
+              ChatRoomLoaded(
+                messages: List.unmodifiable(_messages),
+                isPartnerOnline: _isPartnerOnline,
+                isPartnerTyping: _isPartnerTyping,
+                currentUserId: _currentUserId,
+                isHistoryLoaded: true,
+                partnerName: _partnerName,
+                isFetchingFreshData: true,
+              ),
+            );
+          }
+          _triggerMarkAsRead();
+        } else {
+          // Cache exists but empty
+          if (!emit.isDone) {
+            emit(ChatRoomLoading());
+          }
+        }
       },
     );
+
+    // 🔄 Fetch fresh data in background
+    await _fetchFreshData(event.partnerId, emit, _messages.isNotEmpty);
   }
+
+  Future<void> _fetchFreshData(
+    String partnerId,
+    Emitter<ChatRoomState> emit,
+    bool hasCachedData,
+  ) async {
+    try {
+      _isFetchingFreshData = true;
+
+      // Update state to show syncing if we have cached data
+      if (hasCachedData && !emit.isDone) {
+        _emitLoaded(emit);
+      }
+
+      final freshResult = await getChatHistory(partnerId);
+
+      if (isClosed || emit.isDone) return;
+
+      _isFetchingFreshData = false;
+
+      freshResult.fold(
+        (failure) {
+          // Only show error if we have NO data at all
+          if (_messages.isEmpty && !emit.isDone) {
+            emit(ChatRoomError(failure.message));
+          }
+          // Otherwise, keep showing cached data silently
+          if (hasCachedData && !emit.isDone) {
+            _historyLoaded = true;
+            _isFetchingFreshData = false;
+            _emitLoaded(emit);
+          }
+        },
+        (freshMessages) {
+          // Merge fresh messages with existing cached ones
+          final existingIds = _messages.map((m) => m.id).toSet();
+
+          // Add new messages from server
+          final newMessages = freshMessages
+              .where((m) => !existingIds.contains(m.id))
+              .toList();
+          _messages.addAll(newMessages);
+
+          // Update existing messages (for read receipts, edits, etc.)
+          for (int i = 0; i < _messages.length; i++) {
+            ChatMessage? freshMsg;
+            try {
+              freshMsg = freshMessages.firstWhere(
+                (m) => m.id == _messages[i].id,
+              );
+            } catch (_) {
+              freshMsg = null;
+            }
+            if (freshMsg != null) {
+              _messages[i] = freshMsg;
+            }
+          }
+
+          // Sort by timestamp (newest first)
+          _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+          _historyLoaded = true;
+          _isFirstLoad = false;
+          _isFetchingFreshData = false;
+
+          // Extract partner name from fresh messages
+          if (_partnerName == null || _partnerName!.isEmpty) {
+            for (final msg in freshMessages) {
+              if (msg.senderId == partnerId &&
+                  msg.senderName != null &&
+                  msg.senderName!.isNotEmpty) {
+                _partnerName = msg.senderName;
+                break;
+              }
+            }
+          }
+
+          // Emit updated state with merged data
+          if (!emit.isDone) {
+            _emitLoaded(emit);
+          }
+          _triggerMarkAsRead();
+        },
+      );
+    } catch (e) {
+      debugPrint('❌ [ChatBloc] Failed to fetch fresh messages: $e');
+      _isFetchingFreshData = false;
+
+      // If we have cached data, just mark as loaded and move on
+      if (_messages.isNotEmpty && !emit.isDone) {
+        _historyLoaded = true;
+        _emitLoaded(emit);
+      } else if (!hasCachedData && !emit.isDone) {
+        // Only show error if we never had any data
+        emit(ChatRoomError('Failed to load messages'));
+      }
+    }
+  }
+
+  // ==========================================
+  // RECEIVE MESSAGE
+  // ==========================================
 
   void _onReceiveMessage(
     ReceiveMessageEvent event,
@@ -257,7 +424,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
 
     final msg = event.message;
 
-    // ✅ Extract partner name from incoming messages
+    // Extract partner name from incoming messages
     if (msg.senderId == _currentPartnerId &&
         msg.senderName != null &&
         msg.senderName!.isNotEmpty) {
@@ -275,9 +442,11 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     if (existingIndex >= 0) {
       _messages[existingIndex] = msg;
     } else {
+      // Remove duplicate temp messages
       _messages.removeWhere(
         (m) =>
             m.id.startsWith('temp_') &&
+            m.senderId == msg.senderId &&
             (m.content == msg.content || m.mediaUrl == msg.mediaUrl),
       );
       _messages.insert(0, msg);
@@ -290,7 +459,13 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     }
   }
 
-  void _onSendMessage(SendMessageEvent event, Emitter<ChatRoomState> emit) {
+  // ==========================================
+  // SEND MESSAGE
+  // ==========================================
+  void _onSendMessage(
+    SendMessageEvent event,
+    Emitter<ChatRoomState> emit,
+  ) async {
     if (isClosed) return;
     _sendTypingStatus(false);
 
@@ -303,9 +478,14 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       mediaUrl: event.mediaUrl,
       isRead: false,
       createdAt: DateTime.now(),
+      senderName: null, // Will be updated when confirmation comes
     );
 
     _messages.insert(0, tempMessage);
+
+    // ✅ SAVE TO LOCAL STORAGE IMMEDIATELY
+    await localDataSource.addMessage(event.partnerId, tempMessage);
+
     _emitLoaded(emit);
 
     socketService.sendMessage(
@@ -315,6 +495,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       mediaUrl: event.mediaUrl,
     );
   }
+  // ==========================================
+  // READ RECEIPTS
+  // ==========================================
 
   void _onUpdateReadReceipts(
     UpdateReadReceiptsEvent event,
@@ -334,6 +517,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       _emitLoaded(emit);
     }
   }
+
+  // ==========================================
+  // PARTNER STATUS
+  // ==========================================
 
   void _onUpdatePartnerStatus(
     UpdatePartnerStatusEvent event,
@@ -355,6 +542,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     _sendTypingStatus(event.isTyping);
   }
 
+  // ==========================================
+  // MARK AS READ
+  // ==========================================
+
   void _onMarkAsRead(
     MarkMessagesAsReadEvent event,
     Emitter<ChatRoomState> emit,
@@ -363,17 +554,47 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     _triggerMarkAsRead();
   }
 
+  void _triggerMarkAsRead() {
+    if (_hasMarkedRead || _currentPartnerId == null) return;
+    _hasMarkedRead = true;
+
+    debugPrint(
+      '🔍 [MarkRead] Marking messages as read from: $_currentPartnerId',
+    );
+
+    unawaited(markAsRead.call(_currentPartnerId!));
+    socketService.markAsRead(_currentPartnerId!);
+  }
+
+  // ==========================================
+  // REFRESH
+  // ==========================================
+
   Future<void> _onRefresh(
     RefreshChatEvent event,
     Emitter<ChatRoomState> emit,
   ) async {
     if (_currentPartnerId == null) return;
+
+    _isFetchingFreshData = true;
+    _emitLoaded(emit);
+
     final result = await getChatHistory(_currentPartnerId!);
-    if (isClosed) return;
-    result.fold((_) => null, (history) {
-      _messages = List.from(history);
-      _emitLoaded(emit);
-    });
+
+    if (isClosed || emit.isDone) return;
+
+    _isFetchingFreshData = false;
+
+    result.fold(
+      (_) {
+        if (!emit.isDone) _emitLoaded(emit);
+      },
+      (history) {
+        _messages = List.from(history);
+        _historyLoaded = true;
+        if (!emit.isDone) _emitLoaded(emit);
+      },
+    );
   }
 
   // ==========================================
@@ -388,7 +609,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       final storageService = GetIt.instance<StorageService>();
       final token = await storageService.getAuthToken();
 
-      if (token == null) return;
+      if (token == null || emit.isDone) return;
 
       final response = await http.get(
         Uri.parse(
@@ -400,7 +621,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && !emit.isDone) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final name =
             data['name'] as String? ?? data['phoneNumber'] as String? ?? 'User';
@@ -423,30 +644,36 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   ) async {
     if (_selectedImage == null || _currentPartnerId == null) return;
 
-    emit(
-      ChatRoomImageUploading(
-        image: _selectedImage!,
-        isPartnerOnline: _isPartnerOnline,
-        isPartnerTyping: _isPartnerTyping,
-      ),
-    );
+    if (!emit.isDone) {
+      emit(
+        ChatRoomImageUploading(
+          image: _selectedImage!,
+          isPartnerOnline: _isPartnerOnline,
+          isPartnerTyping: _isPartnerTyping,
+        ),
+      );
+    }
 
     try {
       final url = await _uploadImage(_selectedImage!);
-      if (url != null) {
+      if (url != null && !emit.isDone) {
         final content = event.caption?.isNotEmpty == true
             ? event.caption!
             : '📷 Photo';
         add(SendMessageEvent(_currentPartnerId!, content, 'image', url));
-      } else {
+      } else if (!emit.isDone) {
         emit(ChatRoomError('Failed to upload image'));
       }
     } catch (e) {
       debugPrint('❌ [ChatBloc] Image send error: $e');
-      emit(ChatRoomError('Failed to send image'));
+      if (!emit.isDone) {
+        emit(ChatRoomError('Failed to send image'));
+      }
     } finally {
       _selectedImage = null;
-      _emitLoaded(emit);
+      if (!emit.isDone) {
+        _emitLoaded(emit);
+      }
     }
   }
 
@@ -499,7 +726,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         imageQuality: 80,
         maxWidth: 1024,
       );
-      if (image != null && _currentPartnerId != null && !isClosed) {
+      if (image != null &&
+          _currentPartnerId != null &&
+          !isClosed &&
+          !emit.isDone) {
         _selectedImage = image;
         emit(
           ChatRoomImageSelected(
@@ -524,7 +754,10 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         imageQuality: 80,
         maxWidth: 1024,
       );
-      if (image != null && _currentPartnerId != null && !isClosed) {
+      if (image != null &&
+          _currentPartnerId != null &&
+          !isClosed &&
+          !emit.isDone) {
         _selectedImage = image;
         emit(
           ChatRoomImageSelected(
@@ -561,28 +794,11 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   }
 
   // ==========================================
-  // MARK AS READ
-  // ==========================================
-
-  void _triggerMarkAsRead() {
-    if (_hasMarkedRead || _currentPartnerId == null) return;
-    _hasMarkedRead = true;
-
-    debugPrint(
-      '🔍 [MarkRead] Marking messages as read from: $_currentPartnerId',
-    );
-
-    unawaited(markAsRead.call(_currentPartnerId!));
-    socketService.markAsRead(_currentPartnerId!);
-  }
-
-  // ==========================================
   // CLEANUP
   // ==========================================
 
   @override
   Future<void> close() {
-    _minimumLoadTimer?.cancel();
     _typingTimer?.cancel();
     _msgSub?.cancel();
     _statusSub?.cancel();

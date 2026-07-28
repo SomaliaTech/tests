@@ -13,6 +13,24 @@ class OrderDetailsModel {
             .toList() ??
         [];
 
+    // ✅ Calculate items subtotal
+    double itemsSubtotal = 0.0;
+    for (final item in items) {
+      itemsSubtotal += item.price * item.quantity;
+    }
+
+    // ✅ Get total from API
+    final totalAmount = _parseDouble(json['totalAmount'] ?? json['total'] ?? 0);
+
+    // ✅ Calculate shipping fee = total - items subtotal
+    final shippingFee = totalAmount - itemsSubtotal;
+    final effectiveShippingFee = shippingFee > 0 ? shippingFee : 0.0;
+
+    // Log for debugging
+    print(
+      '📊 OrderDetails: Items Subtotal=$itemsSubtotal, Total=$totalAmount, Shipping Fee=$effectiveShippingFee',
+    );
+
     return OrderDetails(
       id: json['id'] as String? ?? '',
       orderNumber: json['orderNumber'] as String? ?? '',
@@ -24,10 +42,10 @@ class OrderDetailsModel {
         json['paymentStatus'] as String? ?? 'PENDING',
       ),
       paymentMethod: json['paymentMethod'] as String? ?? 'Cash on Delivery',
-      subtotal: _parseDouble(json['subtotal']),
-      shippingFee: _parseDouble(json['shippingFee'] ?? json['shipping'] ?? 0),
+      subtotal: itemsSubtotal, // ✅ Use calculated subtotal
+      shippingFee: effectiveShippingFee, // ✅ Use calculated shipping fee
       discount: _parseDouble(json['discount'] ?? 0),
-      total: _parseDouble(json['totalAmount'] ?? json['total'] ?? 0),
+      total: totalAmount,
       recipientName: json['customerName'] as String? ?? '',
       recipientPhone:
           json['customerPhone'] as String? ??

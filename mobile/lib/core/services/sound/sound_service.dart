@@ -1,50 +1,40 @@
+// lib/core/services/sound/sound_service.dart
+import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 class SoundService {
-  static final SoundService _instance = SoundService._internal();
-  factory SoundService() => _instance;
-  SoundService._internal();
-
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
   bool _isInitialized = false;
-
-  // ✅ Debounce: prevent multiple plays within 500ms
-  DateTime? _lastPlayTime;
+  bool _isDisposed = false;
 
   Future<void> init() async {
-    if (_isInitialized) return;
+    if (_isInitialized || _isDisposed) return;
     _isInitialized = true;
 
     try {
-      await _player.setSource(AssetSource('sounds/message_received.mp3'));
-      await _player.setReleaseMode(ReleaseMode.stop);
-      debugPrint('🔊 Sound service initialized successfully');
+      _player = AudioPlayer();
     } catch (e) {
-      debugPrint('❌ Sound service failed: $e');
+      debugPrint('⚠️ Failed to create audio player: $e');
+      _player = null;
     }
   }
 
   Future<void> playMessageSound() async {
-    try {
-      // ✅ Debounce: prevent rapid successive plays
-      final now = DateTime.now();
-      if (_lastPlayTime != null &&
-          now.difference(_lastPlayTime!).inMilliseconds < 500) {
-        debugPrint('🔊 Sound skipped (debounce)');
-        return;
-      }
-      _lastPlayTime = now;
+    if (_player == null || _isDisposed) return;
 
-      await _player.stop();
-      await _player.play(AssetSource('sounds/message_received.mp3'));
-      debugPrint('🔊 Message sound played');
+    try {
+      await _player!.stop();
+      await _player!.play(AssetSource('sounds/message.mp3'));
     } catch (e) {
-      debugPrint('❌ Sound play failed: $e');
+      // Silently ignore - player might not be ready
     }
   }
 
   void dispose() {
-    _player.dispose();
+    _isDisposed = true;
+    // ✅ Don't call stop/release/dispose on the player directly
+    // Just set the flag and let the player handle its own lifecycle
+    _player = null;
   }
 }

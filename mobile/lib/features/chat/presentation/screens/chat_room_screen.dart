@@ -1,3 +1,4 @@
+// lib/features/chat/presentation/screens/chat_room_screen.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -6,6 +7,7 @@ import 'package:iconsax/iconsax.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile/core/services/sound/message_sound_manager.dart';
+import 'package:mobile/features/chat/data/datasources/chat_local_datasource.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_bloc.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_event.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_state.dart';
@@ -14,6 +16,7 @@ import 'package:mobile/features/chat/presentation/widgets/chat_skeletons.dart';
 import 'package:mobile/features/chat/presentation/widgets/typing_indicator.dart';
 import 'package:mobile/features/chat/presentation/widgets/message_bubble.dart';
 import 'package:mobile/features/chat/presentation/widgets/image_picker_sheet.dart';
+import 'package:mobile/features/chat/presentation/widgets/chat_avatar.dart';
 import '../../../../core/services/chat_socket_service.dart';
 import '../../../../core/services/injection_container.dart';
 
@@ -26,7 +29,7 @@ class ChatRoomScreen extends StatefulWidget {
   const ChatRoomScreen({
     super.key,
     required this.partnerId,
-    this.partnerName = '', // ✅ Default to empty string
+    this.partnerName = '',
     this.partnerImage,
     this.isOnline = false,
   });
@@ -49,6 +52,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
 
   XFile? _selectedImage;
   bool _isUploadingLocally = false;
+  bool _hasShownCachedData = false;
 
   @override
   void initState() {
@@ -60,6 +64,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       getChatHistory: sl(),
       markAsRead: sl(),
       socketService: _socketService,
+      localDataSource: sl<ChatLocalDataSource>(), // ✅ ADD THIS
     );
 
     MessageSoundManager().setCurrentChatPartner(widget.partnerId);
@@ -83,29 +88,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     await _chatRoomBloc.getCurrentUserId();
     if (!mounted) return;
 
-    // ✅ Fetch partner info if name is not provided
-    if (widget.partnerName.isEmpty) {
-      _chatRoomBloc.add(LoadPartnerInfoEvent(widget.partnerId));
-    }
-
-    if (!_socketService.isConnected) {
-      await _socketService.connect();
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    _socketService.checkPartnerStatus(widget.partnerId);
+    // 🚀 LOAD CACHED HISTORY IMMEDIATELY - Don't wait for socket!
     _chatRoomBloc.add(
       LoadChatHistoryEvent(
         partnerId: widget.partnerId,
         isOnline: widget.isOnline,
       ),
     );
+
+    // 🔄 Load partner info and connect socket in parallel AFTER emitting cache
+    if (widget.partnerName.isEmpty) {
+      _chatRoomBloc.add(LoadPartnerInfoEvent(widget.partnerId));
+    }
+
+    // Connect socket asynchronously without blocking UI
+    if (!_socketService.isConnected) {
+      unawaited(_socketService.connect());
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+
+    _socketService.checkPartnerStatus(widget.partnerId);
   }
 
   void _onTextChanged() {
     _typingDebounce?.cancel();
     final hasText = _messageController.text.isNotEmpty;
-
     _chatRoomBloc.add(UserTypingEvent(hasText));
 
     if (hasText) {
@@ -231,6 +238,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
+  // ==========================================
+  // APP BAR
+  // ==========================================
+
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
@@ -239,36 +250,58 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
         icon: const Icon(Iconsax.arrow_left, color: Color(0xFF333333)),
         onPressed: () => Navigator.pop(context),
       ),
-      title: Row(
-        children: [
-          Hero(tag: 'avatar_${widget.partnerId}', child: _buildPartnerAvatar()),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildPartnerName(), // ✅ Use the new method
-                _buildPartnerStatus(),
-              ],
+      title: InkWell(
+        onTap: _navigateToProfile,
+        child: Row(
+          children: [
+            _buildPartnerAvatar(),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [_buildPartnerName(), _buildPartnerStatus()],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ✅ NEW: Partner name with loading state
+  // ==========================================
+  // PARTNER AVATAR - Using ChatAvatar widget
+  // ==========================================
+  // In ChatRoomScreen, update _buildPartnerAvatar to use heroTag
+
+  Widget _buildPartnerAvatar() {
+    return ChatAvatar(
+      imageUrl: widget.partnerImage,
+      name: widget.partnerName,
+      radius: 20,
+      heroTag: 'avatar_${widget.partnerId}', // ✅ Hero tag for animation
+      onTap: _navigateToProfile,
+    );
+  }
+  // ==========================================
+  // PARTNER NAME
+  // ==========================================
+
   Widget _buildPartnerName() {
     return BlocBuilder<ChatRoomBloc, ChatRoomState>(
+      buildWhen: (previous, current) {
+        if (current is ChatRoomLoaded && previous is ChatRoomLoaded) {
+          return previous.partnerName != current.partnerName;
+        }
+        return true;
+      },
       builder: (context, state) {
         String displayName = widget.partnerName;
 
-        // If partner name is empty, try to get it from state
         if (displayName.isEmpty && state is ChatRoomLoaded) {
           displayName = state.partnerName ?? '';
         }
 
-        // If still empty, show default
         if (displayName.isEmpty) {
           displayName = 'User';
         }
@@ -281,18 +314,22 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             color: Color(0xFF333333),
           ),
           overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         );
       },
     );
   }
 
-  // ✅ NEW: Partner online/typing status
+  // ==========================================
+  // PARTNER STATUS
+  // ==========================================
+
   Widget _buildPartnerStatus() {
     return BlocBuilder<ChatRoomBloc, ChatRoomState>(
-      buildWhen: (p, c) {
-        if (p is ChatRoomLoaded && c is ChatRoomLoaded) {
-          return p.isPartnerOnline != c.isPartnerOnline ||
-              p.isPartnerTyping != c.isPartnerTyping;
+      buildWhen: (previous, current) {
+        if (previous is ChatRoomLoaded && current is ChatRoomLoaded) {
+          return previous.isPartnerOnline != current.isPartnerOnline ||
+              previous.isPartnerTyping != current.isPartnerTyping;
         }
         return true;
       },
@@ -311,6 +348,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             ? state.isPartnerOnline
             : widget.isOnline;
         return Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 8,
@@ -334,17 +372,20 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
+  // ==========================================
+  // TYPING INDICATOR
+  // ==========================================
+
   Widget _buildTypingIndicator() {
     return BlocBuilder<ChatRoomBloc, ChatRoomState>(
-      buildWhen: (p, c) {
-        if (p is ChatRoomLoaded && c is ChatRoomLoaded) {
-          return p.isPartnerTyping != c.isPartnerTyping;
+      buildWhen: (previous, current) {
+        if (previous is ChatRoomLoaded && current is ChatRoomLoaded) {
+          return previous.isPartnerTyping != current.isPartnerTyping;
         }
         return false;
       },
       builder: (context, state) {
         if (state is ChatRoomLoaded && state.isPartnerTyping) {
-          // ✅ Get partner name from state if available
           final name = state.partnerName ?? widget.partnerName;
           return TypingIndicator(
             partnerImage: widget.partnerImage,
@@ -356,53 +397,126 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
+  // ==========================================
+  // MESSAGE LIST - NO LOADING IF CACHED DATA
+  // ==========================================
+  // ==========================================
+  // MESSAGE LIST - NO LOADING IF CACHED DATA
+  // ==========================================
+
   Widget _buildMessageList() {
     return BlocConsumer<ChatRoomBloc, ChatRoomState>(
-      buildWhen: (p, c) =>
-          c is! ChatRoomImageSelected && c is! ChatRoomImageUploading,
+      buildWhen: (previous, current) =>
+          current is! ChatRoomImageSelected &&
+          current is! ChatRoomImageUploading,
       listener: (context, state) {
-        if (state is ChatRoomLoaded && state.isHistoryLoaded) {
+        if (state is ChatRoomLoaded) {
           _scrollToBottom();
         }
       },
       builder: (context, state) {
-        if (state is ChatRoomLoaded && !state.isHistoryLoaded) {
-          return const MessagesSkeletonList(count: 8);
+        // ✅ SHOW MESSAGES IMMEDIATELY if we have them
+        if (state is ChatRoomLoaded && state.messages.isNotEmpty) {
+          return Stack(
+            children: [
+              ListView.builder(
+                controller: _scrollController,
+                reverse: true,
+                padding: const EdgeInsets.all(16),
+                itemCount: state.messages.length,
+                itemBuilder: (context, index) {
+                  final msg = state.messages[index];
+                  final isMe = msg.senderId == _chatRoomBloc.currentUserId;
+                  return MessageBubble(
+                    key: ValueKey(msg.id),
+                    message: msg,
+                    isMe: isMe,
+                  );
+                },
+              ),
+              // Subtle syncing indicator
+              if (state.isFetchingFreshData)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: const Color(0xFF2ED573).withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Updating...',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
         }
 
+        // ✅ Empty state (truly no messages after history loaded)
+        if (state is ChatRoomLoaded &&
+            state.isHistoryLoaded &&
+            state.messages.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        // ⚠️ ONLY show skeleton on FIRST LOAD (no cache at all)
+        // ChatRoomLoading is explicitly for when no cache exists
         if (state is ChatRoomLoading) {
           return const MessagesSkeletonList(count: 8);
         }
 
+        // For brief initial state, show nothing (avoid flash)
+        if (state is ChatRoomInitial) {
+          return const SizedBox.shrink();
+        }
+
+        // Error state
         if (state is ChatRoomError) {
           return _buildErrorState(state.message);
         }
 
-        if (state is ChatRoomLoaded) {
-          if (state.messages.isEmpty) {
-            return _buildEmptyState();
-          }
-          return ListView.builder(
-            controller: _scrollController,
-            reverse: true,
-            padding: const EdgeInsets.all(16),
-            itemCount: state.messages.length,
-            itemBuilder: (context, index) {
-              final msg = state.messages[index];
-              final isMe = msg.senderId == _chatRoomBloc.currentUserId;
-              return MessageBubble(
-                key: ValueKey(msg.id),
-                message: msg,
-                isMe: isMe,
-              );
-            },
-          );
-        }
-
-        return const MessagesSkeletonList(count: 8);
+        // Fallback - should rarely reach here
+        return const SizedBox.shrink();
       },
     );
   }
+  // ==========================================
+  // EMPTY STATE
+  // ==========================================
 
   Widget _buildEmptyState() {
     return Center(
@@ -412,7 +526,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+              color: const Color(0xFF2ED573).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(Iconsax.message, size: 48, color: Colors.grey.shade400),
@@ -436,6 +550,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
+  // ==========================================
+  // ERROR STATE
+  // ==========================================
+
   Widget _buildErrorState(String message) {
     return Center(
       child: Padding(
@@ -446,7 +564,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.08),
+                color: Colors.red.withOpacity(0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),
@@ -483,6 +601,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       ),
     );
   }
+
+  // ==========================================
+  // INPUT AREA
+  // ==========================================
 
   Widget _buildInputArea() {
     return Column(
@@ -531,7 +653,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.4),
+                      color: Colors.black.withOpacity(0.4),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Center(
@@ -580,7 +702,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -650,57 +772,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     );
   }
 
-  Widget _buildPartnerAvatar() {
-    final hasImage =
-        widget.partnerImage != null && widget.partnerImage!.isNotEmpty;
-
-    final fallbackWidget = CircleAvatar(
-      radius: 20,
-      backgroundColor: Colors.grey.shade100,
-      child: Text(
-        widget.partnerName.isNotEmpty
-            ? widget.partnerName[0].toUpperCase()
-            : '?',
-        style: const TextStyle(
-          color: Color(0xFF2ED573),
-          fontWeight: FontWeight.bold,
-          fontSize: 18,
-        ),
-      ),
-    );
-
-    if (!hasImage) {
-      return GestureDetector(onTap: _navigateToProfile, child: fallbackWidget);
-    }
-
-    return GestureDetector(
-      onTap: _navigateToProfile,
-      child: CachedNetworkImage(
-        imageUrl: widget.partnerImage!,
-        imageBuilder: (context, imageProvider) => CircleAvatar(
-          radius: 20,
-          backgroundColor: Colors.grey.shade100,
-          backgroundImage: imageProvider,
-        ),
-        placeholder: (context, url) => CircleAvatar(
-          radius: 20,
-          backgroundColor: Colors.grey.shade100,
-          child: const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFF2ED573),
-            ),
-          ),
-        ),
-        errorWidget: (context, url, error) {
-          debugPrint('❌ Failed to load partner avatar: $url');
-          return fallbackWidget;
-        },
-      ),
-    );
-  }
+  // ==========================================
+  // NAVIGATION
+  // ==========================================
 
   void _navigateToProfile() {
     Navigator.push(

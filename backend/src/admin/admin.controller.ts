@@ -38,6 +38,9 @@ import {
   FileFieldsInterceptor,
   AnyFilesInterceptor,
 } from '@nestjs/platform-express';
+
+import { Permissions, PermissionGuard } from '../auth/guards/permission.guard';
+import { Permission } from './enums/permissions.enum';
 @ApiTags('admin')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -52,6 +55,122 @@ export class AdminController {
   @ApiOperation({ summary: 'Get admin dashboard statistics' })
   getStats() {
     return this.adminService.getStats();
+  }
+
+  // Add to AdminController
+
+  // ==========================================
+  // ROLE MANAGEMENT (Super Admin Only)
+  // ==========================================
+
+  @Get('roles')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_VIEW)
+  @ApiOperation({ summary: 'Get all roles' })
+  async getAllRoles() {
+    return this.adminService.getAllRoles();
+  }
+
+  @Post('roles')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_CREATE)
+  @ApiOperation({ summary: 'Create a new role' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string' },
+        permissions: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  })
+  async createRole(
+    @Body() data: { name: string; description?: string; permissions: string[] },
+  ) {
+    return this.adminService.createRole(data);
+  }
+
+  @Put('roles/:roleId')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_UPDATE)
+  @ApiOperation({ summary: 'Update a role' })
+  @ApiParam({ name: 'roleId', description: 'Role UUID' })
+  async updateRole(
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+    @Body()
+    data: { name?: string; description?: string; permissions?: string[] },
+  ) {
+    return this.adminService.updateRole(roleId, data);
+  }
+
+  @Delete('roles/:roleId')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_DELETE)
+  @ApiOperation({ summary: 'Delete a role' })
+  @ApiParam({ name: 'roleId', description: 'Role UUID' })
+  async deleteRole(@Param('roleId', ParseUUIDPipe) roleId: string) {
+    return this.adminService.deleteRole(roleId);
+  }
+
+  // ==========================================
+  // USER ROLE ASSIGNMENT
+  // ==========================================
+
+  @Post('users/:userId/roles')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_UPDATE)
+  @ApiOperation({ summary: 'Assign a role to a user' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        roleId: { type: 'string' },
+      },
+    },
+  })
+  async assignRoleToUser(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body('roleId') roleId: string,
+  ) {
+    return this.adminService.assignRoleToUser(userId, roleId);
+  }
+
+  @Delete('users/:userId/roles/:roleId')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_UPDATE)
+  @ApiOperation({ summary: 'Remove a role from a user' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  @ApiParam({ name: 'roleId', description: 'Role UUID' })
+  async removeRoleFromUser(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Param('roleId', ParseUUIDPipe) roleId: string,
+  ) {
+    return this.adminService.removeRoleFromUser(userId, roleId);
+  }
+
+  @Get('users/:userId/roles')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_VIEW)
+  @ApiOperation({ summary: 'Get user roles' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  async getUserRoles(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.adminService.getUserRoles(userId);
+  }
+
+  // ==========================================
+  // USER PERMISSIONS
+  // ==========================================
+
+  @Get('users/:userId/permissions')
+  @UseGuards(JwtAuthGuard, AdminGuard, PermissionGuard)
+  @Permissions(Permission.ADMIN_VIEW)
+  @ApiOperation({ summary: 'Get user permissions' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  async getUserPermissions(@Param('userId', ParseUUIDPipe) userId: string) {
+    const permissions = await this.adminService.getUserPermissions(userId);
+    return { permissions };
   }
 
   // ==========================================

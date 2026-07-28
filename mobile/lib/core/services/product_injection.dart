@@ -1,41 +1,72 @@
+// lib/core/services/product_injection.dart
 import 'package:get_it/get_it.dart';
-
-import '../../features/product/data/datasources/product_remote_datasource.dart';
-import '../../features/product/data/repositories/product_repository_impl.dart';
-import '../../features/product/domain/repositories/product_repository.dart';
-import '../../features/product/domain/usecases/get_featured_products.dart';
-import '../../features/product/domain/usecases/get_product_by_id.dart';
-import '../../features/product/domain/usecases/get_products_by_category.dart';
-import '../../features/product/domain/usecases/search_products.dart';
-import '../../features/product/presentation/blocs/product_bloc.dart';
+import 'package:mobile/features/product/data/datasources/local/category_local_datasource.dart';
+import 'package:mobile/features/product/data/datasources/local/product_local_datasource.dart';
+import 'package:mobile/features/product/data/datasources/product_remote_datasource.dart';
+import 'package:mobile/features/product/data/repositories/product_repository_impl.dart';
+import 'package:mobile/features/product/domain/repositories/product_repository.dart';
+import 'package:mobile/features/product/domain/usecases/get_featured_products.dart';
+import 'package:mobile/features/product/domain/usecases/get_product_by_id.dart';
+import 'package:mobile/features/product/domain/usecases/get_products_by_category.dart';
+import 'package:mobile/features/product/domain/usecases/search_products.dart';
+import 'package:mobile/features/product/presentation/blocs/product_bloc.dart';
 
 void registerProductDependencies(GetIt sl) {
-  // Data Sources
-  sl.registerLazySingleton<ProductRemoteDataSource>(
-    () => ProductRemoteDataSourceImpl(client: sl()),
-  );
+  // Local Data Sources
+  // ✅ Only register ProductLocalDataSource here
+  if (!sl.isRegistered<ProductLocalDataSource>()) {
+    sl.registerLazySingleton<ProductLocalDataSource>(
+      () => ProductLocalDataSourceImpl(),
+    );
+  }
 
-  // Repositories
-  sl.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(remoteDataSource: sl()),
-  );
+  // ✅ CategoryLocalDataSource is already registered in category_injection.dart
+  // DO NOT register it again here
 
-  // Use Cases (Only product-specific use cases)
-  sl.registerLazySingleton(() => GetFeaturedProducts(sl()));
-  sl.registerLazySingleton(() => GetProductsByCategory(sl()));
-  sl.registerLazySingleton(() => SearchProducts(sl()));
-  sl.registerLazySingleton(() => GetProductById(sl()));
+  // Remote Data Source
+  if (!sl.isRegistered<ProductRemoteDataSource>()) {
+    sl.registerLazySingleton<ProductRemoteDataSource>(
+      () => ProductRemoteDataSourceImpl(client: sl()),
+    );
+  }
+
+  // Repository with ALL data sources
+  if (!sl.isRegistered<ProductRepository>()) {
+    sl.registerLazySingleton<ProductRepository>(
+      () => ProductRepositoryImpl(
+        remoteDataSource: sl<ProductRemoteDataSource>(),
+        localDataSource: sl<ProductLocalDataSource>(),
+        categoryLocalDataSource:
+            sl<CategoryLocalDataSource>(), // ✅ Gets it from category_injection
+      ),
+    );
+  }
+
+  // Use Cases
+  if (!sl.isRegistered<GetFeaturedProducts>()) {
+    sl.registerLazySingleton(() => GetFeaturedProducts(sl()));
+  }
+  if (!sl.isRegistered<GetProductsByCategory>()) {
+    sl.registerLazySingleton(() => GetProductsByCategory(sl()));
+  }
+  if (!sl.isRegistered<SearchProducts>()) {
+    sl.registerLazySingleton(() => SearchProducts(sl()));
+  }
+  if (!sl.isRegistered<GetProductById>()) {
+    sl.registerLazySingleton(() => GetProductById(sl()));
+  }
 
   // BLoC
-  sl.registerFactory(
-    () => ProductBloc(
-      getCategories: sl(), // Resolves successfully from Category registrations
-      getSubcategories:
-          sl(), // Resolves successfully from Category registrations
-      getFeaturedProducts: sl(),
-      getProductsByCategory: sl(),
-      searchProducts: sl(),
-      getProductById: sl(),
-    ),
-  );
+  if (!sl.isRegistered<ProductBloc>()) {
+    sl.registerFactory(
+      () => ProductBloc(
+        getCategories: sl(),
+        getSubcategories: sl(),
+        getFeaturedProducts: sl(),
+        getProductsByCategory: sl(),
+        searchProducts: sl(),
+        getProductById: sl(),
+      ),
+    );
+  }
 }

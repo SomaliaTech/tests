@@ -207,15 +207,16 @@ class ChatSocketService {
   int min(int a, int b) => a < b ? a : b;
 
   // ✅ Heartbeat methods to keep the connection alive and prevent ghost users
+  // In ChatSocketService._startHeartbeat, change log level
   void _startHeartbeat() {
-    _stopHeartbeat(); // Ensure no duplicate timers are running
+    _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_isConnected && _socket != null) {
         _socket!.emit('heartbeat', {});
-        _logger.d('💓 [WS] Heartbeat sent');
+        // Remove or comment out this log to reduce spam:
+        // _logger.d('💓 [WS] Heartbeat sent');
       }
     });
-    _logger.i('💓 [WS] Heartbeat started');
   }
 
   void _stopHeartbeat() {

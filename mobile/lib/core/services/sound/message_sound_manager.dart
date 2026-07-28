@@ -1,3 +1,4 @@
+// lib/core/services/sound/message_sound_manager.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
@@ -13,7 +14,7 @@ class MessageSoundManager {
   StreamSubscription? _connectionSub;
   bool _isInitialized = false;
   String? _currentUserId;
-  String? _currentChatPartnerId; // ✅ Track which chat room is open
+  String? _currentChatPartnerId;
   bool _isAppInForeground = true;
 
   static final MessageSoundManager _instance = MessageSoundManager._internal();
@@ -22,31 +23,25 @@ class MessageSoundManager {
 
   void setCurrentChatPartner(String? partnerId) {
     _currentChatPartnerId = partnerId;
-    debugPrint('💬 [Sound] Current chat partner: $partnerId');
   }
 
   Future<void> init() async {
     if (_isInitialized) return;
     _isInitialized = true;
 
-    await _soundService.init();
+    // ✅ Don't await sound service init if it might fail
+    try {
+      await _soundService.init();
+    } catch (e) {
+      debugPrint('⚠️ Sound service init failed (non-critical): $e');
+    }
 
-    // ✅ Listen for app lifecycle changes
     _setupLifecycleListener();
 
-    // ✅ Centralized message handler
     void handleNewMessage(dynamic message) async {
-      // Only play sound if app is in foreground
-      if (!_isAppInForeground) {
-        debugPrint('🔇 App in background - skipping sound');
-        return;
-      }
+      if (!_isAppInForeground) return;
 
-      // ✅ Skip sound if we're currently viewing the chat with the sender
-      if (_currentChatPartnerId == message.senderId) {
-        debugPrint('🔇 Viewing chat with sender - skipping sound');
-        return;
-      }
+      if (_currentChatPartnerId == message.senderId) return;
 
       try {
         final soundEnabled = await _storageService.getMessageSoundEnabled();
@@ -55,68 +50,57 @@ class MessageSoundManager {
         final senderId = message.senderId;
         final receiverId = message.receiverId;
 
-        // Only play sound for incoming messages (not sent by current user)
         if (receiverId == _currentUserId && senderId != _currentUserId) {
           await _soundService.playMessageSound();
-          debugPrint('🔊 Message sound played for message from: $senderId');
         }
       } catch (e) {
-        debugPrint('❌ Sound play error: $e');
+        // Silently ignore sound errors
       }
     }
 
-    // Wait for WebSocket to connect
     _connectionSub = _socketService.onConnectionChange.listen((
       isConnected,
     ) async {
       if (isConnected) {
         try {
           _currentUserId = await _storageService.getUserId();
-          debugPrint('🔊 [Sound] Current user ID: $_currentUserId');
         } catch (e) {
           _currentUserId = null;
-          debugPrint('❌ [Sound] Failed to get user ID: $e');
         }
 
-        // Cancel previous subscription if exists
         _messageSub?.cancel();
-
-        // Listen for new messages
         _messageSub = _socketService.onNewMessage.listen(handleNewMessage);
       }
     });
 
-    // If already connected, trigger immediately
     if (_socketService.isConnected) {
       try {
         _currentUserId = await _storageService.getUserId();
         _messageSub?.cancel();
         _messageSub = _socketService.onNewMessage.listen(handleNewMessage);
       } catch (e) {
-        debugPrint('❌ Sound init error: $e');
+        // Silently ignore
       }
     }
-
-    debugPrint('🔊 Message sound manager initialized');
   }
 
   void _setupLifecycleListener() {
     try {
       WidgetsBinding.instance.addObserver(_LifecycleObserver(this));
     } catch (e) {
-      debugPrint('⚠️ Could not add lifecycle observer: $e');
+      // Silently ignore
     }
   }
 
   void setAppInForeground(bool isForeground) {
     _isAppInForeground = isForeground;
-    debugPrint('📱 App foreground: $isForeground');
   }
 
   void dispose() {
     _messageSub?.cancel();
     _connectionSub?.cancel();
-    _soundService.dispose();
+    // ✅ Don't dispose sound service - it handles its own lifecycle
+    // _soundService.dispose();
   }
 }
 

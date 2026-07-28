@@ -1,3 +1,4 @@
+// lib/features/admin/presentation/screens/admin_settings_screen.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,8 +6,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/admin/presentation/screens/chat/super_admin_chat_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/chat/super_admin_list_screen.dart';
+import 'package:mobile/features/auth/presentation/screens/phone_input_screen.dart';
 import 'package:mobile/features/profile/presentation/screens/profile_screen.dart';
 import 'package:toastification/toastification.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -14,7 +17,6 @@ import '../../../order/presentation/screens/order_history_screen.dart';
 import '../../../support/presentation/screens/support_screen.dart';
 import '../../../../core/services/injection_container.dart';
 import '../../../../core/services/storage/storage_service.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -81,9 +83,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
           _buildNumber = packageInfo.buildNumber;
         });
       }
-    } catch (_) {
-      // Use defaults
-    }
+    } catch (_) {}
   }
 
   void _handleLogout(BuildContext context) {
@@ -106,15 +106,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 onPressed: () {
                   Navigator.pop(context);
                   authBloc.add(LogoutEvent());
-                  toastification.show(
-                    title: const Text('Logged Out'),
-                    description: const Text(
-                      'You have been logged out successfully',
-                    ),
-                    type: ToastificationType.success,
-                    style: ToastificationStyle.fillColored,
-                    autoCloseDuration: const Duration(seconds: 2),
-                  );
                 },
                 isDestructiveAction: true,
                 child: const Text('Logout'),
@@ -160,15 +151,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 onPressed: () {
                   Navigator.pop(context);
                   authBloc.add(LogoutEvent());
-                  toastification.show(
-                    title: const Text('Logged Out'),
-                    description: const Text(
-                      'You have been logged out successfully',
-                    ),
-                    type: ToastificationType.success,
-                    style: ToastificationStyle.fillColored,
-                    autoCloseDuration: const Duration(seconds: 2),
-                  );
                 },
                 style: TextButton.styleFrom(
                   backgroundColor: const Color(
@@ -200,16 +182,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is Unauthenticated) {
-            Navigator.pushReplacementNamed(context, '/');
+            // ✅ Clear stack and navigate to login
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const PhoneInputScreen()),
+              (route) => false,
+            );
           }
         },
         child: Column(
           children: [
-            // ✅ Scrollable content area (Expanded takes remaining space)
             Expanded(
               child: CustomScrollView(
                 slivers: [
-                  // App Bar
                   SliverAppBar(
                     expandedHeight: 140,
                     floating: false,
@@ -309,8 +293,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                       ),
                     ),
                   ),
-
-                  // Content
                   SliverToBoxAdapter(
                     child: FadeTransition(
                       opacity: _fadeInAnimation,
@@ -328,16 +310,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
                 ],
               ),
             ),
-
-            // ✅ Logout button - FIXED AT BOTTOM
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: _buildLogoutButton(),
             ),
-
-            // ✅ App Version - BELOW logout
             _buildAppVersion(),
-
             const SizedBox(height: 126),
           ],
         ),
@@ -347,12 +324,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
 
   Widget _buildProfileCard() {
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ProfileScreen()),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProfileScreen()),
+      ),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),
         padding: const EdgeInsets.all(20),
@@ -485,8 +460,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
             },
           ),
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
-
-          // ✅ Super Admin Chat - only show for super admins
           BlocBuilder<AuthBloc, AuthState>(
             builder: (context, state) {
               if (state is Authenticated && state.user.isSuperAdmin == true) {
@@ -514,7 +487,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
               return const SizedBox.shrink();
             },
           ),
-
           _buildMenuItem(
             icon: Iconsax.info_circle,
             title: 'Help Center',
@@ -605,11 +577,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen>
         ),
         child: Ink(
           height: double.infinity,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
               colors: [Color(0xFFFF4757), Color(0xFFFF6B81)],
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.all(Radius.circular(16)),
           ),
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,

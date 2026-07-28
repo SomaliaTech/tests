@@ -1,7 +1,8 @@
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart'; // Add logger package
+import 'package:logger/logger.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/features/chat/data/datasources/chat_local_datasource.dart';
 import 'package:mobile/features/chat/data/datasources/chat_remote_datasource.dart';
 import 'package:mobile/features/chat/data/repositories/chat_repository_impl.dart';
 import 'package:mobile/features/chat/domain/repositories/chat_repository.dart';
@@ -35,55 +36,78 @@ void registerChatDependencies() {
     );
   }
 
+  // ✅ REGISTER ChatLocalDataSource ONLY ONCE
+  if (!sl.isRegistered<ChatLocalDataSource>()) {
+    sl.registerLazySingleton<ChatLocalDataSource>(
+      () => ChatLocalDataSourceImpl(),
+    );
+    _logger.i('✅ ChatLocalDataSource registered');
+  }
+
   // Repositories
-  // In chat_injection.dart or wherever you register ChatRepositoryImpl
-  sl.registerLazySingleton<ChatRepository>(
-    () => ChatRepositoryImpl(
-      remoteDataSource: sl<ChatRemoteDataSource>(),
-      storageService: sl<StorageService>(), // ✅ Add this
-    ),
-  );
+  if (!sl.isRegistered<ChatRepository>()) {
+    sl.registerLazySingleton<ChatRepository>(
+      () => ChatRepositoryImpl(
+        remoteDataSource: sl<ChatRemoteDataSource>(),
+        localDataSource: sl<ChatLocalDataSource>(),
+        storageService: sl<StorageService>(),
+      ),
+    );
+    _logger.i('✅ ChatRepository registered');
+  }
 
   // Use Cases
   if (!sl.isRegistered<GetConversations>()) {
     sl.registerLazySingleton<GetConversations>(
       () => GetConversations(sl<ChatRepository>()),
     );
+    _logger.i('✅ GetConversations registered');
   }
+
   if (!sl.isRegistered<GetChatHistory>()) {
     sl.registerLazySingleton<GetChatHistory>(
       () => GetChatHistory(sl<ChatRepository>()),
     );
+    _logger.i('✅ GetChatHistory registered');
   }
+
   if (!sl.isRegistered<chat.MarkAsRead>()) {
     sl.registerLazySingleton<chat.MarkAsRead>(
       () => chat.MarkAsRead(sl<ChatRepository>()),
     );
+    _logger.i('✅ MarkAsRead registered');
   }
+
   if (!sl.isRegistered<SearchConversations>()) {
-    sl.registerLazySingleton(() => SearchConversations(sl<ChatRepository>()));
+    sl.registerLazySingleton<SearchConversations>(
+      () => SearchConversations(sl<ChatRepository>()),
+    );
+    _logger.i('✅ SearchConversations registered');
   }
+
   // BLoCs
+  // In your registration function
   if (!sl.isRegistered<ConversationsBloc>()) {
     sl.registerLazySingleton(
       () => ConversationsBloc(
         getConversations: sl<GetConversations>(),
         searchConversations: sl<SearchConversations>(),
         socketService: sl<ChatSocketService>(),
+        localDataSource: sl<ChatLocalDataSource>(), // ✅ ADD THIS
       ),
     );
   }
-  // ✅ FIX: Removed 'dataSource' parameter
-  // In chat_injection.dart
-  if (!sl.isRegistered<ChatRoomBloc>()) {
-    sl.registerFactory(
-      () => ChatRoomBloc(
-        getChatHistory: sl<GetChatHistory>(),
-        markAsRead: sl<chat.MarkAsRead>(),
-        socketService: sl<ChatSocketService>(),
-      ),
-    );
-  }
+  // ✅ ChatRoomBloc - registered as factory (new instance each time)
+  // No need to check isRegistered since it's a factory
+  sl.registerFactory<ChatRoomBloc>(
+    () => ChatRoomBloc(
+      getChatHistory: sl<GetChatHistory>(),
+      markAsRead: sl<chat.MarkAsRead>(),
+      socketService: sl<ChatSocketService>(),
+      localDataSource: sl<ChatLocalDataSource>(),
+    ),
+  );
+  _logger.i('✅ ChatRoomBloc registered as factory');
 
   _logger.i('✅ Chat Dependencies Registered');
 }

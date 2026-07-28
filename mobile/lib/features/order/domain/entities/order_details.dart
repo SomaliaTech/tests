@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter/animation.dart';
+import 'package:flutter/material.dart';
 
 enum OrderDetailStatus { pending, processing, shipped, delivered, cancelled }
 
@@ -116,7 +116,7 @@ class OrderDetails extends Equatable {
   final PaymentDetailStatus paymentStatus;
   final String paymentMethod;
   final double subtotal;
-  final double shippingFee;
+  final double shippingFee; // ✅ Order-level shipping fee
   final double discount;
   final double total;
   final String recipientName;

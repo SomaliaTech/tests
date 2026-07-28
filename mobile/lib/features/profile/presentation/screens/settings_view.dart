@@ -1,9 +1,10 @@
+// lib/features/profile/presentation/screens/settings_screen.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
-import 'package:toastification/toastification.dart';
+import 'package:mobile/features/auth/presentation/screens/phone_input_screen.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -37,7 +38,6 @@ class _SettingsViewState extends State<SettingsView> {
     _loadUserData();
   }
 
-  /// ✅ Returns Future<void> so it can be used with RefreshIndicator
   Future<void> _loadUserData() async {
     try {
       final name = await _storageService.getUserName();
@@ -45,10 +45,6 @@ class _SettingsViewState extends State<SettingsView> {
       final profileImage = await _storageService.getUserProfileImage();
       final isAdmin = await _storageService.getIsAdmin();
       final isSuperAdmin = await _storageService.getIsSuperAdmin();
-
-      debugPrint(
-        '👤 SettingsView - isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
-      );
 
       if (mounted) {
         setState(() {
@@ -61,10 +57,7 @@ class _SettingsViewState extends State<SettingsView> {
         });
       }
     } catch (e) {
-      debugPrint('❌ Failed to load user data: $e');
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -87,15 +80,6 @@ class _SettingsViewState extends State<SettingsView> {
                 onPressed: () {
                   Navigator.pop(context);
                   authBloc.add(LogoutEvent());
-                  toastification.show(
-                    title: const Text('Logged Out'),
-                    description: const Text(
-                      'You have been logged out successfully',
-                    ),
-                    type: ToastificationType.success,
-                    style: ToastificationStyle.fillColored,
-                    autoCloseDuration: const Duration(seconds: 2),
-                  );
                 },
                 isDestructiveAction: true,
                 child: const Text('Logout'),
@@ -124,15 +108,6 @@ class _SettingsViewState extends State<SettingsView> {
                 onPressed: () {
                   Navigator.pop(context);
                   authBloc.add(LogoutEvent());
-                  toastification.show(
-                    title: const Text('Logged Out'),
-                    description: const Text(
-                      'You have been logged out successfully',
-                    ),
-                    type: ToastificationType.success,
-                    style: ToastificationStyle.fillColored,
-                    autoCloseDuration: const Duration(seconds: 2),
-                  );
                 },
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFFF4757),
@@ -153,14 +128,17 @@ class _SettingsViewState extends State<SettingsView> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is Unauthenticated) {
-            Navigator.pushReplacementNamed(context, '/');
+            // ✅ Clear stack and navigate to login
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const PhoneInputScreen()),
+              (route) => false,
+            );
           }
         },
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // ✅ Scrollable content area
                   Expanded(
                     child: RefreshIndicator(
                       onRefresh: _loadUserData,
@@ -207,19 +185,15 @@ class _SettingsViewState extends State<SettingsView> {
                                     height: 1,
                                     color: Color(0xFFE0E0E0),
                                   ),
-
-                                  // ✅ Show Admin Dashboard for both Admin and Super Admin
                                   if (_isAdmin || _isSuperAdmin) ...[
                                     MenuItem(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const AdminMainNavigationScreen(),
-                                          ),
-                                        );
-                                      },
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const AdminMainNavigationScreen(),
+                                        ),
+                                      ),
                                       id: 'admin-dashboard',
                                       title: _isSuperAdmin
                                           ? 'Super Admin Dashboard'
@@ -234,15 +208,12 @@ class _SettingsViewState extends State<SettingsView> {
                                 ],
                               ),
                             ),
-                            // ✅ Add some padding at the bottom of scrollable content
                             const SizedBox(height: 20),
                           ],
                         ),
                       ),
                     ),
                   ),
-
-                  // ✅ Logout button fixed at the bottom
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -250,7 +221,6 @@ class _SettingsViewState extends State<SettingsView> {
                     ),
                     child: LogoutButton(onTap: () => _handleLogout(context)),
                   ),
-                  // ✅ Safe area for devices with bottom navigation bar
                   const SizedBox(height: 120),
                 ],
               ),

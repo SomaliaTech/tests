@@ -1,13 +1,14 @@
+// lib/features/chat/presentation/screens/conversations_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:mobile/core/error/error_handler.dart';
 import 'package:mobile/core/services/sound/message_sound_manager.dart';
 import 'package:mobile/features/chat/presentation/bloc/conversations_event.dart';
 import 'package:mobile/features/chat/presentation/bloc/conversations_state.dart';
 import 'package:mobile/features/chat/presentation/widgets/chat_skeletons.dart';
+import 'package:mobile/features/chat/presentation/widgets/chat_avatar.dart';
 import '../../domain/entities/conversation.dart';
 import '../../../../core/services/injection_container.dart';
 import '../../../../core/services/chat_socket_service.dart';
@@ -122,8 +123,14 @@ class _ConversationsScreenState extends State<ConversationsScreen>
 
     MessageSoundManager().setCurrentChatPartner(null);
 
+    // ✅ Reload conversations when returning from chat
     if (mounted) {
-      _bloc.add(LoadConversationsEvent());
+      // Small delay to ensure socket messages are processed
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _bloc.add(LoadConversationsEvent());
+        }
+      });
     }
   }
 
@@ -228,15 +235,19 @@ class _ConversationsScreenState extends State<ConversationsScreen>
         }
       },
       builder: (context, state) {
-        // ✅ Show skeleton on initial load or if state is still Initial
+        // ✅ Show skeleton ONLY on very first load with no cached data
         if (state is ConversationsInitial ||
             (_isInitialLoad && state is ConversationsLoading)) {
           return const ConversationsSkeletonList(count: 10);
         }
 
-        // Error state
-        if (state is ConversationsError) {
-          return _buildErrorState(state.message);
+        // ✅ If loading but we have cached conversations, keep showing them
+        if (state is ConversationsLoading && !_isInitialLoad) {
+          final cachedConversations = _bloc.cachedConversations;
+          if (cachedConversations.isNotEmpty) {
+            return _buildConversationsList(cachedConversations);
+          }
+          return const ConversationsSkeletonList(count: 10);
         }
 
         // Search results
@@ -247,7 +258,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           return _buildConversationsList(state.conversations);
         }
 
-        // Loaded state
+        // Loaded state - show conversations
         if (state is ConversationsLoaded) {
           if (state.conversations.isEmpty) {
             return _buildEmptyState();
@@ -261,10 +272,14 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           );
         }
 
-        // If loading (e.g. pulling to refresh), just show the existing list
-        // The RefreshIndicator will show its own loading spinner
-        if (state is ConversationsLoading) {
-          return const ConversationsSkeletonList(count: 10);
+        // Error state - only show if no cached data
+        if (state is ConversationsError) {
+          final cachedConversations = _bloc.cachedConversations;
+          if (cachedConversations.isNotEmpty) {
+            // Show cached data even on error
+            return _buildConversationsList(cachedConversations);
+          }
+          return _buildErrorState(state.message);
         }
 
         return const SizedBox.shrink();
@@ -273,6 +288,10 @@ class _ConversationsScreenState extends State<ConversationsScreen>
   }
 
   Widget _buildConversationsList(List<Conversation> conversations) {
+    if (conversations.isEmpty) {
+      return _buildEmptyState();
+    }
+
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 20),
@@ -437,7 +456,9 @@ class _ConversationsScreenState extends State<ConversationsScreen>
   }
 }
 
-// Optimized Conversation Card
+// ==========================================
+// CONVERSATION CARD
+// ==========================================
 class _ConversationCard extends StatelessWidget {
   final Conversation conversation;
   final VoidCallback onTap;
@@ -468,152 +489,140 @@ class _ConversationCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Row(
-            children: [
-              // Avatar with online indicator
-              Stack(
-                children: [
-                  Hero(
-                    tag: 'avatar_${conv.partnerId}',
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundColor: Colors.grey.shade100,
-                      backgroundImage: _getValidImage(conv.partnerImage),
-                      child: _getValidImage(conv.partnerImage) == null
-                          ? Text(
-                              conv.partnerName.isNotEmpty
-                                  ? conv.partnerName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: Color(0xFF2ED573),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: conv.isOnline
-                            ? const Color(0xFF2ED573)
-                            : Colors.grey.shade400,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2.5),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar with online indicator
+                Stack(
                   children: [
-                    Text(
-                      conv.partnerName,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: hasUnread
-                            ? FontWeight.bold
-                            : FontWeight.w600,
-                        color: const Color(0xFF111111),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    ChatAvatar(
+                      imageUrl: conv.partnerImage,
+                      name: conv.partnerName,
+                      radius: 28,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (hasUnread)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 6),
-                            child: Icon(
-                              Iconsax.message_text,
-                              size: 14,
-                              color: Color(0xFF2ED573),
-                            ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            conv.lastMessageType == 'image'
-                                ? '📷 Photo'
-                                : (conv.lastMessage ?? ''),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: hasUnread
-                                  ? const Color(0xFF111111)
-                                  : Colors.grey.shade500,
-                              fontWeight: hasUnread
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
-                            ),
-                          ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: conv.isOnline
+                              ? const Color(0xFF2ED573)
+                              : Colors.grey.shade400,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2.5),
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    _formatTime(conv.lastMessageTime),
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: hasUnread
-                          ? const Color(0xFF2ED573)
-                          : Colors.grey.shade400,
-                      fontWeight: hasUnread
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                    ),
+                const SizedBox(width: 16),
+                // Name and message
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        conv.partnerName,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: hasUnread
+                              ? FontWeight.bold
+                              : FontWeight.w600,
+                          color: const Color(0xFF111111),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (hasUnread)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 6),
+                              child: Icon(
+                                Iconsax.message_text,
+                                size: 14,
+                                color: Color(0xFF2ED573),
+                              ),
+                            ),
+                          Flexible(
+                            child: Text(
+                              conv.lastMessageType == 'image'
+                                  ? '📷 Photo'
+                                  : (conv.lastMessage ?? ''),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: hasUnread
+                                    ? const Color(0xFF111111)
+                                    : Colors.grey.shade500,
+                                fontWeight: hasUnread
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  if (hasUnread)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2ED573),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        conv.unreadCount > 99 ? '99+' : '${conv.unreadCount}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                ),
+                const SizedBox(width: 12),
+                // Time and unread badge
+                SizedBox(
+                  width: 55,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _formatTime(conv.lastMessageTime),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hasUnread
+                              ? const Color(0xFF2ED573)
+                              : Colors.grey.shade400,
+                          fontWeight: hasUnread
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ],
+                      const SizedBox(height: 8),
+                      if (hasUnread)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2ED573),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            conv.unreadCount > 99
+                                ? '99+'
+                                : '${conv.unreadCount}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  CachedNetworkImageProvider? _getValidImage(String? imageUrl) {
-    if (imageUrl != null &&
-        imageUrl.isNotEmpty &&
-        !imageUrl.contains('example.com')) {
-      return CachedNetworkImageProvider(imageUrl);
-    }
-    return null;
   }
 
   String _formatTime(DateTime time) {

@@ -1,3 +1,4 @@
+// lib/features/chat/presentation/bloc/chat_room_state.dart
 import 'package:equatable/equatable.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../domain/entities/chat_message.dart';
@@ -34,7 +35,6 @@ class ChatRoomImageSelected extends ChatRoomState {
   List<Object?> get props => [image, isPartnerOnline, isPartnerTyping];
 }
 
-// ✅ UPDATED: Added XFile so we can show the thumbnail while uploading
 class ChatRoomImageUploading extends ChatRoomState {
   final XFile image;
   final bool isPartnerOnline;
@@ -50,14 +50,14 @@ class ChatRoomImageUploading extends ChatRoomState {
   List<Object?> get props => [image, isPartnerOnline, isPartnerTyping];
 }
 
-// lib/features/chat/presentation/bloc/chat_room_state.dart
 class ChatRoomLoaded extends ChatRoomState {
   final List<ChatMessage> messages;
   final bool isPartnerOnline;
   final bool isPartnerTyping;
   final String? currentUserId;
   final bool isHistoryLoaded;
-  final String? partnerName; // ✅ Add this field
+  final String? partnerName;
+  final bool isFetchingFreshData;
 
   const ChatRoomLoaded({
     required this.messages,
@@ -65,10 +65,14 @@ class ChatRoomLoaded extends ChatRoomState {
     this.isPartnerTyping = false,
     this.currentUserId,
     this.isHistoryLoaded = false,
-    this.partnerName, // ✅ Add this
+    this.partnerName,
+    this.isFetchingFreshData = false,
   });
 
-  // ✅ ADD THIS METHOD
+  // Helpers
+  bool get isEmpty => messages.isEmpty && isHistoryLoaded;
+  bool get isSyncing => isFetchingFreshData && messages.isNotEmpty;
+
   ChatRoomLoaded copyWith({
     List<ChatMessage>? messages,
     bool? isPartnerOnline,
@@ -76,6 +80,7 @@ class ChatRoomLoaded extends ChatRoomState {
     String? currentUserId,
     bool? isHistoryLoaded,
     String? partnerName,
+    bool? isFetchingFreshData,
   }) {
     return ChatRoomLoaded(
       messages: messages ?? this.messages,
@@ -84,6 +89,7 @@ class ChatRoomLoaded extends ChatRoomState {
       currentUserId: currentUserId ?? this.currentUserId,
       isHistoryLoaded: isHistoryLoaded ?? this.isHistoryLoaded,
       partnerName: partnerName ?? this.partnerName,
+      isFetchingFreshData: isFetchingFreshData ?? this.isFetchingFreshData,
     );
   }
 
@@ -95,5 +101,6 @@ class ChatRoomLoaded extends ChatRoomState {
     currentUserId,
     isHistoryLoaded,
     partnerName,
+    isFetchingFreshData,
   ];
 }

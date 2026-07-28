@@ -1,9 +1,7 @@
 // lib/features/main/presentation/screens/main_navigation_screen.dart
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
-import 'package:mobile/core/common/widgets/network_aware_wrapper.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/core/theme/theme.dart';
 import 'package:mobile/features/chat/presentation/screens/conversations_screen.dart';
@@ -26,8 +24,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   StreamSubscription? _messageSub;
   StreamSubscription? _statusSub;
 
-  late final ChatSocketService _socketService;
-
   final List<Widget> _screens = [
     const HomeScreen(),
     const WishlistScreen(),
@@ -39,35 +35,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    try {
-      _socketService = GetIt.instance<ChatSocketService>();
-      _setupUnreadListener();
-    } catch (e) {
-      debugPrint('⚠️ ChatSocketService not available: $e');
-    }
+    _setupUnreadListener();
   }
 
   void _setupUnreadListener() {
-    // Listen for new messages to increment unread count
-    _messageSub = _socketService.onNewMessage.listen((message) {
-      if (!mounted) return;
+    try {
+      final socketService = GetIt.instance<ChatSocketService>();
 
-      // Only increment if not on chat screen
-      if (_selectedIndex != 2) {
-        setState(() {
-          _unreadCount++;
-        });
-      }
-    });
+      // Listen for new messages to increment unread count
+      _messageSub = socketService.onNewMessage.listen((message) {
+        if (!mounted) return;
 
-    // Reset unread count when entering chat screen
-    // or when messages are marked as read
-    _statusSub = _socketService.onMessageRead.listen((data) {
-      if (!mounted) return;
-      // Update unread count from server periodically
-      _fetchUnreadCount();
-    });
+        // Only increment if not on chat screen
+        if (_selectedIndex != 2) {
+          setState(() {
+            _unreadCount++;
+          });
+        }
+      });
+
+      // Reset unread count when messages are marked as read
+      _statusSub = socketService.onMessageRead.listen((data) {
+        if (!mounted) return;
+        _fetchUnreadCount();
+      });
+    } catch (e) {
+      debugPrint('⚠️ ChatSocketService not available: $e');
+    }
   }
 
   void _onItemTapped(int index) {
@@ -103,40 +97,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   @override
   Widget build(BuildContext context) {
-    return NetworkAwareWrapper(
-      showBanner: true, // Show connecting banner for unstable connections
-      child: Scaffold(
-        body: _screens[_selectedIndex],
-        bottomNavigationBar: BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
-          selectedItemColor: AppTheme.primaryColor,
-          unselectedItemColor: AppTheme.unselectedColor,
-          showUnselectedLabels: true,
-          items: [
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.favorite_border),
-              activeIcon: Icon(Icons.favorite),
-              label: 'Favorite',
-            ),
-            BottomNavigationBarItem(
-              icon: _buildChatIcon(),
-              activeIcon: const Icon(Iconsax.message),
-              label: 'Chat',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.settings_outlined),
-              activeIcon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
-        ),
+    return Scaffold(
+      body: IndexedStack(index: _selectedIndex, children: _screens),
+      bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        selectedItemColor: AppTheme.primaryColor,
+        unselectedItemColor: AppTheme.unselectedColor,
+        showUnselectedLabels: true,
+        items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.favorite_border),
+            activeIcon: Icon(Icons.favorite),
+            label: 'Favorite',
+          ),
+          BottomNavigationBarItem(
+            icon: _buildChatIcon(),
+            activeIcon: const Icon(Iconsax.message),
+            label: 'Chat',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
       ),
     );
   }

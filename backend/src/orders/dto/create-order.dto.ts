@@ -17,7 +17,7 @@ export class OrderItemDto {
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsString()
-  @IsOptional() // ✅ Make optional
+  @IsOptional()
   productVariantId?: string;
 
   @ApiProperty({
@@ -26,7 +26,7 @@ export class OrderItemDto {
   })
   @IsString()
   @IsNotEmpty()
-  productId: string; // ✅ Add productId
+  productId: string;
 
   @ApiProperty({
     description: 'Quantity of the product',
@@ -38,10 +38,7 @@ export class OrderItemDto {
 }
 
 export class AddressDto {
-  @ApiProperty({
-    description: 'Address label',
-    example: 'Home',
-  })
+  @ApiProperty({ description: 'Address label', example: 'Home' })
   @IsString()
   @IsNotEmpty()
   label: string;
@@ -73,10 +70,7 @@ export class AddressDto {
 }
 
 export class CreateOrderDto {
-  @ApiProperty({
-    description: 'Array of order items',
-    type: [OrderItemDto],
-  })
+  @ApiProperty({ description: 'Array of order items', type: [OrderItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
@@ -90,20 +84,27 @@ export class CreateOrderDto {
   @Type(() => AddressDto)
   shippingAddress: AddressDto;
 
-  @ApiProperty({
-    description: 'Payment method (e.g., cash, card, mobile money)',
-    example: 'cash',
-  })
+  @ApiProperty({ description: 'Payment method', example: 'evc_plus' })
   @IsString()
   @IsNotEmpty()
   paymentMethod: string;
 
   @ApiProperty({
-    description: 'Order notes or special instructions',
+    description: 'Order notes',
     example: 'Please deliver after 5 PM',
     required: false,
   })
   @IsString()
   @IsOptional()
   notes?: string;
+
+  // ✅ NEW: Delivery fee field
+  @ApiPropertyOptional({
+    description: 'Delivery fee for the order',
+    example: 10.0,
+    default: 0,
+  })
+  @IsNumber()
+  @IsOptional()
+  deliveryFee?: number;
 }

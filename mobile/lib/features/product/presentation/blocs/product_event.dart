@@ -1,3 +1,4 @@
+// lib/features/product/presentation/blocs/product_event.dart
 import 'package:equatable/equatable.dart';
 
 abstract class ProductEvent extends Equatable {
@@ -17,16 +18,6 @@ class GetSubcategoriesEvent extends ProductEvent {
   List<Object?> get props => [parentId];
 }
 
-class GetFeaturedProductsEvent extends ProductEvent {}
-
-class SearchProductsEvent extends ProductEvent {
-  final String? query;
-  const SearchProductsEvent(this.query);
-
-  @override
-  List<Object?> get props => [query];
-}
-
 class ResetProductStateEvent extends ProductEvent {}
 
 class GetProductsByCategoryEvent extends ProductEvent {
@@ -43,4 +34,36 @@ class GetProductByIdEvent extends ProductEvent {
 
   @override
   List<Object?> get props => [productId];
+}
+
+// ✅ REMOVED abstract keyword
+class SearchProductsEvent extends ProductEvent {
+  final String? query;
+  final double? minPrice;
+  final double? maxPrice;
+  final String? categoryId;
+  final String? sortBy;
+
+  const SearchProductsEvent({
+    this.query,
+    this.minPrice,
+    this.maxPrice,
+    this.categoryId,
+    this.sortBy,
+  });
+
+  @override
+  List<Object?> get props => [query, minPrice, maxPrice, categoryId, sortBy];
+}
+
+// ✅ REMOVED abstract keyword
+// In ProductBloc, add a force refresh option
+class GetFeaturedProductsEvent extends ProductEvent {
+  final int? limit;
+  final bool forceRefresh; // ✅ Add this
+
+  const GetFeaturedProductsEvent({this.limit, this.forceRefresh = false});
+
+  @override
+  List<Object?> get props => [limit, forceRefresh];
 }
