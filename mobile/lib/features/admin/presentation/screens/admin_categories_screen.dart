@@ -13,6 +13,10 @@ import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_cat
 import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_category_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_category_state.dart';
 import 'package:mobile/features/admin/presentation/widgets/transfer_products_dialog.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/permission_service.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 
 class AdminCategoriesScreen extends StatefulWidget {
   const AdminCategoriesScreen({super.key});
@@ -25,14 +29,48 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
   bool _isInitialLoad = true;
   bool _showSuccessMessage = false;
   String _successMessage = '';
-
+  bool _canCreate = false;
+  bool _canUpdate = false;
+  bool _canDelete = false;
   @override
   void initState() {
     super.initState();
+    _loadPermissions();
+
     // ✅ Load only once on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent());
     });
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final storageService = sl<StorageService>();
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final isSuper = await storageService.getIsSuperAdmin();
+      final perms = await permissionService.loadPermissions(
+        forceRefresh: false,
+      );
+
+      bool has(String p) {
+        if (isSuper) return true;
+        if (perms.contains('*')) return true;
+        if (perms.contains(p)) return true;
+        final module = p.split(':').first;
+        return perms.contains('$module:manage');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _canCreate = has('category:create');
+        _canUpdate = has('category:update');
+        _canDelete = has('category:delete');
+      });
+    } catch (e) {
+      debugPrint('❌ [Categories] Permission load failed: $e');
+    }
   }
 
   void _showAddCategoryDialog({AdminCategoryEntity? parentCategory}) {
@@ -328,15 +366,20 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddCategoryDialog(),
-        backgroundColor: AppTheme.primaryColor,
-        icon: const Icon(Iconsax.add, color: Colors.white),
-        label: const Text(
-          'Add Category',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-      ),
+      floatingActionButton: _canCreate
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddCategoryDialog(),
+              backgroundColor: AppTheme.primaryColor,
+              icon: const Icon(Iconsax.add, color: Colors.white),
+              label: const Text(
+                'Add Category',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null, // Add this line to handle the case when _canCreate is false
     );
   }
 
@@ -416,50 +459,57 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'add_subcategory':
-                        _showAddCategoryDialog(parentCategory: category);
-                      case 'edit':
-                        _showEditCategoryDialog(category);
-                      case 'delete':
-                        _showDeleteConfirmation(category);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'add_subcategory',
-                      child: Row(
-                        children: [
-                          Icon(Iconsax.add_circle, size: 18),
-                          SizedBox(width: 8),
-                          Text('Add Subcategory'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Iconsax.edit, size: 18),
-                          SizedBox(width: 8),
-                          Text('Edit'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Iconsax.trash, size: 18, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                if (_canCreate || _canUpdate || _canDelete)
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'add_subcategory':
+                          _showAddCategoryDialog(parentCategory: category);
+                        case 'edit':
+                          _showEditCategoryDialog(category);
+                        case 'delete':
+                          _showDeleteConfirmation(category);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (_canCreate)
+                        const PopupMenuItem(
+                          value: 'add_subcategory',
+                          child: Row(
+                            children: [
+                              Icon(Iconsax.add_circle, size: 18),
+                              SizedBox(width: 8),
+                              Text('Add Subcategory'),
+                            ],
+                          ),
+                        ),
+                      if (_canUpdate)
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Iconsax.edit, size: 18),
+                              SizedBox(width: 8),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
+                      if (_canDelete)
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Iconsax.trash, size: 18, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text(
+                                'Delete',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),

@@ -36,6 +36,9 @@ import {
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionGuard, Permissions } from '../auth/guards/permission.guard';
+
+import { Permission } from '../admin/enums/permissions.enum';
 import { AddToCartDto, UpdateCartItemQuantityDto } from './dto/cart.dto';
 
 @ApiTags('products')
@@ -70,15 +73,18 @@ export class ProductsController {
   }
 
   // ==========================================
-  // ADMIN ENDPOINTS
+  // ADMIN ENDPOINTS - Permission Protected
   // ==========================================
 
+  // CREATE PRODUCT - Requires PRODUCT_CREATE permission
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_CREATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Create a new product',
-    description: 'Creates a new product. Requires authentication.',
+    summary: 'Create a new product (Admin)',
+    description:
+      'Creates a new product. Requires authentication and PRODUCT_CREATE permission.',
   })
   @ApiBody({ type: CreateProductDto })
   @ApiResponse({
@@ -90,6 +96,10 @@ export class ProductsController {
     description: 'Unauthorized - Invalid or missing JWT token',
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_CREATE permission',
+  })
+  @ApiResponse({
     status: 400,
     description: 'Invalid product data',
   })
@@ -97,12 +107,15 @@ export class ProductsController {
     return this.productsService.create(createProductDto);
   }
 
+  // UPLOAD IMAGES FROM URLS - Requires PRODUCT_UPDATE permission
   @Post(':id/images/urls')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Upload product images (URLs)',
-    description: 'Adds product images using public image URLs.',
+    summary: 'Upload product images from URLs (Admin)',
+    description:
+      'Adds product images using public image URLs. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -132,6 +145,10 @@ export class ProductsController {
     status: 401,
     description: 'Unauthorized',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
   uploadImagesFromUrls(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { imageUrls: string[] },
@@ -146,12 +163,15 @@ export class ProductsController {
     return this.productsService.uploadImagesFromUrls(id, body.imageUrls);
   }
 
+  // UPLOAD BASE64 IMAGE - Requires PRODUCT_UPDATE permission
   @Post(':id/images/base64')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Upload product image (Base64)',
-    description: 'Adds a product image using a Base64 encoded string.',
+    summary: 'Upload product image as Base64 (Admin)',
+    description:
+      'Adds a product image using a Base64 encoded string. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -167,6 +187,10 @@ export class ProductsController {
     status: 401,
     description: 'Unauthorized',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
   uploadBase64Image(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() base64Dto: UploadBase64ImageDto,
@@ -174,12 +198,15 @@ export class ProductsController {
     return this.productsService.uploadBase64Image(id, base64Dto);
   }
 
+  // ADD VARIANT - Requires PRODUCT_UPDATE permission
   @Post(':id/variants')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Add product variant',
-    description: 'Adds a new variant to an existing product.',
+    summary: 'Add product variant (Admin)',
+    description:
+      'Adds a new variant to an existing product. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -195,6 +222,10 @@ export class ProductsController {
     status: 401,
     description: 'Unauthorized',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
   addVariant(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() createVariantDto: CreateProductVariantDto,
@@ -202,12 +233,15 @@ export class ProductsController {
     return this.productsService.addVariant(id, createVariantDto);
   }
 
+  // UPDATE PRODUCT - Requires PRODUCT_UPDATE permission
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Update product',
-    description: 'Updates an existing product.',
+    summary: 'Update product (Admin)',
+    description:
+      'Updates an existing product. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -224,6 +258,10 @@ export class ProductsController {
     description: 'Unauthorized',
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Product not found',
   })
@@ -234,12 +272,15 @@ export class ProductsController {
     return this.productsService.update(id, updateProductDto);
   }
 
+  // DELETE IMAGE - Requires PRODUCT_UPDATE permission
   @Delete(':id/images/:imageId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Delete product image',
-    description: 'Removes an image from a product.',
+    summary: 'Delete product image (Admin)',
+    description:
+      'Removes an image from a product. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -259,6 +300,10 @@ export class ProductsController {
     status: 401,
     description: 'Unauthorized',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
   deleteImage(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('imageId', ParseUUIDPipe) imageId: string,
@@ -266,12 +311,15 @@ export class ProductsController {
     return this.productsService.deleteImage(id, imageId);
   }
 
+  // DELETE PRODUCT - Requires PRODUCT_DELETE permission
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_DELETE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Delete product',
-    description: 'Permanently deletes a product.',
+    summary: 'Delete product (Admin)',
+    description:
+      'Permanently deletes a product. Requires PRODUCT_DELETE permission.',
   })
   @ApiParam({
     name: 'id',
@@ -287,6 +335,10 @@ export class ProductsController {
     description: 'Unauthorized',
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_DELETE permission',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Product not found',
   })
@@ -294,12 +346,15 @@ export class ProductsController {
     return this.productsService.remove(id);
   }
 
+  // UPDATE VARIANT STOCK - Requires PRODUCT_UPDATE permission
   @Patch('variants/:variantId/stock')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.PRODUCT_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Update variant stock',
-    description: 'Updates the stock quantity of a specific product variant.',
+    summary: 'Update variant stock (Admin)',
+    description:
+      'Updates the stock quantity of a specific product variant. Requires PRODUCT_UPDATE permission.',
   })
   @ApiParam({
     name: 'variantId',
@@ -328,6 +383,10 @@ export class ProductsController {
     description: 'Unauthorized',
   })
   @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Requires PRODUCT_UPDATE permission',
+  })
+  @ApiResponse({
     status: 404,
     description: 'Variant not found',
   })
@@ -342,13 +401,15 @@ export class ProductsController {
   }
 
   // ==========================================
-  // PUBLIC ENDPOINTS - ✅ WITH DTO TRANSFORMATION
+  // PUBLIC ENDPOINTS - No Authentication Required
   // ==========================================
 
+  // GET ALL PRODUCTS - Public
   @Get()
   @ApiOperation({
-    summary: 'Get all products',
-    description: 'Returns a list of all products with pagination.',
+    summary: 'Get all products (Public)',
+    description:
+      'Returns a list of all products with pagination. No authentication required.',
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -385,9 +446,10 @@ export class ProductsController {
     return this.transformPaginatedResponse(result);
   }
 
+  // SEARCH PRODUCTS - Public
   @Get('search')
   @ApiOperation({
-    summary: 'Search products',
+    summary: 'Search products (Public)',
     description: 'Search products with filters, sorting, and pagination.',
   })
   @ApiQuery({
@@ -465,9 +527,10 @@ export class ProductsController {
     return this.transformPaginatedResponse(result);
   }
 
+  // GET FILTERS - Public
   @Get('filters')
   @ApiOperation({
-    summary: 'Get product filters',
+    summary: 'Get product filters (Public)',
     description:
       'Returns available product filters including price range and categories.',
   })
@@ -479,9 +542,10 @@ export class ProductsController {
     return this.productsService.getProductFilters();
   }
 
+  // GET FEATURED PRODUCTS - Public
   @Get('featured')
   @ApiOperation({
-    summary: 'Get featured products',
+    summary: 'Get featured products (Public)',
     description: 'Returns a list of featured products.',
   })
   @ApiQuery({
@@ -504,9 +568,10 @@ export class ProductsController {
     return this.transformProducts(products);
   }
 
+  // DEBUG CATEGORY - Public
   @Get('debug/category/:categoryId')
   @ApiOperation({
-    summary: 'Debug category products',
+    summary: 'Debug category products (Public)',
     description: 'Returns debug information about products in a category.',
   })
   @ApiParam({
@@ -522,9 +587,10 @@ export class ProductsController {
     return this.productsService.debugCategory(categoryId);
   }
 
+  // GET PRODUCT BY SLUG - Public
   @Get('slug/:slug')
   @ApiOperation({
-    summary: 'Get product by slug',
+    summary: 'Get product by slug (Public)',
     description: 'Returns a product by its unique slug.',
   })
   @ApiParam({
@@ -546,9 +612,10 @@ export class ProductsController {
     return this.transformProduct(product);
   }
 
+  // GET PRODUCTS BY CATEGORY - Public
   @Get('category/:categoryId')
   @ApiOperation({
-    summary: 'Get products by category',
+    summary: 'Get products by category (Public)',
     description:
       'Returns products belonging to a specific category with filters.',
   })
@@ -613,9 +680,10 @@ export class ProductsController {
     return this.transformPaginatedResponse(result);
   }
 
+  // GET PRODUCT BY ID - Public
   @Get(':id')
   @ApiOperation({
-    summary: 'Get product by ID',
+    summary: 'Get product by ID (Public)',
     description: 'Returns a product by its UUID.',
   })
   @ApiParam({
@@ -640,7 +708,7 @@ export class ProductsController {
   }
 
   // ==========================================
-  // CART ENDPOINTS
+  // CART ENDPOINTS - JWT Authentication Only
   // ==========================================
 
   @Post('cart')

@@ -82,3 +82,6 @@ class FetchCategoriesTreeEvent extends AdminProductEvent {}
 class FetchColorsEvent extends AdminProductEvent {}
 
 class FetchSizesEvent extends AdminProductEvent {}
+
+// In admin_product_event.dart
+class SilentFetchAllAdminProductsEvent extends AdminProductEvent {}

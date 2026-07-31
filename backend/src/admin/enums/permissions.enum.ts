@@ -5,7 +5,7 @@ export enum Permission {
   PRODUCT_UPDATE = 'product:update',
   PRODUCT_DELETE = 'product:delete',
   PRODUCT_VIEW = 'product:view',
-  PRODUCT_MANAGE = 'product:manage', // All product permissions
+  PRODUCT_MANAGE = 'product:manage',
 
   // Order Permissions
   ORDER_VIEW = 'order:view',
@@ -55,7 +55,7 @@ export enum Permission {
   FAQ_VIEW = 'faq:view',
   FAQ_MANAGE = 'faq:manage',
 
-  // Revenue/Financial Permissions
+  // Revenue Permissions
   REVENUE_VIEW = 'revenue:view',
   REVENUE_EXPORT = 'revenue:export',
   REVENUE_MANAGE = 'revenue:manage',
@@ -65,7 +65,7 @@ export enum Permission {
   ANALYTICS_EXPORT = 'analytics:export',
   ANALYTICS_MANAGE = 'analytics:manage',
 
-  // Admin Management (Super Admin only)
+  // Admin Management
   ADMIN_MANAGE = 'admin:manage',
   ADMIN_CREATE = 'admin:create',
   ADMIN_DELETE = 'admin:delete',
@@ -77,12 +77,9 @@ export enum Permission {
   SYSTEM_LOGS = 'system:logs',
 }
 
-// Permission Groups for easier assignment
 export const PermissionGroups = {
-  // Full access to everything (Super Admin only)
   SUPER_ADMIN: Object.values(Permission),
 
-  // Product Manager
   PRODUCT_MANAGER: [
     Permission.PRODUCT_CREATE,
     Permission.PRODUCT_UPDATE,
@@ -94,7 +91,6 @@ export const PermissionGroups = {
     Permission.CATEGORY_DELETE,
   ],
 
-  // Order Manager
   ORDER_MANAGER: [
     Permission.ORDER_VIEW,
     Permission.ORDER_UPDATE,
@@ -102,7 +98,6 @@ export const PermissionGroups = {
     Permission.ANALYTICS_VIEW,
   ],
 
-  // Content Manager (FAQs, Banners)
   CONTENT_MANAGER: [
     Permission.FAQ_CREATE,
     Permission.FAQ_UPDATE,
@@ -110,7 +105,6 @@ export const PermissionGroups = {
     Permission.FAQ_VIEW,
   ],
 
-  // Inventory Manager
   INVENTORY_MANAGER: [
     Permission.PRODUCT_VIEW,
     Permission.PRODUCT_UPDATE,
@@ -122,7 +116,6 @@ export const PermissionGroups = {
     Permission.SIZE_UPDATE,
   ],
 
-  // Support Manager
   SUPPORT_MANAGER: [
     Permission.USER_VIEW,
     Permission.ORDER_VIEW,
@@ -131,7 +124,6 @@ export const PermissionGroups = {
     Permission.FAQ_UPDATE,
   ],
 
-  // View Only
   VIEW_ONLY: [
     Permission.PRODUCT_VIEW,
     Permission.ORDER_VIEW,

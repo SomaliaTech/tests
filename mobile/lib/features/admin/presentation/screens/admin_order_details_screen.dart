@@ -6,6 +6,10 @@ import 'package:mobile/features/admin/domain/entities/admin_order_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin/admin_state.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/permission_service.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 
 class AdminOrderDetailsScreen extends StatefulWidget {
   final AdminOrderEntity order;
@@ -19,11 +23,41 @@ class AdminOrderDetailsScreen extends StatefulWidget {
 
 class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
   late AdminOrderEntity _currentOrder;
+  bool _canUpdate = false;
 
   @override
   void initState() {
     super.initState();
+    _loadPermissions();
     _currentOrder = widget.order;
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final storageService = sl<StorageService>();
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final isSuper = await storageService.getIsSuperAdmin();
+      final perms = await permissionService.loadPermissions(
+        forceRefresh: false,
+      );
+
+      bool has(String p) {
+        if (isSuper) return true;
+        if (perms.contains('*')) return true;
+        if (perms.contains(p)) return true;
+        final module = p.split(':').first;
+        return perms.contains('$module:manage');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _canUpdate = has('color:update');
+      });
+    } catch (e) {
+      debugPrint('❌ [Colors] Permission load failed: $e');
+    }
   }
 
   @override
@@ -173,23 +207,24 @@ class _AdminOrderDetailsScreenState extends State<AdminOrderDetailsScreen> {
                 ),
                 const SizedBox(height: 24),
                 // Update Status Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showStatusUpdateSheet(context),
-                    icon: const Icon(Iconsax.edit_2),
-                    label: const Text('Update Status'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                if (_canUpdate)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showStatusUpdateSheet(context),
+                      icon: const Icon(Iconsax.edit_2),
+                      label: const Text('Update Status'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
                       ),
-                      elevation: 0,
                     ),
                   ),
-                ),
               ],
             ),
           );

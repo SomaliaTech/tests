@@ -1,3 +1,4 @@
+// lib/features/profile/presentation/screens/profile_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/error/error_handler.dart';
@@ -35,8 +36,6 @@ class _ProfileViewState extends State<ProfileView> {
   bool _profileLoaded = false;
   bool _isInitializing = true;
   static const String _whatsappNumber = '+252686330033';
-
-  // ✅ Store the current profile
   Profile? _currentProfile;
 
   @override
@@ -84,32 +83,42 @@ class _ProfileViewState extends State<ProfileView> {
   Future<void> _loadMarkets() async {
     if (!mounted) return;
 
-    final result = await sl<GetMarkets>()();
+    try {
+      final result = await sl<GetMarkets>()();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    result.fold(
-      (failure) {
-        debugPrint('❌ Failed to load markets: ${failure.message}');
+      result.fold(
+        (failure) {
+          debugPrint('❌ Failed to load markets: ${failure.message}');
+          setState(() {
+            _markets = [];
+            _marketsLoaded = true;
+          });
+        },
+        (markets) {
+          final activeMarkets = markets.where((m) => m.isActive).toList();
+          debugPrint(
+            '📊 Total markets: ${markets.length}, Active: ${activeMarkets.length}',
+          );
+
+          setState(() {
+            _markets = activeMarkets;
+            _marketsLoaded = true;
+          });
+
+          _tryPreSelectMarket();
+        },
+      );
+    } catch (e) {
+      debugPrint('❌ Error loading markets: $e');
+      if (mounted) {
         setState(() {
           _markets = [];
           _marketsLoaded = true;
         });
-      },
-      (markets) {
-        final activeMarkets = markets.where((m) => m.isActive).toList();
-        debugPrint(
-          '📊 Total markets: ${markets.length}, Active: ${activeMarkets.length}',
-        );
-
-        setState(() {
-          _markets = activeMarkets;
-          _marketsLoaded = true;
-        });
-
-        _tryPreSelectMarket();
-      },
-    );
+      }
+    }
   }
 
   void _tryPreSelectMarket() {
@@ -246,7 +255,6 @@ class _ProfileViewState extends State<ProfileView> {
           if (state is ProfileError) {
             ErrorHandler.showError(context, state.message);
           } else if (state is ProfileUpdated) {
-            // ✅ Update current profile
             _currentProfile = state.profile;
             _name = state.profile.name;
             _email = state.profile.email ?? '';
@@ -271,31 +279,27 @@ class _ProfileViewState extends State<ProfileView> {
               autoCloseDuration: const Duration(seconds: 2),
             );
           } else if (state is ProfileLoaded) {
-            // ✅ Store profile
             _currentProfile = state.profile;
             _name = state.profile.name;
             _email = state.profile.email ?? '';
             _currentMarketId = state.profile.marketId;
             _profileLoaded = true;
 
-            setState(() {}); // ✅ Trigger rebuild
+            setState(() {});
             _tryPreSelectMarket();
           }
         },
         builder: (context, state) {
-          // Show loading only on initial load
           if (_isInitializing && state is ProfileLoading) {
             return const Center(
               child: CircularProgressIndicator(color: Color(0xFF2ED573)),
             );
           }
 
-          // Show error state if profile failed to load initially
           if (state is ProfileError && !_profileLoaded) {
             return _buildErrorState(context, state.message);
           }
 
-          // ✅ Show profile content once we have the profile
           if (_currentProfile != null) {
             return Stack(
               children: [
@@ -317,12 +321,10 @@ class _ProfileViewState extends State<ProfileView> {
                                 );
                               },
                             ),
-                            // ✅ Pass the actual profile object, not null
                             ProfileForm(
                               profile: _currentProfile!,
                               selectedMarket: _selectedMarket,
                               onNameChanged: (name) => _name = name,
-
                               onMarketTap: () {
                                 setState(() => _isMarketDropdownOpen = true);
                               },
@@ -366,7 +368,6 @@ class _ProfileViewState extends State<ProfileView> {
             );
           }
 
-          // Fallback loading
           return const Center(child: CircularProgressIndicator());
         },
       ),

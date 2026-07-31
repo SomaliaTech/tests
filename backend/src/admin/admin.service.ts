@@ -1,3 +1,4 @@
+// src/admin/admin.service.ts
 import {
   BadRequestException,
   Injectable,
@@ -7,8 +8,6 @@ import {
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from '../cloudfare/cloudflare.service';
-// At the top of admin.controller.ts
-
 import {
   orders,
   products,
@@ -19,6 +18,8 @@ import {
   categories,
   markets,
   mediaAssets,
+  roles, // ✅ ADD THIS
+  userRoles, // ✅ ADD THIS
 } from '../drizzle/schema';
 import {
   sql,
@@ -41,6 +42,7 @@ import { CreateProductAdminDto } from './dto/create-proudct-admin-dto';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { NotificationType } from 'src/notifications/notification.entity';
+import { PermissionGroups, Permission } from './enums/permissions.enum'; // ✅ ADD THIS
 
 // Type definitions
 interface CategoryData {
@@ -442,7 +444,39 @@ export class AdminService {
   }
 
   // Dashboard & Analytics
-  async getAllDashboardData(period: string) {
+  async getAllDashboardData(userId: string, period: string) {
+    const [user] = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const permissionsList = await this.getUserPermissions(userId);
+    const permissions = new Set<string>(permissionsList);
+
+    const can = (permission: string): boolean => {
+      // Super admin can see everything
+      if (user?.isSuperAdmin) return true;
+
+      // Direct permission
+      if (permissions.has(permission)) return true;
+
+      // Wildcard: product:manage allows product:view, product:create, etc.
+      const moduleName = permission.split(':')[0];
+      return permissions.has(`${moduleName}:manage`);
+    };
+
+    const emptyStats = {
+      totalUsers: 0,
+      totalOrders: 0,
+      totalRevenue: 0,
+      newUsers: 0,
+      userGrowth: 0,
+      orderGrowth: 0,
+      revenueGrowth: 0,
+      newUserGrowth: 0,
+    };
+
     const [
       stats,
       usersChartData,
@@ -451,12 +485,29 @@ export class AdminService {
       locationTraffic,
       productTraffic,
     ] = await Promise.all([
-      this.getDashboardStats(period),
-      this.getUsersChartData(period),
-      this.getRevenueChart(period),
-      this.getDeviceTraffic(),
-      this.getLocationTraffic(),
-      this.getProductTraffic(period),
+      can(Permission.ANALYTICS_VIEW)
+        ? this.getDashboardStats(period)
+        : Promise.resolve(emptyStats),
+
+      can(Permission.ANALYTICS_VIEW)
+        ? this.getUsersChartData(period)
+        : Promise.resolve([]),
+
+      can(Permission.REVENUE_VIEW)
+        ? this.getRevenueChart(period)
+        : Promise.resolve([]),
+
+      can(Permission.ANALYTICS_VIEW)
+        ? this.getDeviceTraffic()
+        : Promise.resolve([]),
+
+      can(Permission.ANALYTICS_VIEW)
+        ? this.getLocationTraffic()
+        : Promise.resolve([]),
+
+      can(Permission.PRODUCT_VIEW) || can(Permission.ANALYTICS_VIEW)
+        ? this.getProductTraffic(period)
+        : Promise.resolve([]),
     ]);
 
     return {
@@ -919,45 +970,65 @@ export class AdminService {
   // ==========================================
 
   async getUserPermissions(userId: string): Promise<string[]> {
-    // Get user's roles with permissions
-    const userRoles = await this.drizzle.db
-      .select({
-        permissions: roles.permissions,
-      })
-      .from(userRoles)
-      .leftJoin(roles, eq(roles.id, userRoles.roleId))
-      .where(eq(userRoles.userId, userId));
+    try {
+      const userRolesList = await this.drizzle.db
+        .select({
+          permissions: roles.permissions,
+        })
+        .from(userRoles)
+        .leftJoin(roles, eq(roles.id, userRoles.roleId))
+        .where(eq(userRoles.userId, userId));
 
-    // Collect all permissions from all roles
-    const allPermissions = new Set<string>();
-    userRoles.forEach((ur) => {
-      if (ur.permissions && Array.isArray(ur.permissions)) {
-        ur.permissions.forEach((p) => allPermissions.add(p));
-      }
-    });
+      const allPermissions = new Set<string>();
 
-    return Array.from(allPermissions);
+      userRolesList.forEach((ur) => {
+        let permissions = ur.permissions as unknown;
+
+        // ✅ Handle string permissions (in case stored as JSON string)
+        if (typeof permissions === 'string') {
+          try {
+            permissions = JSON.parse(permissions);
+          } catch {
+            permissions = [];
+          }
+        }
+
+        if (Array.isArray(permissions)) {
+          permissions.forEach((p) => allPermissions.add(p as string));
+        }
+      });
+
+      return Array.from(allPermissions);
+    } catch (error) {
+      console.error('❌ [Admin] Error getting user permissions:', error);
+      return [];
+    }
   }
+  // src/admin/admin.service.ts - Fix createRole
 
   async createRole(data: {
     name: string;
     description?: string;
     permissions: string[];
   }) {
-    const [role] = await this.drizzle.db
-      .insert(roles)
-      .values({
-        id: uuidv4(),
-        name: data.name,
-        description: data.description || null,
-        permissions: data.permissions,
-        isSystem: false,
-      })
-      .returning();
+    try {
+      const [role] = await this.drizzle.db
+        .insert(roles)
+        .values({
+          id: uuidv4(),
+          name: data.name,
+          description: data.description || null,
+          permissions: data.permissions,
+          isSystem: false,
+        })
+        .returning();
 
-    return role;
+      return role;
+    } catch (error) {
+      console.error('❌ [Admin] Error creating role:', error);
+      throw new BadRequestException('Failed to create role');
+    }
   }
-
   async updateRole(
     roleId: string,
     data: { name?: string; description?: string; permissions?: string[] },
@@ -976,9 +1047,19 @@ export class AdminService {
       .returning();
 
     if (!role) throw new NotFoundException('Role not found');
+
+    // ✅ Notify all users assigned to this role
+    const affectedUsers = await this.drizzle.db
+      .select({ userId: userRoles.userId })
+      .from(userRoles)
+      .where(eq(userRoles.roleId, roleId));
+
+    for (const affected of affectedUsers) {
+      await this.emitRoleChanged(affected.userId);
+    }
+
     return role;
   }
-
   async deleteRole(roleId: string) {
     // Check if role is system role
     const [role] = await this.drizzle.db
@@ -1010,173 +1091,315 @@ export class AdminService {
   }
 
   async getAllRoles() {
-    const allRoles = await this.drizzle.db
-      .select()
-      .from(roles)
-      .orderBy(roles.name);
+    try {
+      // ✅ Single query with LEFT JOIN instead of N+1 queries
+      const rolesWithCount = await this.drizzle.db
+        .select({
+          id: roles.id,
+          name: roles.name,
+          description: roles.description,
+          permissions: roles.permissions,
+          isSystem: roles.isSystem,
+          createdAt: roles.createdAt,
+          updatedAt: roles.updatedAt,
+          userCount: sql<number>`COUNT(${userRoles.id})::int`,
+        })
+        .from(roles)
+        .leftJoin(userRoles, eq(userRoles.roleId, roles.id))
+        .groupBy(
+          roles.id,
+          roles.name,
+          roles.description,
+          roles.permissions,
+          roles.isSystem,
+          roles.createdAt,
+          roles.updatedAt,
+        )
+        .orderBy(roles.name);
 
-    // Get user count for each role
-    const rolesWithCount = await Promise.all(
-      allRoles.map(async (role) => {
-        const users = await this.drizzle.db
-          .select({ count: sql<number>`COUNT(*)::int` })
-          .from(userRoles)
-          .where(eq(userRoles.roleId, role.id));
-
-        return {
-          ...role,
-          userCount: Number(users[0]?.count) || 0,
-        };
-      }),
-    );
-
-    return rolesWithCount;
+      return rolesWithCount.map((role) => ({
+        ...role,
+        userCount: Number(role.userCount) || 0,
+      }));
+    } catch (error) {
+      console.error('❌ [Admin] Error getting roles:', error);
+      throw new BadRequestException('Failed to get roles');
+    }
   }
-
   async assignRoleToUser(userId: string, roleId: string) {
-    // Check if user exists
-    const user = await this.drizzle.db
+    try {
+      const user = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (user.length === 0) {
+        throw new NotFoundException('User not found');
+      }
+
+      const role = await this.drizzle.db
+        .select()
+        .from(roles)
+        .where(eq(roles.id, roleId))
+        .limit(1);
+
+      if (role.length === 0) {
+        throw new NotFoundException('Role not found');
+      }
+
+      const existing = await this.drizzle.db
+        .select()
+        .from(userRoles)
+        .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
+        .limit(1);
+
+      if (existing.length > 0) {
+        return {
+          message: 'User already has this role',
+          alreadyAssigned: true,
+        };
+      }
+
+      const [assignment] = await this.drizzle.db
+        .insert(userRoles)
+        .values({
+          id: uuidv4(),
+          userId,
+          roleId,
+        })
+        .returning();
+
+      // ✅ Notify with role name
+      await this.emitRoleChanged(userId, role[0].name, 'assigned');
+
+      return {
+        message: 'Role assigned successfully',
+        assignment,
+      };
+    } catch (error) {
+      console.error('❌ [Admin] Error assigning role:', error);
+      throw new BadRequestException('Failed to assign role');
+    }
+  }
+  async removeRoleFromUser(userId: string, roleId: string) {
+    try {
+      const [role] = await this.drizzle.db
+        .select()
+        .from(roles)
+        .where(eq(roles.id, roleId));
+
+      if (role?.isSystem) {
+        const userRolesList = await this.drizzle.db
+          .select()
+          .from(userRoles)
+          .where(eq(userRoles.userId, userId));
+
+        if (userRolesList.length === 1) {
+          throw new BadRequestException(
+            'Cannot remove the last role from user',
+          );
+        }
+      }
+
+      const deleted = await this.drizzle.db
+        .delete(userRoles)
+        .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
+        .returning();
+
+      if (deleted.length === 0) {
+        return {
+          message: 'Role was not assigned',
+          alreadyRemoved: true,
+        };
+      }
+
+      // ✅ Notify with role name
+      await this.emitRoleChanged(userId, role?.name, 'removed');
+
+      return {
+        message: 'Role removed successfully',
+      };
+    } catch (error) {
+      console.error('❌ [Admin] Error removing role:', error);
+      throw error;
+    }
+  }
+  async getUserRoles(userId: string) {
+    try {
+      const assignments = await this.drizzle.db.query.userRoles.findMany({
+        where: eq(userRoles.userId, userId),
+        with: {
+          role: true,
+        },
+      });
+
+      return assignments
+        .filter((assignment) => assignment.role)
+        .map((assignment) => ({
+          ...assignment.role,
+          userCount: 0,
+        }));
+    } catch (error) {
+      console.error('❌ [Admin] Error getting user roles:', error);
+      throw new BadRequestException('Failed to get user roles');
+    }
+  }
+  async setUserRole(userId: string, roleId: string | null) {
+    const [user] = await this.drizzle.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    if (!user) throw new NotFoundException('User not found');
-
-    // Check if role exists
-    const role = await this.drizzle.db
-      .select()
-      .from(roles)
-      .where(eq(roles.id, roleId))
-      .limit(1);
-
-    if (!role) throw new NotFoundException('Role not found');
-
-    // Check if assignment already exists
-    const existing = await this.drizzle.db
-      .select()
-      .from(userRoles)
-      .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
-      .limit(1);
-
-    if (existing.length > 0) {
-      throw new BadRequestException('User already has this role');
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
-    const [assignment] = await this.drizzle.db
-      .insert(userRoles)
-      .values({
+    // Remove all existing roles
+    await this.drizzle.db.delete(userRoles).where(eq(userRoles.userId, userId));
+
+    // Assign new role if provided
+    if (roleId) {
+      const [role] = await this.drizzle.db
+        .select()
+        .from(roles)
+        .where(eq(roles.id, roleId))
+        .limit(1);
+
+      if (!role) {
+        throw new NotFoundException('Role not found');
+      }
+
+      await this.drizzle.db.insert(userRoles).values({
         id: uuidv4(),
         userId,
         roleId,
-      })
-      .returning();
-
-    // Notify user
-    try {
-      this.chatGateway.server.to(`user:${userId}`).emit('role_assigned', {
-        role: role[0].name,
-        message: `You have been assigned the ${role[0].name} role`,
       });
-    } catch (e) {}
-
-    return assignment;
-  }
-
-  async removeRoleFromUser(userId: string, roleId: string) {
-    // Check if role is system role and user is the only admin
-    const [role] = await this.drizzle.db
-      .select()
-      .from(roles)
-      .where(eq(roles.id, roleId));
-
-    if (role?.isSystem) {
-      // Check if user has other admin roles
-      const userRolesList = await this.drizzle.db
-        .select()
-        .from(userRoles)
-        .where(eq(userRoles.userId, userId));
-
-      if (userRolesList.length === 1) {
-        throw new BadRequestException('Cannot remove the last role from user');
-      }
     }
 
-    const deleted = await this.drizzle.db
-      .delete(userRoles)
-      .where(and(eq(userRoles.userId, userId), eq(userRoles.roleId, roleId)))
-      .returning();
-
-    if (deleted.length === 0) {
-      throw new NotFoundException('Role assignment not found');
-    }
-
-    return { message: 'Role removed successfully' };
-  }
-
-  async getUserRoles(userId: string) {
-    const userRolesList = await this.drizzle.db
-      .select({
-        roleId: roles.id,
-        roleName: roles.name,
-        roleDescription: roles.description,
-        permissions: roles.permissions,
-        isSystem: roles.isSystem,
-        assignedAt: userRoles.createdAt,
-      })
-      .from(userRoles)
-      .leftJoin(roles, eq(roles.id, userRoles.roleId))
-      .where(eq(userRoles.userId, userId));
-
-    return userRolesList;
+    return {
+      message: 'User role updated successfully',
+    };
   }
 
   // ==========================================
   // SEED DEFAULT ROLES
   // ==========================================
+  // In your backend, run this script or add it to your seed file
+  // This should be added to your admin.service.ts or a seed script
 
   async seedDefaultRoles() {
     const defaultRoles = [
       {
         name: 'Super Admin',
         description: 'Full system access',
-        permissions: PermissionGroups.SUPER_ADMIN,
+        permissions: [
+          'product:create',
+          'product:update',
+          'product:delete',
+          'product:view',
+          'product:manage',
+          'order:view',
+          'order:update',
+          'order:delete',
+          'order:manage',
+          'user:view',
+          'user:create',
+          'user:update',
+          'user:delete',
+          'user:manage',
+          'category:create',
+          'category:update',
+          'category:delete',
+          'category:view',
+          'category:manage',
+          'market:create',
+          'market:update',
+          'market:delete',
+          'market:view',
+          'market:manage',
+          'color:create',
+          'color:update',
+          'color:delete',
+          'color:view',
+          'color:manage',
+          'size:create',
+          'size:update',
+          'size:delete',
+          'size:view',
+          'size:manage',
+          'faq:create',
+          'faq:update',
+          'faq:delete',
+          'faq:view',
+          'faq:manage',
+          'revenue:view',
+          'revenue:export',
+          'revenue:manage',
+          'analytics:view',
+          'analytics:export',
+          'analytics:manage',
+          'admin:manage',
+          'admin:create',
+          'admin:delete',
+          'admin:update',
+          'admin:view',
+          'system:settings',
+          'system:logs',
+        ],
         isSystem: true,
       },
       {
         name: 'Product Manager',
         description: 'Manage products, categories, colors, sizes',
-        permissions: PermissionGroups.PRODUCT_MANAGER,
+        permissions: [
+          'product:create',
+          'product:update',
+          'product:delete',
+          'product:view',
+          'category:view',
+          'category:create',
+          'category:update',
+          'category:delete',
+          'color:view',
+          'color:create',
+          'color:update',
+          'size:view',
+          'size:create',
+          'size:update',
+        ],
         isSystem: true,
       },
       {
         name: 'Order Manager',
         description: 'Manage orders and view revenue',
-        permissions: PermissionGroups.ORDER_MANAGER,
+        permissions: [
+          'order:view',
+          'order:update',
+          'revenue:view',
+          'analytics:view',
+        ],
         isSystem: true,
       },
       {
         name: 'Content Manager',
         description: 'Manage FAQs and banners',
-        permissions: PermissionGroups.CONTENT_MANAGER,
-        isSystem: true,
-      },
-      {
-        name: 'Inventory Manager',
-        description: 'Manage product inventory',
-        permissions: PermissionGroups.INVENTORY_MANAGER,
-        isSystem: true,
-      },
-      {
-        name: 'Support Manager',
-        description: 'View users and orders, manage FAQs',
-        permissions: PermissionGroups.SUPPORT_MANAGER,
+        permissions: ['faq:create', 'faq:update', 'faq:delete', 'faq:view'],
         isSystem: true,
       },
       {
         name: 'View Only',
         description: 'Read-only access',
-        permissions: PermissionGroups.VIEW_ONLY,
+        permissions: [
+          'product:view',
+          'order:view',
+          'user:view',
+          'category:view',
+          'market:view',
+          'revenue:view',
+          'analytics:view',
+        ],
         isSystem: true,
       },
     ];
@@ -1194,6 +1417,7 @@ export class AdminService {
           ...roleData,
           permissions: roleData.permissions,
         });
+        console.log(`✅ Created default role: ${roleData.name}`);
       }
     }
   }
@@ -3207,6 +3431,71 @@ export class AdminService {
     }
 
     return result;
+  }
+  private async emitRoleChanged(
+    userId: string,
+    roleName?: string,
+    action?: 'assigned' | 'removed' | 'updated',
+  ) {
+    try {
+      const [user] = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) return;
+
+      // ✅ 1. Emit real-time WebSocket event
+      this.chatGateway.server.to(`user:${userId}`).emit('role_changed', {
+        userId,
+        isAdmin: user.isAdmin,
+        isSuperAdmin: user.isSuperAdmin,
+        message: 'Your permissions have been updated',
+      });
+
+      // ✅ 2. Create persistent notification in database
+      let title = 'Permissions Updated';
+      let message = 'Your role permissions have been updated.';
+
+      if (action === 'assigned' && roleName) {
+        title = 'New Role Assigned';
+        message = `You have been assigned the "${roleName}" role.`;
+      } else if (action === 'removed' && roleName) {
+        title = 'Role Removed';
+        message = `The "${roleName}" role has been removed from your account.`;
+      } else if (action === 'updated' && roleName) {
+        title = 'Role Updated';
+        message = `The "${roleName}" role permissions have been updated.`;
+      }
+
+      await this.notificationsService.create({
+        userId,
+        type: NotificationType.SYSTEM,
+        title,
+        message,
+        actionText: 'View Details',
+        actionLink: '/admin/settings',
+      });
+
+      // ✅ 3. Also emit to admins room so other admins see it
+      this.chatGateway.server.to('admins').emit('new_notification', {
+        id: uuidv4(),
+        type: 'system',
+        title,
+        message: `${user.name || 'A user'}: ${message}`,
+        actionText: 'View User',
+        actionLink: `/admin/users/${userId}`,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+
+      console.log(
+        `🔔 [Admin] Emitted role_changed + notification to user: ${userId}`,
+      );
+    } catch (error) {
+      console.error('❌ [Admin] Failed to emit role_changed:', error);
+    }
   }
   // ==========================================
   // ANALYTICS - All Analytics Combined

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:get_it/get_it.dart';
+import 'package:mobile/core/constants/admin_permissions.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
+import 'package:mobile/core/services/permission_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/theme/theme.dart';
 import 'package:mobile/features/admin/domain/entities/analytics_entities.dart';
@@ -51,6 +53,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isCheckingAdmin = true;
   bool _isAdmin = false;
 
+  // ✅ Permission-related fields
+  List<String> _permissions = [];
+  bool _can(String permission) =>
+      AdminPermissions.has(_permissions, permission);
+
   @override
   void initState() {
     super.initState();
@@ -81,12 +88,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
-  void _loadDashboardData() {
+  void _loadDashboardData() async {
+    // ✅ 1. Load this admin's permissions first
+    try {
+      final permissionService = GetIt.instance<PermissionService>();
+      _permissions = await permissionService.loadPermissions(
+        forceRefresh: true,
+      );
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      debugPrint('Failed to load permissions: $e');
+    }
+
+    // ✅ 2. Only load what this role is allowed to see
     context.read<DashboardBloc>().add(
       const LoadDashboardDataEvent(period: 'week'),
     );
-    context.read<AdminBloc>().add(FetchAllOrdersEvent());
-    context.read<AnalyticsBloc>().add(const LoadAnalyticsEvent(period: 'week'));
+
+    if (_can(AdminPermissions.orderView)) {
+      context.read<AdminBloc>().add(FetchAllOrdersEvent());
+    }
+
+    if (_can(AdminPermissions.analyticsView)) {
+      context.read<AnalyticsBloc>().add(
+        const LoadAnalyticsEvent(period: 'week'),
+      );
+    }
 
     _dashboardSubscription = context.read<DashboardBloc>().stream.listen((
       state,
@@ -148,13 +176,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       _newOrderSub = socketService.onNewOrder.listen((orderData) {
         if (mounted) {
           _showNewOrderToast(orderData);
-          context.read<AdminBloc>().add(FetchAllOrdersEvent());
+          if (_can(AdminPermissions.orderView)) {
+            context.read<AdminBloc>().add(FetchAllOrdersEvent());
+          }
           context.read<DashboardBloc>().add(
             LoadDashboardDataEvent(period: _periodNotifier.value),
           );
-          context.read<AnalyticsBloc>().add(
-            LoadAnalyticsEvent(period: _periodNotifier.value),
-          );
+          if (_can(AdminPermissions.analyticsView)) {
+            context.read<AnalyticsBloc>().add(
+              LoadAnalyticsEvent(period: _periodNotifier.value),
+            );
+          }
         }
       });
     } catch (e) {
@@ -217,13 +249,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         listener: (context, state) {
           if (state is DashboardError) {
             final message = state.message.toLowerCase();
-            if (message.contains('403') ||
-                message.contains('forbidden') ||
-                message.contains('administrators') ||
-                message.contains('admin access') ||
-                message.contains('unauthorized')) {
-              _redirectToHome('Your admin access has been revoked');
+
+            // Only redirect if authentication really failed
+            if (message.contains('401') ||
+                message.contains('unauthorized') ||
+                message.contains('token') ||
+                message.contains('not authenticated')) {
+              _redirectToHome('Session expired. Please login again.');
             }
+
+            // ❌ Do NOT redirect on 403 forbidden from dashboard widgets
+            // That only means this role cannot see that section.
+            debugPrint('⚠️ [Dashboard] Error: ${state.message}');
           }
         },
         child: CustomScrollView(
@@ -234,25 +271,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _buildSliverAppBar(),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.all(12.0), // ✅ Reduced from 16.0
+                padding: const EdgeInsets.all(12.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildPeriodSelector(context),
-                    const SizedBox(height: 16), // ✅ Reduced from 20
+                    const SizedBox(height: 16),
                     _buildStatsSection(context),
-                    const SizedBox(height: 16), // ✅ Reduced from 24
+                    const SizedBox(height: 16),
                     _buildChartsSection(context),
-                    const SizedBox(height: 16), // ✅ Reduced from 24
+                    const SizedBox(height: 16),
                     _buildAnalyticsSection(context),
-                    const SizedBox(height: 16), // ✅ Reduced from 24
+                    const SizedBox(height: 16),
                     _buildSectionTitle('Quick Management'),
-                    const SizedBox(height: 8), // ✅ Reduced from 12
+                    const SizedBox(height: 8),
                     _buildQuickActions(context),
-                    const SizedBox(height: 16), // ✅ Reduced from 24
-                    _buildSectionTitle('Recent Orders'),
-                    const SizedBox(height: 8), // ✅ Reduced from 12
-                    _buildRecentOrders(context),
+                    const SizedBox(height: 16),
+                    if (_can(AdminPermissions.orderView)) ...[
+                      _buildSectionTitle('Recent Orders'),
+                      const SizedBox(height: 8),
+                      _buildRecentOrders(context),
+                    ],
                     const SizedBox(height: 120),
                   ],
                 ),
@@ -298,8 +337,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: Icon(Iconsax.back_square, color: Colors.white),
             ),
           ),
-
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -370,9 +408,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       context.read<DashboardBloc>().add(
                         ChangePeriodEvent(period: period),
                       );
-                      context.read<AnalyticsBloc>().add(
-                        ChangeAnalyticsPeriodEvent(period),
-                      );
+                      if (_can(AdminPermissions.analyticsView)) {
+                        context.read<AnalyticsBloc>().add(
+                          ChangeAnalyticsPeriodEvent(period),
+                        );
+                      }
                     }
                   },
                   child: AnimatedContainer(
@@ -404,8 +444,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ✅ ADDED: Stats Section (was missing from class)
-  // ✅ FIXED: Stats Section with reduced gaps
+  // ✅ Stats Section with permission-based visibility
   Widget _buildStatsSection(BuildContext context) {
     return BlocBuilder<DashboardBloc, DashboardState>(
       builder: (context, state) {
@@ -423,7 +462,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             return _buildEmptyStatsCard();
           }
 
-          // ✅ Use Row/Column with Expanded for tighter spacing
           return Column(
             children: [
               Row(
@@ -436,59 +474,65 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       icon: Iconsax.user,
                       color: Colors.blueAccent,
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AdminUsersScreen(),
-                          ),
-                        );
+                        if (_can(AdminPermissions.userView)) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AdminUsersScreen(),
+                            ),
+                          );
+                        }
                       },
                     ),
                   ),
-                  const SizedBox(width: 10), // ✅ Reduced from 16 to 10
-                  Expanded(
-                    child: DashboardStatCard(
-                      title: 'Total Orders',
-                      value: state.stats.totalOrders.toString(),
-                      trend: state.stats.orderGrowth,
-                      icon: Iconsax.shopping_cart,
-                      color: Colors.orangeAccent,
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const AdminMainNavigationScreen(
-                                  initialIndex: 2,
-                                ),
-                          ),
-                        );
-                      },
+                  const SizedBox(width: 10),
+                  if (_can(AdminPermissions.orderView))
+                    Expanded(
+                      child: DashboardStatCard(
+                        title: 'Total Orders',
+                        value: state.stats.totalOrders.toString(),
+                        trend: state.stats.orderGrowth,
+                        icon: Iconsax.shopping_cart,
+                        color: Colors.orangeAccent,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const AdminMainNavigationScreen(
+                                    initialIndex: 2,
+                                  ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 10), // ✅ Reduced from 16 to 10
+              const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(
-                    child: DashboardStatCard(
-                      title: 'Revenue',
-                      value: '\$${state.stats.totalRevenue.toStringAsFixed(0)}',
-                      trend: state.stats.revenueGrowth,
-                      icon: Iconsax.money_tick,
-                      color: AppTheme.primaryColor,
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ModernAnalyticsScreen(),
-                          ),
-                        );
-                      },
+                  if (_can(AdminPermissions.revenueView))
+                    Expanded(
+                      child: DashboardStatCard(
+                        title: 'Revenue',
+                        value:
+                            '\$${state.stats.totalRevenue.toStringAsFixed(0)}',
+                        trend: state.stats.revenueGrowth,
+                        icon: Iconsax.money_tick,
+                        color: AppTheme.primaryColor,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ModernAnalyticsScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10), // ✅ Reduced from 16 to 10
+                  if (_can(AdminPermissions.revenueView))
+                    const SizedBox(width: 10),
                   Expanded(
                     child: DashboardStatCard(
                       title: 'New Users',
@@ -568,6 +612,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // ✅ Charts Section with permission-based visibility
   Widget _buildChartsSection(BuildContext context) {
     return BlocBuilder<DashboardBloc, DashboardState>(
       builder: (context, state) {
@@ -588,11 +633,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 title: 'User Growth',
                 data: state.usersChartData,
               ),
-              const SizedBox(height: 20),
-              DashboardLineChart(
-                title: 'Revenue Trend',
-                data: state.revenueChartData,
-              ),
+              if (_can(AdminPermissions.revenueView)) ...[
+                const SizedBox(height: 20),
+                DashboardLineChart(
+                  title: 'Revenue Trend',
+                  data: state.revenueChartData,
+                ),
+              ],
             ],
           );
         }
@@ -617,7 +664,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // ✅ Analytics Section with permission-based visibility
   Widget _buildAnalyticsSection(BuildContext context) {
+    if (!_can(AdminPermissions.analyticsView)) {
+      return const SizedBox.shrink();
+    }
+
     return BlocBuilder<AnalyticsBloc, AnalyticsState>(
       builder: (context, state) {
         if (state is AnalyticsLoading) {
@@ -731,7 +783,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          // Rank Badge
           Container(
             width: 28,
             height: 28,
@@ -764,7 +815,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          // Product Image
           Container(
             width: 44,
             height: 44,
@@ -788,7 +838,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 : const Icon(Iconsax.image, color: Colors.grey, size: 20),
           ),
           const SizedBox(width: 12),
-          // Product Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -811,7 +860,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
           ),
-          // Revenue
           Text(
             '\$${product.totalRevenue.toStringAsFixed(0)}',
             style: const TextStyle(
@@ -826,7 +874,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildRevenueByCategoryCard(List<CategoryRevenueEntity> categories) {
-    // ✅ Calculate total revenue for percentage
     final totalRevenue = categories.fold<double>(
       0,
       (sum, category) => sum + category.totalRevenue,
@@ -893,7 +940,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ✅ FIXED: Pass totalRevenue as parameter
   Widget _buildCategoryItem(
     CategoryRevenueEntity category,
     double totalRevenue,
@@ -1013,7 +1059,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ✅ RENAMED: From _buildStatusChip to _buildOrderStatusChip
   Widget _buildOrderStatusChip(OrderStatusEntity status) {
     Color color;
     switch (status.status) {
@@ -1363,116 +1408,115 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // ✅ Quick Actions with permission-based visibility
   Widget _buildQuickActions(BuildContext context) {
-    return Column(
-      children: [
+    final actions = <_QuickAction>[
+      _QuickAction(
+        'Markets',
+        Iconsax.box_1,
+        Colors.blueAccent,
+        AdminPermissions.marketView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AdminMarketsScreen()),
+          );
+        },
+      ),
+      _QuickAction(
+        'Categories',
+        Iconsax.category,
+        Colors.purpleAccent,
+        AdminPermissions.categoryView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AdminCategoriesScreen(),
+            ),
+          );
+        },
+      ),
+      _QuickAction(
+        'FAQ',
+        Iconsax.message_question,
+        Colors.teal,
+        AdminPermissions.faqView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminFaqScreen()),
+          );
+        },
+      ),
+      _QuickAction(
+        'Colors',
+        Iconsax.colorfilter,
+        Colors.pinkAccent,
+        AdminPermissions.colorView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AdminColorsScreen()),
+          );
+        },
+      ),
+      _QuickAction(
+        'Users',
+        Iconsax.profile_2user,
+        Colors.orange,
+        AdminPermissions.userView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
+          );
+        },
+      ),
+      _QuickAction(
+        'Sizes',
+        Iconsax.ruler,
+        Colors.indigo,
+        AdminPermissions.sizeView,
+        () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AdminSizesScreen()),
+          );
+        },
+      ),
+    ];
+
+    final visible = actions.where((a) => _can(a.permission)).toList();
+    if (visible.isEmpty) return const SizedBox.shrink();
+
+    final rows = <Widget>[];
+    for (var i = 0; i < visible.length; i += 3) {
+      final chunk = visible.sublist(
+        i,
+        (i + 3 > visible.length) ? visible.length : i + 3,
+      );
+      rows.add(
         Row(
           children: [
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'Markets',
-                Iconsax.box_1,
-                Colors.blueAccent,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminMarketsScreen(),
-                    ),
-                  );
-                },
+            for (var j = 0; j < chunk.length; j++) ...[
+              if (j > 0) const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionCard(
+                  context,
+                  chunk[j].title,
+                  chunk[j].icon,
+                  chunk[j].color,
+                  chunk[j].onTap,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'Categories',
-                Iconsax.category,
-                Colors.purpleAccent,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminCategoriesScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'FAQ',
-                Iconsax.message_question,
-                Colors.teal,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AdminFaqScreen()),
-                  );
-                },
-              ),
-            ),
+            ],
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'Colors',
-                Iconsax.colorfilter,
-                Colors.pinkAccent,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminColorsScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'Users',
-                Iconsax.image,
-                Colors.orange,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildActionCard(
-                context,
-                'Sizes',
-                Iconsax.ruler,
-                Colors.indigo,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const AdminSizesScreen(),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+      );
+      if (i + 3 < visible.length) rows.add(const SizedBox(height: 12));
+    }
+    return Column(children: rows);
   }
 
   Widget _buildActionCard(
@@ -1522,6 +1566,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  // ✅ Recent Orders with permission-based visibility
   Widget _buildRecentOrders(BuildContext context) {
     return BlocBuilder<AdminBloc, AdminState>(
       buildWhen: (prev, current) =>
@@ -1620,7 +1665,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ✅ RENAMED: From _buildStatusChip to _buildStringStatusChip
   Widget _buildStringStatusChip(String status) {
     Color color;
     switch (status) {
@@ -1689,6 +1733,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
     );
   }
+}
+
+// ✅ Quick Action Helper Class
+class _QuickAction {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final String permission;
+  final VoidCallback onTap;
+
+  const _QuickAction(
+    this.title,
+    this.icon,
+    this.color,
+    this.permission,
+    this.onTap,
+  );
 }
 
 class _AnalyticsCardSkeleton extends StatelessWidget {

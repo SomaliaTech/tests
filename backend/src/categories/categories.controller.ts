@@ -8,6 +8,7 @@ import {
   Query,
   ParseUUIDPipe,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +24,9 @@ import { categories, products, mediaAssets } from '../drizzle/schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { eq, isNull, inArray } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionGuard, Permissions } from '../auth/guards/permission.guard';
+import { Permission } from 'src/admin/enums/permissions.enum';
 
 @ApiTags('categories')
 @Controller('categories')
@@ -30,15 +34,22 @@ export class CategoriesController {
   constructor(private drizzle: DrizzleService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.CATEGORY_CREATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Create a new category',
-    description: 'Creates a new product category. Requires authentication.',
+    description:
+      'Creates a new product category. Requires authentication and category creation permission.',
   })
   @ApiBody({ type: CreateCategoryDto })
   @ApiResponse({ status: 201, description: 'Category created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid category data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   async create(@Body() createCategoryDto: CreateCategoryDto) {
     const id = randomUUID();
     const [category] = await this.drizzle.db
@@ -125,8 +136,9 @@ export class CategoriesController {
     return formatted;
   }
 
-  // ✅ UPDATED: Delete with optional transfer
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.CATEGORY_DELETE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Delete category',
@@ -145,12 +157,16 @@ export class CategoriesController {
     description: 'Cannot delete category with products',
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   @ApiResponse({ status: 404, description: 'Category not found' })
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('transferToId') transferToId?: string,
   ) {
-    // ✅ Check if category exists
+    // Check if category exists
     const [category] = await this.drizzle.db
       .select()
       .from(categories)
@@ -160,13 +176,13 @@ export class CategoriesController {
       throw new BadRequestException('Category not found');
     }
 
-    // ✅ Check if category has subcategories
+    // Check if category has subcategories
     const subcategories = await this.drizzle.db
       .select()
       .from(categories)
       .where(eq(categories.parentId, id));
 
-    // ✅ Check if category has products
+    // Check if category has products
     const categoryProducts = await this.drizzle.db
       .select()
       .from(products)
@@ -175,7 +191,7 @@ export class CategoriesController {
     const hasSubcategories = subcategories.length > 0;
     const hasProducts = categoryProducts.length > 0;
 
-    // ✅ If no products and no subcategories, just delete
+    // If no products and no subcategories, just delete
     if (!hasProducts && !hasSubcategories) {
       const [deleted] = await this.drizzle.db
         .delete(categories)
@@ -184,7 +200,7 @@ export class CategoriesController {
       return { message: 'Category deleted successfully', category: deleted };
     }
 
-    // ✅ If has products/subcategories AND transferToId is provided, do the transfer
+    // If has products/subcategories AND transferToId is provided, do the transfer
     if (transferToId) {
       // Validate target category exists
       const [targetCategory] = await this.drizzle.db
@@ -201,7 +217,7 @@ export class CategoriesController {
         throw new BadRequestException('Cannot transfer to the same category');
       }
 
-      // ✅ Transfer products to target category
+      // Transfer products to target category
       if (hasProducts) {
         await this.drizzle.db
           .update(products)
@@ -209,7 +225,7 @@ export class CategoriesController {
           .where(eq(products.categoryId, id));
       }
 
-      // ✅ Transfer subcategories to target category
+      // Transfer subcategories to target category
       if (hasSubcategories) {
         await this.drizzle.db
           .update(categories)
@@ -217,7 +233,7 @@ export class CategoriesController {
           .where(eq(categories.parentId, id));
       }
 
-      // ✅ Now delete the category
+      // Now delete the category
       const [deleted] = await this.drizzle.db
         .delete(categories)
         .where(eq(categories.id, id))
@@ -229,13 +245,13 @@ export class CategoriesController {
       };
     }
 
-    // ✅ If has products/subcategories but no transferToId, reject
+    // If has products/subcategories but no transferToId, reject
     throw new BadRequestException(
       `Cannot delete category with ${hasProducts ? categoryProducts.length : 0} products and ${hasSubcategories ? subcategories.length : 0} subcategories. Use transferToId query parameter to move them first.`,
     );
   }
 
-  // ✅ Helper method to attach iconUrl to categories
+  // Helper method to attach iconUrl to categories
   private async _formatCategoriesWithIcons(categoryList: any[]) {
     if (!categoryList || categoryList.length === 0) return categoryList;
 

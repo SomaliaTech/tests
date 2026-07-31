@@ -1,3 +1,4 @@
+// lib/features/admin/presentation/screens/admin_user_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -6,9 +7,9 @@ import 'package:mobile/features/admin/domain/entities/admin_user_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_state.dart';
-import 'package:mobile/features/admin/presentation/screens/edit_user_screen.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/services/injection_container.dart';
+import 'package:mobile/features/admin/presentation/screens/edit_user/edit_user_screen.dart';
 import 'package:mobile/features/chat/presentation/screens/chat_room_screen.dart';
 import 'package:toastification/toastification.dart';
 
@@ -23,12 +24,12 @@ class AdminUserDetailsScreen extends StatefulWidget {
 
 class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
   bool _isSuperAdmin = false;
-  late AdminUserEntity _currentUser; // ✅ Track current user
+  late AdminUserEntity _currentUser;
 
   @override
   void initState() {
     super.initState();
-    _currentUser = widget.user; // ✅ Initialize with widget.user
+    _currentUser = widget.user;
     _checkSuperAdmin();
   }
 
@@ -91,7 +92,6 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                 IconButton(
                   icon: const Icon(Iconsax.edit, color: Colors.black87),
                   onPressed: () async {
-                    // ✅ Wait for result from EditUserScreen
                     final result = await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -99,7 +99,6 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                       ),
                     );
 
-                    // ✅ If edit was successful, refresh this screen
                     if (result == true && mounted) {
                       context.read<UserBloc>().add(
                         FetchUserByIdEvent(_currentUser.id),
@@ -118,11 +117,9 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
             if (state.message.contains('deleted')) {
               Navigator.pop(context, true);
             } else if (state.message.contains('updated')) {
-              // ✅ Refresh user data from server
               context.read<UserBloc>().add(FetchUserByIdEvent(_currentUser.id));
             }
           } else if (state is UserLoaded) {
-            // ✅ Update current user with fresh data
             setState(() {
               _currentUser = state.user;
             });
@@ -136,106 +133,8 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ Profile Card - uses _currentUser instead of widget.user
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.05),
-                      spreadRadius: 1,
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
-                      child: Text(
-                        _currentUser.name?.isNotEmpty == true
-                            ? _currentUser.name![0].toUpperCase()
-                            : _currentUser.phoneNumber.substring(0, 2),
-                        style: TextStyle(
-                          color: AppTheme.primaryColor,
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _currentUser.name ?? 'No Name',
-                      style: const TextStyle(
-                        color: Colors.black87,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _currentUser.email ?? _currentUser.phoneNumber,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildBadge(
-                          label: _currentUser.isVerified
-                              ? 'Verified'
-                              : 'Not Verified',
-                          color: _currentUser.isVerified
-                              ? Colors.green
-                              : Colors.orange,
-                        ),
-                        const SizedBox(width: 12),
-                        if (_currentUser.isAdmin)
-                          _buildBadge(label: 'Admin', color: Colors.purple),
-                        if (_currentUser.isSuperAdmin ?? false)
-                          _buildBadge(label: 'Super Admin', color: Colors.red),
-
-                        SizedBox(width: 20),
-
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChatRoomScreen(
-                                  partnerId: _currentUser.id,
-                                  partnerName:
-                                      _currentUser.name ?? "no user name",
-                                ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2ED573),
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(10),
-                              ),
-                            ),
-                            child: const Icon(
-                              Iconsax.message,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 20),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              // ✅ User Information - uses _currentUser
+              _buildProfileCard(),
+              const SizedBox(height: 30),
               _buildSection('Information', [
                 _buildInfoRow(Iconsax.call, 'Phone', _currentUser.phoneNumber),
                 if (_currentUser.email != null)
@@ -261,37 +160,9 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                       : 'User',
                 ),
               ]),
-              // ✅ Actions section - uses _currentUser
               if (_isSuperAdmin) ...[
                 const SizedBox(height: 24),
-                _buildSection('Actions', [
-                  _buildActionButton(
-                    icon: Iconsax.edit,
-                    label: 'Edit User',
-                    color: Colors.blue,
-                    onTap: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => EditUserScreen(user: _currentUser),
-                        ),
-                      );
-
-                      if (result == true && mounted) {
-                        context.read<UserBloc>().add(
-                          FetchUserByIdEvent(_currentUser.id),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _buildActionButton(
-                    icon: Iconsax.trash,
-                    label: 'Delete User',
-                    color: Colors.red,
-                    onTap: () => _showDeleteConfirmation(),
-                  ),
-                ]),
+                _buildActionsSection(),
               ],
             ],
           ),
@@ -300,21 +171,164 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
     );
   }
 
+  Widget _buildProfileCard() {
+    final isSuperAdmin = _currentUser.isSuperAdmin ?? false;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: isSuperAdmin
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFDC143C), Color(0xFF8B0000)],
+              )
+            : _currentUser.isAdmin
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+              )
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+              ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color:
+                (isSuperAdmin
+                        ? const Color(0xFFDC143C)
+                        : _currentUser.isAdmin
+                        ? const Color(0xFF7C3AED)
+                        : const Color(0xFF2ED573))
+                    .withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.white.withOpacity(0.2),
+            child: Text(
+              _currentUser.name?.isNotEmpty == true
+                  ? _currentUser.name![0].toUpperCase()
+                  : _currentUser.phoneNumber.substring(0, 2),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _currentUser.name ?? 'No Name',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _currentUser.email ?? _currentUser.phoneNumber,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildBadge(
+                label: _currentUser.isVerified ? 'Verified' : 'Not Verified',
+                color: _currentUser.isVerified ? Colors.green : Colors.orange,
+              ),
+              if (_currentUser.isAdmin)
+                _buildBadge(label: 'Admin', color: Colors.purple),
+              if (_currentUser.isSuperAdmin ?? false)
+                _buildBadge(label: 'Super Admin', color: Colors.red),
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatRoomScreen(
+                        partnerId: _currentUser.id,
+                        partnerName: _currentUser.name ?? "no user name",
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Iconsax.message, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        'Message',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBadge({required String label, required Color color}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withOpacity(0.3)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -386,6 +400,64 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionsSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.05),
+            spreadRadius: 1,
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Actions',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildActionButton(
+            icon: Iconsax.edit,
+            label: 'Edit User',
+            color: Colors.blue,
+            onTap: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => EditUserScreen(user: _currentUser),
+                ),
+              );
+
+              if (result == true && mounted) {
+                context.read<UserBloc>().add(
+                  FetchUserByIdEvent(_currentUser.id),
+                );
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildActionButton(
+            icon: Iconsax.trash,
+            label: 'Delete User',
+            color: Colors.red,
+            onTap: () => _showDeleteConfirmation(),
           ),
         ],
       ),

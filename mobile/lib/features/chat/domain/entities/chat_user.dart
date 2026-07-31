@@ -1,7 +1,5 @@
 // lib/features/chat/domain/entities/chat_user.dart
-import 'package:equatable/equatable.dart';
-
-class ChatUser extends Equatable {
+class ChatUser {
   final String id;
   final String? name;
   final String phoneNumber;
@@ -9,42 +7,48 @@ class ChatUser extends Equatable {
   final bool isOnline;
   final DateTime? lastSeen;
   final bool isAdmin;
-  final bool? isSuperAdmin;
+  final bool? isSuperAdmin; // ✅ Add this field
 
-  const ChatUser({
+  ChatUser({
     required this.id,
     this.name,
     required this.phoneNumber,
     this.profileImage,
-    required this.isOnline,
+    this.isOnline = false,
     this.lastSeen,
-    required this.isAdmin,
-    this.isSuperAdmin,
+    this.isAdmin = false,
+    this.isSuperAdmin, // ✅ Add this field
   });
 
   factory ChatUser.fromJson(Map<String, dynamic> json) {
     return ChatUser(
-      id: json['id']?.toString() ?? '',
-      name: json['name'] as String?,
-      phoneNumber: json['phoneNumber']?.toString() ?? '',
-      profileImage: json['profileImage'] as String?,
-      isOnline: json['isOnline'] == true || json['is_online'] == true,
+      id: json['id'] ?? '',
+      name: json['name'],
+      phoneNumber: json['phoneNumber'] ?? json['phone_number'] ?? '',
+      profileImage: json['profileImage'] ?? json['profile_image'],
+      isOnline: json['isOnline'] ?? json['is_online'] ?? false,
       lastSeen: json['lastSeen'] != null
-          ? DateTime.tryParse(json['lastSeen'].toString())
+          ? DateTime.tryParse(json['lastSeen'].toString()) ??
+                (json['last_seen'] != null
+                    ? DateTime.tryParse(json['last_seen'].toString())
+                    : null)
           : null,
-      isAdmin: json['isAdmin'] == true || json['is_admin'] == true,
+      isAdmin: json['isAdmin'] ?? json['is_admin'] ?? false,
       isSuperAdmin:
-          json['isSuperAdmin'] == true || json['is_super_admin'] == true,
+          json['isSuperAdmin'] ?? json['is_super_admin'], // ✅ Add this
     );
   }
 
-  @override
-  List<Object?> get props => [
-    id,
-    name,
-    phoneNumber,
-    isOnline,
-    isAdmin,
-    isSuperAdmin,
-  ];
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'phoneNumber': phoneNumber,
+      'profileImage': profileImage,
+      'isOnline': isOnline,
+      'lastSeen': lastSeen?.toIso8601String(),
+      'isAdmin': isAdmin,
+      'isSuperAdmin': isSuperAdmin, // ✅ Add this
+    };
+  }
 }

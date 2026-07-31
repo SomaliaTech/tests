@@ -1,10 +1,15 @@
 import 'dart:async';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:get_it/get_it.dart';
+
+import 'package:mobile/core/constants/admin_permissions.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
+import 'package:mobile/core/services/permission_service.dart';
 import 'package:mobile/core/theme/theme.dart';
+
 import 'package:mobile/features/admin/presentation/screens/admin_dashboard_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_products_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_orders_screen.dart';
@@ -21,25 +26,162 @@ class AdminMainNavigationScreen extends StatefulWidget {
 }
 
 class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
-  late int _selectedIndex;
-  StreamSubscription? _roleChangeSub;
+  int _selectedIndex = 0;
+  bool _isLoadingTabs = true;
   bool _isRedirecting = false;
+  bool _isBuildingTabs = false;
 
-  final List<Widget> _screens = [
-    AdminDashboardScreen(),
-    const AdminProductsScreen(),
-    const AdminOrdersScreen(),
-    const AdminSettingsScreen(),
-  ];
+  List<_AdminTab> _tabs = [];
+
+  StreamSubscription? _roleChangeSub;
 
   @override
   void initState() {
     super.initState();
-    _selectedIndex = widget.initialIndex;
+
+    // ✅ Always load fresh permissions when entering admin area
+    _buildTabs(forceRefresh: true);
+
+    // ✅ Listen for realtime role changes
     _setupRoleChangeListener();
   }
 
-  // ✅ Listen for role changes from server
+  @override
+  void dispose() {
+    _roleChangeSub?.cancel();
+    super.dispose();
+  }
+
+  /// ✅ Build tabs based on admin permissions
+  Future<void> _buildTabs({bool forceRefresh = false}) async {
+    if (_isBuildingTabs) return;
+
+    _isBuildingTabs = true;
+
+    try {
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final permissions = await permissionService
+          .loadPermissions(forceRefresh: forceRefresh)
+          .timeout(const Duration(seconds: 10), onTimeout: () => <String>[]);
+
+      debugPrint('🧭 [AdminNav] Loaded permissions: $permissions');
+
+      bool allowed(String? permission) {
+        // No permission required
+        if (permission == null) return true;
+
+        // Super admin wildcard
+        if (permissions.contains('*')) return true;
+
+        // Normal permission check
+        return AdminPermissions.has(permissions, permission);
+      }
+
+      final allTabs = [
+        _AdminTab(
+          icon: Iconsax.chart,
+          activeIcon: Iconsax.chart_2,
+          label: 'Dashboard',
+          screen: const AdminDashboardScreen(),
+          permission: null,
+        ),
+        _AdminTab(
+          icon: Iconsax.box_1,
+          activeIcon: Iconsax.box,
+          label: 'Products',
+          screen: const AdminProductsScreen(),
+          permission: AdminPermissions.productView,
+        ),
+        _AdminTab(
+          icon: Iconsax.shopping_cart,
+          activeIcon: Iconsax.shopping_bag,
+          label: 'Orders',
+          screen: const AdminOrdersScreen(),
+          permission: AdminPermissions.orderView,
+        ),
+        _AdminTab(
+          icon: Iconsax.setting_2,
+          activeIcon: Iconsax.setting,
+          label: 'Settings',
+          screen: const AdminSettingsScreen(),
+          permission: null,
+        ),
+      ];
+
+      final visibleTabs = allTabs
+          .where((tab) => allowed(tab.permission))
+          .toList();
+
+      // ✅ Should not happen because Dashboard and Settings have null permission,
+      // but keep safe fallback.
+      if (visibleTabs.isEmpty) {
+        visibleTabs.add(
+          _AdminTab(
+            icon: Iconsax.setting_2,
+            activeIcon: Iconsax.setting,
+            label: 'Settings',
+            screen: const AdminSettingsScreen(),
+            permission: null,
+          ),
+        );
+      }
+
+      // ✅ Try to keep requested initial tab if it is visible
+      int targetIndex = 0;
+
+      if (widget.initialIndex >= 0 && widget.initialIndex < allTabs.length) {
+        final requestedLabel = allTabs[widget.initialIndex].label;
+
+        final foundIndex = visibleTabs.indexWhere(
+          (tab) => tab.label == requestedLabel,
+        );
+
+        if (foundIndex != -1) {
+          targetIndex = foundIndex;
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _tabs = visibleTabs;
+        _selectedIndex = targetIndex;
+        _isLoadingTabs = false;
+      });
+    } catch (e) {
+      debugPrint('❌ [AdminNav] Failed to build tabs: $e');
+
+      if (!mounted) return;
+
+      // ✅ Safe fallback: do NOT show Products/Orders if permissions fail
+      setState(() {
+        _tabs = [
+          _AdminTab(
+            icon: Iconsax.chart,
+            activeIcon: Iconsax.chart_2,
+            label: 'Dashboard',
+            screen: const AdminDashboardScreen(),
+            permission: null,
+          ),
+          _AdminTab(
+            icon: Iconsax.setting_2,
+            activeIcon: Iconsax.setting,
+            label: 'Settings',
+            screen: const AdminSettingsScreen(),
+            permission: null,
+          ),
+        ];
+
+        _selectedIndex = 0;
+        _isLoadingTabs = false;
+      });
+    } finally {
+      _isBuildingTabs = false;
+    }
+  }
+
+  /// ✅ Listen for backend role_changed event
   void _setupRoleChangeListener() {
     try {
       final socketService = GetIt.instance<ChatSocketService>();
@@ -49,27 +191,28 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
         final isSuperAdmin = data['isSuperAdmin'] as bool? ?? false;
 
         debugPrint(
-          '🔔 [AdminNav] Role change detected: isAdmin=$isAdmin, isSuperAdmin=$isSuperAdmin',
+          '🔔 [AdminNav] role_changed -> isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
         );
 
-        // ✅ If user lost admin access, redirect to main navigation
-        if (!isAdmin && !isSuperAdmin && !_isRedirecting) {
+        if (!isAdmin && !isSuperAdmin) {
           _redirectToMainNavigation();
+        } else {
+          // ✅ Still admin, but permissions may have changed
+          GetIt.instance<PermissionService>().invalidate();
+          _buildTabs(forceRefresh: true);
         }
       });
     } catch (e) {
-      debugPrint('❌ [AdminNav] Failed to setup role change listener: $e');
+      debugPrint('❌ [AdminNav] Role listener failed: $e');
     }
   }
 
-  // ✅ Redirect to main navigation with notification
+  /// ✅ Redirect when admin access is revoked
   void _redirectToMainNavigation() {
     if (_isRedirecting) return;
+
     _isRedirecting = true;
 
-    debugPrint('🔄 [AdminNav] Redirecting to main navigation...');
-
-    // Show notification
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -88,7 +231,6 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
       );
     }
 
-    // ✅ Pop back to main navigation after showing notification
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -96,23 +238,22 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
     });
   }
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  @override
-  void dispose() {
-    _roleChangeSub?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingTabs || _tabs.isEmpty) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
     return Scaffold(
-      extendBody: true, // ✅ Content scrolls behind the glass
-      body: IndexedStack(index: _selectedIndex, children: _screens),
+      extendBody: true,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _tabs.map((tab) => tab.screen).toList(),
+      ),
       bottomNavigationBar: _buildLiquidGlassNavBar(),
     );
   }
@@ -127,7 +268,6 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
         child: Container(
           decoration: BoxDecoration(
-            // ✅ Apple-style liquid glass gradient
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -138,11 +278,9 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
               ],
               stops: const [0.0, 0.5, 1.0],
             ),
-            // ✅ Subtle border for glass edge
             border: Border(
               top: BorderSide(color: Colors.white.withOpacity(0.4), width: 1),
             ),
-            // ✅ Soft shadow for depth
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -158,30 +296,8 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildNavItem(
-                    icon: Iconsax.chart,
-                    activeIcon: Iconsax.chart_2,
-                    label: 'Dashboard',
-                    index: 0,
-                  ),
-                  _buildNavItem(
-                    icon: Iconsax.box_1,
-                    activeIcon: Iconsax.box,
-                    label: 'Products',
-                    index: 1,
-                  ),
-                  _buildNavItem(
-                    icon: Iconsax.shopping_cart,
-                    activeIcon: Iconsax.shopping_bag,
-                    label: 'Orders',
-                    index: 2,
-                  ),
-                  _buildNavItem(
-                    icon: Iconsax.setting_2,
-                    activeIcon: Iconsax.setting,
-                    label: 'Settings',
-                    index: 3,
-                  ),
+                  for (int i = 0; i < _tabs.length; i++)
+                    _buildNavItem(tab: _tabs[i], index: i),
                 ],
               ),
             ),
@@ -191,17 +307,16 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
     );
   }
 
-  Widget _buildNavItem({
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required int index,
-  }) {
+  Widget _buildNavItem({required _AdminTab tab, required int index}) {
     final isSelected = _selectedIndex == index;
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => _onItemTapped(index),
+        onTap: () {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
@@ -211,7 +326,6 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ✅ Icon with liquid glass effect when selected
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
@@ -221,25 +335,22 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
                       ? AppTheme.primaryColor.withOpacity(0.15)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
-                  // ✅ Subtle glow when selected
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
                             color: AppTheme.primaryColor.withOpacity(0.2),
                             blurRadius: 12,
-                            spreadRadius: 0,
                           ),
                         ]
                       : null,
                 ),
                 child: Icon(
-                  isSelected ? activeIcon : icon,
+                  isSelected ? tab.activeIcon : tab.icon,
                   color: isSelected ? AppTheme.primaryColor : Colors.grey[600],
                   size: 24,
                 ),
               ),
               const SizedBox(height: 4),
-              // ✅ Label with smooth color transition
               AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 300),
                 style: TextStyle(
@@ -247,7 +358,7 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                   color: isSelected ? AppTheme.primaryColor : Colors.grey[600],
                 ),
-                child: Text(label),
+                child: Text(tab.label),
               ),
             ],
           ),
@@ -255,4 +366,20 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
       ),
     );
   }
+}
+
+class _AdminTab {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final Widget screen;
+  final String? permission;
+
+  const _AdminTab({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.screen,
+    this.permission,
+  });
 }

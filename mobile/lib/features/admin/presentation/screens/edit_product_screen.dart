@@ -324,6 +324,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
+        // In EditProductScreen - update the listener in the BlocConsumer
         listener: (context, state) {
           if (state is AdminCategoriesLoaded) {
             _cachedCategories = state.categories;
@@ -337,7 +338,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
           } else if (state is AdminProductOperationSuccess) {
             HapticFeedback.mediumImpact();
             ToastHelper.showSuccess(context, state.message);
-            Navigator.pop(context);
+
+            // ✅ Pop with result — let the PARENT screen handle refresh
+            if (mounted) {
+              Navigator.pop(context, true);
+            }
           } else if (state is AdminProductsError) {
             HapticFeedback.heavyImpact();
             ToastHelper.showError(context, state.message);

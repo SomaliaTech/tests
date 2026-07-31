@@ -1,3 +1,4 @@
+// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
@@ -11,19 +12,18 @@ import { AppController } from './app.controller';
 import { AdminModule } from './admin/admin.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AppService } from './app.service';
-
 import { SupabaseModule } from './supabase/supabase.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { FaqModule } from './faq/faq.module';
+import { PermissionGuard } from './auth/guards/permission.guard';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-
     DrizzleModule,
-    // CloudflareModule,
     SupabaseModule,
     CategoriesModule,
     ProductsModule,
@@ -34,10 +34,12 @@ import { FaqModule } from './faq/faq.module';
     OrdersModule,
     DashboardModule,
     NotificationsModule,
-    ChatModule,
     FaqModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    PermissionGuard, // ✅ Guard registered as a provider
+  ],
 })
 export class AppModule {}

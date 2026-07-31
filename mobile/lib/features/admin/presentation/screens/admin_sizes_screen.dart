@@ -7,6 +7,10 @@ import 'package:mobile/features/admin/domain/entities/size_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_color_size/admin_color_size_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_color_size/admin_color_size_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_color_size/admin_color_size_state.dart';
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/permission_service.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 
 class AdminSizesScreen extends StatefulWidget {
   const AdminSizesScreen({super.key});
@@ -16,10 +20,44 @@ class AdminSizesScreen extends StatefulWidget {
 }
 
 class _AdminSizesScreenState extends State<AdminSizesScreen> {
+  bool _canCreate = false;
+  bool _canUpdate = false;
+  bool _canDelete = false;
   @override
   void initState() {
     super.initState();
+    _loadPermissions();
     context.read<AdminColorSizeBloc>().add(FetchAllSizesEvent());
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final storageService = sl<StorageService>();
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final isSuper = await storageService.getIsSuperAdmin();
+      final perms = await permissionService.loadPermissions(
+        forceRefresh: false,
+      );
+
+      bool has(String p) {
+        if (isSuper) return true;
+        if (perms.contains('*')) return true;
+        if (perms.contains(p)) return true;
+        final module = p.split(':').first;
+        return perms.contains('$module:manage');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _canCreate = has('size:create');
+        _canUpdate = has('size:update');
+        _canDelete = has('size:delete');
+      });
+    } catch (e) {
+      debugPrint('❌ [Sizes] Permission load failed: $e');
+    }
   }
 
   void _showAddSizeDialog({SizeEntity? size}) {
@@ -158,15 +196,20 @@ class _AdminSizesScreenState extends State<AdminSizesScreen> {
           return const SizedBox.shrink();
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddSizeDialog(),
-        backgroundColor: AppTheme.primaryColor,
-        icon: const Icon(Iconsax.add, color: Colors.white),
-        label: const Text(
-          'Add Size',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-      ),
+      floatingActionButton: _canCreate
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddSizeDialog(),
+              backgroundColor: AppTheme.primaryColor,
+              icon: const Icon(Iconsax.add, color: Colors.white),
+              label: const Text(
+                'Add Size',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -226,40 +269,42 @@ class _AdminSizesScreenState extends State<AdminSizesScreen> {
               ],
             ),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'edit':
-                  _showAddSizeDialog(size: size);
-                  break;
-                case 'delete':
-                  _showDeleteConfirmation(size);
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Iconsax.edit, size: 18),
-                    SizedBox(width: 8),
-                    Text('Edit'),
-                  ],
+          if (_canUpdate)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                switch (value) {
+                  case 'edit':
+                    _showAddSizeDialog(size: size);
+                    break;
+                  case 'delete':
+                    _showDeleteConfirmation(size);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Iconsax.edit, size: 18),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Iconsax.trash, size: 18, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: Colors.red)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+                if (_canDelete)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Iconsax.trash, size: 18, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -397,6 +442,7 @@ class _AddEditSizeDialogState extends State<_AddEditSizeDialog> {
                       ),
                     ),
                   ),
+
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(

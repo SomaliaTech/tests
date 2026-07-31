@@ -8,6 +8,11 @@ import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_marke
 import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_market_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_market_state.dart';
 
+import 'package:get_it/get_it.dart';
+import 'package:mobile/core/services/permission_service.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
+
 class AdminMarketsScreen extends StatefulWidget {
   const AdminMarketsScreen({super.key});
 
@@ -17,11 +22,44 @@ class AdminMarketsScreen extends StatefulWidget {
 
 class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   List<MarketEntity> _markets = [];
-
+  bool _canCreate = false;
+  bool _canUpdate = false;
+  bool _canDelete = false;
   @override
   void initState() {
     super.initState();
+    _loadPermissions();
     context.read<AdminMarketBloc>().add(FetchAllMarketsEvent());
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final storageService = sl<StorageService>();
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final isSuper = await storageService.getIsSuperAdmin();
+      final perms = await permissionService.loadPermissions(
+        forceRefresh: false,
+      );
+
+      bool has(String p) {
+        if (isSuper) return true;
+        if (perms.contains('*')) return true;
+        if (perms.contains(p)) return true;
+        final module = p.split(':').first;
+        return perms.contains('$module:manage');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _canCreate = has('market:create');
+        _canUpdate = has('market:update');
+        _canDelete = has('market:delete');
+      });
+    } catch (e) {
+      debugPrint('❌ [Markets] Permission load failed: $e');
+    }
   }
 
   void _showAddMarketDialog({MarketEntity? market}) {
@@ -261,15 +299,21 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddMarketDialog(),
-        backgroundColor: AppTheme.primaryColor,
-        icon: const Icon(Iconsax.add, color: Colors.white),
-        label: const Text(
-          'Add Market',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-      ),
+
+      floatingActionButton: _canCreate
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddMarketDialog(),
+              backgroundColor: AppTheme.primaryColor,
+              icon: const Icon(Iconsax.add, color: Colors.white),
+              label: const Text(
+                'Add Market',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -426,75 +470,76 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
               ],
 
               const Spacer(),
-
-              // Actions Menu
-              PopupMenuButton<String>(
-                icon: const Icon(Iconsax.more, color: Colors.grey),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'edit':
-                      _showAddMarketDialog(market: market);
-                      break;
-                    case 'toggle_status':
-                      context.read<AdminMarketBloc>().add(
-                        UpdateMarketEvent(market.id, {
-                          'isActive': !market.isActive,
-                        }),
-                      );
-                      break;
-                    case 'delete':
-                      _showDeleteConfirmation(market);
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Iconsax.edit, size: 18),
-                        SizedBox(width: 8),
-                        Text('Edit'),
-                      ],
+              if (_canUpdate)
+                // Actions Menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Iconsax.more, color: Colors.grey),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'edit':
+                        _showAddMarketDialog(market: market);
+                        break;
+                      case 'toggle_status':
+                        context.read<AdminMarketBloc>().add(
+                          UpdateMarketEvent(market.id, {
+                            'isActive': !market.isActive,
+                          }),
+                        );
+                        break;
+                      case 'delete':
+                        _showDeleteConfirmation(market);
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Iconsax.edit, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
                     ),
-                  ),
-                  PopupMenuItem(
-                    value: 'toggle_status',
-                    child: Row(
-                      children: [
-                        Icon(
-                          market.isActive
-                              ? Iconsax.close_circle
-                              : Iconsax.tick_circle,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(market.isActive ? 'Deactivate' : 'Activate'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    enabled: !hasUsers,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Iconsax.trash,
-                          size: 18,
-                          color: hasUsers ? Colors.grey : Colors.red,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Delete',
-                          style: TextStyle(
-                            color: hasUsers ? Colors.grey : Colors.red,
+                    PopupMenuItem(
+                      value: 'toggle_status',
+                      child: Row(
+                        children: [
+                          Icon(
+                            market.isActive
+                                ? Iconsax.close_circle
+                                : Iconsax.tick_circle,
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(market.isActive ? 'Deactivate' : 'Activate'),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    if (_canDelete)
+                      PopupMenuItem(
+                        value: 'delete',
+                        enabled: !hasUsers,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Iconsax.trash,
+                              size: 18,
+                              color: hasUsers ? Colors.grey : Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: hasUsers ? Colors.grey : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
             ],
           ),
         ],

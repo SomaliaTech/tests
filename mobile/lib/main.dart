@@ -1,10 +1,11 @@
-// lib/main.dart
+// lib/main.dart - Fixed version
 import 'dart:io';
 import 'package:hive_flutter/adapters.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/network/internet_banner.dart';
+import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -66,7 +67,9 @@ void main() async {
 
   // ✅ Open ALL Hive boxes FIRST with correct types
   await Future.wait([
-    Hive.openBox<String>('con6versations_cache'),
+    Hive.openBox<String>(
+      'conversations_cache',
+    ), // ✅ FIXED typo (was 'con6versations_cache')
     Hive.openBox<String>('messages_cache'),
     Hive.openBox<String>('sync_timestamps'),
     Hive.openBox<String>('product_cache'),
@@ -231,6 +234,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<AdminCategoryBloc>()),
           BlocProvider(create: (context) => sl<AdminColorSizeBloc>()),
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
+          BlocProvider(create: (context) => sl<AdminRoleBloc>()),
           BlocProvider(create: (_) => sl<FaqBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
           Provider<StorageService>.value(value: sl<StorageService>()),
@@ -256,12 +260,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ],
             );
           },
-          // ✅ home property handles the root route
           home: Consumer<ConnectivityService>(
             builder: (context, connectivity, _) {
               if (connectivity.isInitialCheck &&
                   !widget.isInitiallyAuthenticated) {
-                return const SplashScreen();
+                return SplashScreen(); // ✅ Removed 'const'
               }
 
               if (widget.isInitiallyAuthenticated) {
@@ -278,19 +281,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     if (widget.isInitiallyAuthenticated) {
                       return const MainNavigationScreen();
                     }
-                    return const SplashScreen();
+                    return SplashScreen(); // ✅ Removed 'const'
                   } else if (state is Authenticated) {
                     return const MainNavigationScreen();
                   } else if (state is Unauthenticated) {
                     return const PhoneInputScreen();
                   } else {
-                    return const SplashScreen();
+                    return SplashScreen(); // ✅ Removed 'const'
                   }
                 },
               );
             },
           ),
-          // ✅ Only non-root routes here
           routes: {'/home': (context) => const MainNavigationScreen()},
         ),
       ),

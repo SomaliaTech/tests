@@ -12,6 +12,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { jsonb } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // CATEGORY TABLE
@@ -674,23 +675,6 @@ export const productVariantsRelations = relations(
   }),
 );
 
-export const usersRelations = relations(users, ({ one, many }) => ({
-  market: one(markets, {
-    fields: [users.marketId],
-    references: [markets.id],
-  }),
-  addresses: many(addresses),
-  orders: many(orders),
-  cartItems: many(cartItems),
-  notifications: many(notifications),
-  deviceTokens: many(deviceTokens),
-  sentMessages: many(messages, { relationName: 'sender' }),
-  receivedMessages: many(messages, { relationName: 'receiver' }),
-  conversationsAsP1: many(conversations, { relationName: 'participant1' }),
-  conversationsAsP2: many(conversations, { relationName: 'participant2' }),
-  reviews: many(reviews),
-}));
-
 export const addressesRelations = relations(addresses, ({ one }) => ({
   user: one(users, {
     fields: [addresses.userId],
@@ -815,4 +799,96 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     fields: [reviews.orderId],
     references: [orders.id],
   }),
+}));
+// src/drizzle/schema.ts - Add this after your existing tables
+
+// ==========================================
+// ROLES TABLE
+// ==========================================
+export const roles = pgTable(
+  'roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: varchar('description', { length: 500 }),
+    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+    isSystem: boolean('is_system').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    nameIdx: index('idx_roles_name').on(table.name),
+    systemIdx: index('idx_roles_system').on(table.isSystem),
+  }),
+);
+
+// ==========================================
+// USER ROLES JUNCTION TABLE
+// ==========================================
+export const userRoles = pgTable(
+  'user_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('idx_user_roles_user_id').on(table.userId),
+    roleIdIdx: index('idx_user_roles_role_id').on(table.roleId),
+    uniqueUserRole: uniqueIndex('idx_user_roles_unique').on(
+      table.userId,
+      table.roleId,
+    ),
+  }),
+);
+
+// ==========================================
+// ROLES RELATIONS
+// ==========================================
+export const rolesRelations = relations(roles, ({ many }) => ({
+  userRoles: many(userRoles),
+}));
+
+export const userRolesRelations = relations(userRoles, ({ one }) => ({
+  user: one(users, {
+    fields: [userRoles.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [userRoles.roleId],
+    references: [roles.id],
+  }),
+}));
+
+// Also update usersRelations to include roles
+export const usersRelations = relations(users, ({ one, many }) => ({
+  market: one(markets, {
+    fields: [users.marketId],
+    references: [markets.id],
+  }),
+  addresses: many(addresses),
+  orders: many(orders),
+  cartItems: many(cartItems),
+  notifications: many(notifications),
+  deviceTokens: many(deviceTokens),
+  sentMessages: many(messages, { relationName: 'sender' }),
+  receivedMessages: many(messages, { relationName: 'receiver' }),
+  conversationsAsP1: many(conversations, { relationName: 'participant1' }),
+  conversationsAsP2: many(conversations, { relationName: 'participant2' }),
+  reviews: many(reviews),
+  userRoles: many(userRoles), // ✅ ADD THIS
 }));

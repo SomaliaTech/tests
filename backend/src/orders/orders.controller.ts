@@ -26,9 +26,12 @@ import {
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionGuard, Permissions } from '../auth/guards/permission.guard';
+
 import { AddressDto } from './dto/address.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import { AddToCartDto } from '../products/dto/cart.dto';
+import { Permission } from 'src/admin/enums/permissions.enum';
 
 @ApiTags('orders')
 @Controller('orders')
@@ -38,7 +41,7 @@ export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
   // ==========================================
-  // 1. ADDRESS ENDPOINTS
+  // 1. ADDRESS ENDPOINTS (User-specific, JWT auth only)
   // ==========================================
 
   @Post('addresses')
@@ -47,18 +50,9 @@ export class OrdersController {
     description: 'Adds a new shipping address for the authenticated user.',
   })
   @ApiBody({ type: AddressDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Address added successfully',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid address data',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 201, description: 'Address added successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid address data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async addAddress(@Request() req, @Body() addressData: AddressDto) {
     return this.ordersService.addAddress(req.user.userId, addressData);
   }
@@ -68,14 +62,8 @@ export class OrdersController {
     summary: 'Get all addresses',
     description: 'Returns all shipping addresses for the authenticated user.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Addresses retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Addresses retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getAddresses(@Request() req) {
     return this.ordersService.getAddresses(req.user.userId);
   }
@@ -86,18 +74,9 @@ export class OrdersController {
     description:
       'Returns the default shipping address for the authenticated user.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Default address retrieved',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'No default address found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Default address retrieved' })
+  @ApiResponse({ status: 404, description: 'No default address found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getDefaultAddress(@Request() req) {
     return this.ordersService.getDefaultAddress(req.user.userId);
   }
@@ -108,23 +87,13 @@ export class OrdersController {
     description:
       'Sets a specific address as the default for the authenticated user.',
   })
-  @ApiParam({
-    name: 'addressId',
-    description: 'Address UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiParam({ name: 'addressId', description: 'Address UUID' })
   @ApiResponse({
     status: 200,
     description: 'Default address updated successfully',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'Address not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 404, description: 'Address not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async setDefaultAddress(
     @Request() req,
     @Param('addressId', ParseUUIDPipe) addressId: string,
@@ -137,23 +106,10 @@ export class OrdersController {
     summary: 'Delete address',
     description: 'Deletes a shipping address for the authenticated user.',
   })
-  @ApiParam({
-    name: 'addressId',
-    description: 'Address UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Address deleted successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Address not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiParam({ name: 'addressId', description: 'Address UUID' })
+  @ApiResponse({ status: 200, description: 'Address deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Address not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async deleteAddress(
     @Request() req,
     @Param('addressId', ParseUUIDPipe) addressId: string,
@@ -162,7 +118,7 @@ export class OrdersController {
   }
 
   // ==========================================
-  // 2. CART ENDPOINTS
+  // 2. CART ENDPOINTS (User-specific, JWT auth only)
   // ==========================================
 
   @Get('cart')
@@ -171,14 +127,8 @@ export class OrdersController {
     description:
       'Returns the current shopping cart for the authenticated user.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Cart retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Cart retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getCart(@Request() req) {
     return this.ordersService.getCart(req.user.userId);
   }
@@ -189,18 +139,12 @@ export class OrdersController {
     description: "Adds a product variant to the user's shopping cart.",
   })
   @ApiBody({ type: AddToCartDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Item added to cart successfully',
-  })
+  @ApiResponse({ status: 201, description: 'Item added to cart successfully' })
   @ApiResponse({
     status: 400,
     description: 'Invalid data or insufficient stock',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async addToCart(@Request() req, @Body() addToCartDto: AddToCartDto) {
     return this.ordersService.addToCart(req.user.userId, addToCartDto);
   }
@@ -211,11 +155,7 @@ export class OrdersController {
     description:
       'Updates the quantity of a specific item in the shopping cart.',
   })
-  @ApiParam({
-    name: 'itemId',
-    description: 'Cart item UUID',
-    example: '550e8400-e29b-41d4-a716-446655440002',
-  })
+  @ApiParam({ name: 'itemId', description: 'Cart item UUID' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -229,18 +169,9 @@ export class OrdersController {
       },
     },
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Cart item updated successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Cart item not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Cart item updated successfully' })
+  @ApiResponse({ status: 404, description: 'Cart item not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async updateCartItem(
     @Request() req,
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -257,23 +188,13 @@ export class OrdersController {
     summary: 'Remove item from cart',
     description: 'Removes a specific item from the shopping cart.',
   })
-  @ApiParam({
-    name: 'itemId',
-    description: 'Cart item UUID',
-    example: '550e8400-e29b-41d4-a716-446655440002',
-  })
+  @ApiParam({ name: 'itemId', description: 'Cart item UUID' })
   @ApiResponse({
     status: 200,
     description: 'Item removed from cart successfully',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'Cart item not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 404, description: 'Cart item not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async removeCartItem(
     @Request() req,
     @Param('itemId', ParseUUIDPipe) itemId: string,
@@ -286,14 +207,8 @@ export class OrdersController {
     summary: 'Clear cart',
     description: 'Removes all items from the shopping cart.',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'Cart cleared successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Cart cleared successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async clearCart(@Request() req) {
     return this.ordersService.clearCart(req.user.userId);
   }
@@ -308,27 +223,23 @@ export class OrdersController {
     description: "Creates a new order from the user's cart or specified items.",
   })
   @ApiBody({ type: CreateOrderDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Order created successfully',
-  })
+  @ApiResponse({ status: 201, description: 'Order created successfully' })
   @ApiResponse({
     status: 400,
     description: 'Invalid order data or insufficient stock',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async createOrder(@Request() req, @Body() createOrderDto: CreateOrderDto) {
     return this.ordersService.createOrder(req.user.userId, createOrderDto);
   }
 
   @Get()
+  @UseGuards(PermissionGuard)
+  @Permissions(Permission.ORDER_VIEW)
   @ApiOperation({
-    summary: 'Get user orders',
+    summary: 'Get user orders (Admin)',
     description:
-      'Returns all orders for the authenticated user. Can filter by status.',
+      'Returns all orders. Can filter by status. Requires ORDER_VIEW permission.',
   })
   @ApiQuery({
     name: 'status',
@@ -355,13 +266,11 @@ export class OrdersController {
     type: Number,
     description: 'Items per page',
   })
+  @ApiResponse({ status: 200, description: 'Orders retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 200,
-    description: 'Orders retrieved successfully',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
   async getOrders(
     @Request() req,
@@ -378,28 +287,12 @@ export class OrdersController {
     description:
       'Processes payment for an order using the specified payment method.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'Order UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
   @ApiBody({ type: ProcessPaymentDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Payment processed successfully',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid payment data',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Order not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 200, description: 'Payment processed successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid payment data' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async processPayment(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
@@ -417,37 +310,23 @@ export class OrdersController {
     summary: 'Get order by ID',
     description: 'Returns a specific order by its UUID.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'Order UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Order found',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Order not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
+  @ApiResponse({ status: 200, description: 'Order found' })
+  @ApiResponse({ status: 404, description: 'Order not found' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getOrderById(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.ordersService.getOrderById(id, req.user.userId);
   }
 
   @Put(':id/status')
+  @UseGuards(PermissionGuard)
+  @Permissions(Permission.ORDER_UPDATE)
   @ApiOperation({
-    summary: 'Update order status',
-    description: 'Updates the status of an order.',
+    summary: 'Update order status (Admin)',
+    description:
+      'Updates the status of an order. Requires ORDER_UPDATE permission.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'Order UUID',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
+  @ApiParam({ name: 'id', description: 'Order UUID' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -471,14 +350,12 @@ export class OrdersController {
     status: 200,
     description: 'Order status updated successfully',
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 404,
-    description: 'Order not found',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 404, description: 'Order not found' })
   async updateOrderStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: string,

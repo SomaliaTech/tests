@@ -12,23 +12,87 @@ class StorageService {
   static const String _userProfileImageKey = 'user_profile_image';
   static const String _userMarketIdKey = 'user_market_id';
   static const String _isAdminKey = 'is_admin';
-  static const String _isSuperAdminKey = 'is_super_admin'; // ✅ Already defined
+  static const String _isSuperAdminKey = 'is_super_admin';
   static const String _messageSoundKey = 'message_sound_enabled';
+  static const String _permissionsKey = 'cached_permissions'; // ✅ Added
 
   final FlutterSecureStorage _secureStorage;
 
   // ✅ In-memory cache to prevent read delays
   String? _cachedToken;
-  bool? _cachedIsSuperAdmin; // ✅ Cache for super admin
+  bool? _cachedIsSuperAdmin;
+  List<String>? _cachedPermissions; // ✅ Added cache for permissions
 
   StorageService({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   // ==========================================
+  // Permissions Management (using SharedPreferences)
+  // ==========================================
+
+  /// Save user permissions to local storage
+  Future<void> savePermissions(List<String> permissions) async {
+    debugPrint('💾 Saving permissions: ${permissions.length} permissions');
+    _cachedPermissions = permissions;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_permissionsKey, permissions);
+    debugPrint('💾 Permissions saved successfully');
+  }
+
+  /// Get cached user permissions
+  Future<List<String>> getPermissions() async {
+    if (_cachedPermissions != null) {
+      debugPrint(
+        '🔍 Returning cached permissions: ${_cachedPermissions!.length}',
+      );
+      return _cachedPermissions!;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final permissions = prefs.getStringList(_permissionsKey) ?? [];
+    _cachedPermissions = permissions;
+    debugPrint('🔍 Loaded permissions from storage: ${permissions.length}');
+    return permissions;
+  }
+
+  /// Clear cached permissions (call on logout)
+  Future<void> clearPermissions() async {
+    debugPrint('🗑️ Clearing cached permissions');
+    _cachedPermissions = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_permissionsKey);
+    debugPrint('🗑️ Permissions cleared successfully');
+  }
+
+  /// Check if user has a specific permission
+  Future<bool> hasPermission(String permission) async {
+    final permissions = await getPermissions();
+    final hasPermission = permissions.contains(permission);
+    debugPrint('🔍 Checking permission "$permission": $hasPermission');
+    return hasPermission;
+  }
+
+  /// Check if user has any of the specified permissions
+  Future<bool> hasAnyPermission(List<String> permissions) async {
+    final userPermissions = await getPermissions();
+    final hasAny = permissions.any((p) => userPermissions.contains(p));
+    debugPrint('🔍 Checking any permission from $permissions: $hasAny');
+    return hasAny;
+  }
+
+  /// Check if user has all of the specified permissions
+  Future<bool> hasAllPermissions(List<String> permissions) async {
+    final userPermissions = await getPermissions();
+    final hasAll = permissions.every((p) => userPermissions.contains(p));
+    debugPrint('🔍 Checking all permissions from $permissions: $hasAll');
+    return hasAll;
+  }
+
+  // ==========================================
   // Super Admin
   // ==========================================
   Future<void> saveIsSuperAdmin(bool isSuperAdmin) async {
-    debugPrint('💾 Saving isSuperAdmin: $isSuperAdmin'); // ✅ Debug
+    debugPrint('💾 Saving isSuperAdmin: $isSuperAdmin');
     _cachedIsSuperAdmin = isSuperAdmin;
     await _secureStorage.write(
       key: _isSuperAdminKey,
@@ -49,16 +113,16 @@ class StorageService {
   }
 
   Future<bool> getIsSuperAdmin() async {
-    debugPrint('🔍 Getting isSuperAdmin from storage...'); // ✅ Debug
+    debugPrint('🔍 Getting isSuperAdmin from storage...');
     if (_cachedIsSuperAdmin != null) {
       debugPrint('🔍 Cached isSuperAdmin: $_cachedIsSuperAdmin');
       return _cachedIsSuperAdmin!;
     }
     final value = await _secureStorage.read(key: _isSuperAdminKey);
-    debugPrint('🔍 Raw isSuperAdmin value: $value'); // ✅ Debug
+    debugPrint('🔍 Raw isSuperAdmin value: $value');
     final result = value == 'true';
     _cachedIsSuperAdmin = result;
-    debugPrint('🔍 Parsed isSuperAdmin: $result'); // ✅ Debug
+    debugPrint('🔍 Parsed isSuperAdmin: $result');
     return result;
   }
 
@@ -175,8 +239,12 @@ class StorageService {
   // Clear Data (Logout)
   // ==========================================
   Future<void> clearAuthData() async {
+    debugPrint('🗑️ Clearing all auth data...');
     _cachedToken = null;
-    _cachedIsSuperAdmin = null; // ✅ Clear cache
+    _cachedIsSuperAdmin = null;
+    _cachedPermissions = null; // ✅ Clear permissions cache
+
+    // Clear secure storage
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);
@@ -186,6 +254,11 @@ class StorageService {
     await _secureStorage.delete(key: _userProfileImageKey);
     await _secureStorage.delete(key: _userMarketIdKey);
     await _secureStorage.delete(key: _isAdminKey);
-    await _secureStorage.delete(key: _isSuperAdminKey); // ✅ Clear super admin
+    await _secureStorage.delete(key: _isSuperAdminKey);
+
+    // Clear permissions from SharedPreferences
+    await clearPermissions();
+
+    debugPrint('🗑️ All auth data cleared successfully');
   }
 }

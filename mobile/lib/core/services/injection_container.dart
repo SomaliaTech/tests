@@ -5,12 +5,14 @@ import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/services/address_injection.dart';
 import 'package:mobile/core/services/admin_feq_ijection.dart';
 import 'package:mobile/core/services/admin_injection.dart';
+import 'package:mobile/core/services/admin_role_ijection.dart';
 import 'package:mobile/core/services/analytics_injection.dart';
 import 'package:mobile/core/services/auth_ijdection.dart';
 import 'package:mobile/core/services/cart_injection.dart';
 import 'package:mobile/core/services/dashboard_injection.dart';
 import 'package:mobile/core/services/notification_injection.dart';
 import 'package:mobile/core/services/order_injection.dart';
+import 'package:mobile/core/services/permission_service.dart';
 import 'package:mobile/core/services/profile_ijection.dart';
 import 'package:mobile/core/services/server_status_service.dart';
 import 'package:mobile/core/services/support_injection.dart';
@@ -61,6 +63,11 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<ServerStatusService>(() => ServerStatusService());
   sl.registerLazySingleton(() => GetAdminUsers(sl()));
 
+  if (!sl.isRegistered<PermissionService>()) {
+    sl.registerLazySingleton<PermissionService>(
+      () => PermissionService(storageService: sl(), client: sl()),
+    );
+  }
   // ==========================================
   // ✅ Register each dependency group ONLY ONCE
   // ==========================================
@@ -81,8 +88,5 @@ Future<void> initDependencies() async {
   registerSupportDependencies(sl);
   registerAdminFaqDependencies(sl);
   registerAnalyticsDependencies(sl);
-
-  // ❌ REMOVED THESE DUPLICATES:
-  // registerCategoryDependencies(sl);  ← DUPLICATE
-  // registerProductDependencies(sl);   ← DUPLICATE
+  registerAdminRoleDependencies(sl);
 }

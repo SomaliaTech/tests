@@ -12,7 +12,7 @@ import {
   Query,
   DefaultValuePipe,
   ParseIntPipe,
-  BadRequestException, // ✅ ADD THIS
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -27,7 +27,8 @@ import { FaqService } from './faq.service';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { AdminGuard } from '../auth/guards/admin.guard';
+import { PermissionGuard, Permissions } from '../auth/guards/permission.guard';
+import { Permission } from 'src/admin/enums/permissions.enum';
 
 @ApiTags('faq')
 @Controller('faq')
@@ -82,15 +83,17 @@ export class FaqController {
   }
 
   // ==========================================
-  // ADMIN ENDPOINTS - ✅ PAGINATED
+  // ADMIN ENDPOINTS - With Permission Guards
   // ==========================================
 
   @Get()
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_VIEW)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Get all FAQs (Admin)',
-    description: 'Returns all FAQs including inactive ones with pagination',
+    description:
+      'Returns all FAQs including inactive ones with pagination. Requires FAQ_VIEW permission.',
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -100,6 +103,11 @@ export class FaqController {
   @ApiResponse({
     status: 200,
     description: 'All FAQs retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
   async getAllFaqs(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -120,11 +128,12 @@ export class FaqController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_VIEW)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Get FAQ by ID (Admin)',
-    description: 'Returns a specific FAQ',
+    description: 'Returns a specific FAQ. Requires FAQ_VIEW permission.',
   })
   @ApiParam({
     name: 'id',
@@ -135,6 +144,11 @@ export class FaqController {
     status: 200,
     description: 'FAQ retrieved successfully',
   })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
+  })
   @ApiResponse({
     status: 404,
     description: 'FAQ not found',
@@ -144,28 +158,23 @@ export class FaqController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_CREATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Create FAQ (Admin only)',
-    description: 'Creates a new FAQ',
+    summary: 'Create FAQ',
+    description: 'Creates a new FAQ. Requires FAQ_CREATE permission.',
   })
   @ApiBody({ type: CreateFaqDto })
   @ApiResponse({
     status: 201,
     description: 'FAQ created successfully',
   })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid FAQ data',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 400, description: 'Invalid FAQ data' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,
-    description: 'Forbidden - Admin access required',
+    description: 'Forbidden - Insufficient permissions',
   })
   async createFaq(@Request() req, @Body() createFaqDto: CreateFaqDto) {
     const userId = req.user.userId || req.user.sub;
@@ -173,25 +182,22 @@ export class FaqController {
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Update FAQ (Admin only)',
-    description: 'Updates an existing FAQ',
+    summary: 'Update FAQ',
+    description: 'Updates an existing FAQ. Requires FAQ_UPDATE permission.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'FAQ UUID',
-  })
+  @ApiParam({ name: 'id', description: 'FAQ UUID' })
   @ApiBody({ type: UpdateFaqDto })
+  @ApiResponse({ status: 200, description: 'FAQ updated successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 200,
-    description: 'FAQ updated successfully',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'FAQ not found',
-  })
+  @ApiResponse({ status: 404, description: 'FAQ not found' })
   async updateFaq(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateFaqDto: UpdateFaqDto,
@@ -200,53 +206,53 @@ export class FaqController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_DELETE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Delete FAQ (Admin only)',
-    description: 'Deletes an FAQ',
+    summary: 'Delete FAQ',
+    description: 'Deletes an FAQ. Requires FAQ_DELETE permission.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'FAQ UUID',
-  })
+  @ApiParam({ name: 'id', description: 'FAQ UUID' })
+  @ApiResponse({ status: 200, description: 'FAQ deleted successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 200,
-    description: 'FAQ deleted successfully',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
-  @ApiResponse({
-    status: 404,
-    description: 'FAQ not found',
-  })
+  @ApiResponse({ status: 404, description: 'FAQ not found' })
   async deleteFaq(@Param('id', ParseUUIDPipe) id: string) {
     return this.faqService.deleteFaq(id);
   }
 
   @Put(':id/toggle')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Toggle FAQ status (Admin only)',
-    description: 'Activates or deactivates an FAQ',
+    summary: 'Toggle FAQ status',
+    description:
+      'Activates or deactivates an FAQ. Requires FAQ_UPDATE permission.',
   })
-  @ApiParam({
-    name: 'id',
-    description: 'FAQ UUID',
-  })
+  @ApiParam({ name: 'id', description: 'FAQ UUID' })
+  @ApiResponse({ status: 200, description: 'FAQ status toggled successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 200,
-    description: 'FAQ status toggled successfully',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
   async toggleFaqStatus(@Param('id', ParseUUIDPipe) id: string) {
     return this.faqService.toggleFaqStatus(id);
   }
 
   @Put('reorder')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_UPDATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Reorder FAQs (Admin only)',
-    description: 'Updates the display order of FAQs',
+    summary: 'Reorder FAQs',
+    description:
+      'Updates the display order of FAQs. Requires FAQ_UPDATE permission.',
   })
   @ApiBody({
     schema: {
@@ -260,9 +266,11 @@ export class FaqController {
       },
     },
   })
+  @ApiResponse({ status: 200, description: 'FAQs reordered successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 200,
-    description: 'FAQs reordered successfully',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
   async reorderFaqs(@Body('faqIds') faqIds: string[]) {
     if (!faqIds || !Array.isArray(faqIds) || faqIds.length === 0) {
@@ -272,11 +280,13 @@ export class FaqController {
   }
 
   @Post('bulk')
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(Permission.FAQ_CREATE)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Bulk create FAQs (Admin only)',
-    description: 'Creates multiple FAQs at once',
+    summary: 'Bulk create FAQs',
+    description:
+      'Creates multiple FAQs at once. Requires FAQ_CREATE permission.',
   })
   @ApiBody({
     schema: {
@@ -289,9 +299,11 @@ export class FaqController {
       },
     },
   })
+  @ApiResponse({ status: 201, description: 'FAQs created successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
-    status: 201,
-    description: 'FAQs created successfully',
+    status: 403,
+    description: 'Forbidden - Insufficient permissions',
   })
   async bulkCreateFaqs(@Request() req, @Body('faqs') faqsList: CreateFaqDto[]) {
     if (!faqsList || !Array.isArray(faqsList) || faqsList.length === 0) {
