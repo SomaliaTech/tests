@@ -234,12 +234,10 @@ export class OrdersController {
   }
 
   @Get()
-  @UseGuards(PermissionGuard)
-  @Permissions(Permission.ORDER_VIEW)
   @ApiOperation({
-    summary: 'Get user orders (Admin)',
+    summary: 'Get user orders',
     description:
-      'Returns all orders. Can filter by status. Requires ORDER_VIEW permission.',
+      'Returns orders. Regular users see only their orders. Admins see all.',
   })
   @ApiQuery({
     name: 'status',
@@ -254,24 +252,10 @@ export class OrdersController {
       'CANCELLED',
     ],
   })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    description: 'Page number',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    description: 'Items per page',
-  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Orders retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Insufficient permissions',
-  })
   async getOrders(
     @Request() req,
     @Query('status') status?: string,
@@ -280,7 +264,6 @@ export class OrdersController {
   ) {
     return this.ordersService.getOrders(req.user.userId, status, page, limit);
   }
-
   @Post(':id/payment')
   @ApiOperation({
     summary: 'Process payment',

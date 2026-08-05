@@ -567,6 +567,8 @@ export class OrdersService {
       order: updatedOrder,
     };
   }
+  // Replace these two methods in your existing OrdersService:
+
   async getOrders(
     userId: string,
     status?: string,
@@ -574,10 +576,38 @@ export class OrdersService {
     limit: number = 10,
   ) {
     const offset = (page - 1) * limit;
-    const conditions = [eq(orders.userId, userId)];
-    if (status) conditions.push(eq(orders.status, status));
 
-    const whereClause = and(...conditions);
+    // ✅ Check if user is admin/super admin
+    const [user] = await this.drizzle.db
+      .select({
+        isAdmin: users.isAdmin,
+        isSuperAdmin: users.isSuperAdmin,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const isAdmin = user?.isAdmin || user?.isSuperAdmin;
+
+    this.logger.log(
+      `📊 getOrders - User: ${userId}, isAdmin: ${isAdmin}, Status: ${status || 'ALL'}`,
+    );
+
+    // ✅ Build conditions with proper typing
+    const conditions: any[] = []; // <-- FIX: Use any[] instead of never[]
+
+    if (!isAdmin) {
+      // Regular users only see their own orders
+      conditions.push(eq(orders.userId, userId));
+    }
+    // Admins see ALL orders (no userId filter)
+
+    if (status) {
+      conditions.push(eq(orders.status, status));
+    }
+
+    // ✅ Handle empty conditions
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [items, total] = await Promise.all([
       this.drizzle.db.query.orders.findMany({
@@ -597,12 +627,20 @@ export class OrdersService {
               },
             },
           },
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              phoneNumber: true,
+              email: true,
+            },
+          },
         },
       }),
       this.drizzle.db
         .select({ count: sql<number>`COUNT(*)::int` })
         .from(orders)
-        .where(whereClause),
+        .where(whereClause || sql`1=1`),
     ]);
 
     return {
@@ -617,8 +655,31 @@ export class OrdersService {
   }
 
   async getOrderById(orderId: string, userId: string) {
+    this.logger.log(`🔍 getOrderById - Order: ${orderId}, User: ${userId}`);
+
+    // ✅ Check if user is admin/super admin
+    const [user] = await this.drizzle.db
+      .select({
+        isAdmin: users.isAdmin,
+        isSuperAdmin: users.isSuperAdmin,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const isAdmin = user?.isAdmin || user?.isSuperAdmin;
+
+    // ✅ Build where conditions based on role
+    const conditions = [eq(orders.id, orderId)];
+
+    if (!isAdmin) {
+      // Regular users can only view their own orders
+      conditions.push(eq(orders.userId, userId));
+    }
+    // Admins can view any order
+
     const order = await this.drizzle.db.query.orders.findFirst({
-      where: and(eq(orders.id, orderId), eq(orders.userId, userId)),
+      where: and(...conditions),
       with: {
         items: {
           with: {
@@ -631,10 +692,22 @@ export class OrdersService {
             },
           },
         },
+        // ✅ Include user info for admins
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            email: true,
+          },
+        },
       },
     });
 
-    if (!order) throw new NotFoundException('Order not found');
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
     return order;
   }
 

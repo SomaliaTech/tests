@@ -40,16 +40,61 @@ export class AuthService {
     private supabaseService: SupabaseService,
     private notificationsService: NotificationsService,
   ) {}
+  // auth.service.ts - Updated sendOtp method
 
   async sendOtp(phoneNumber: string) {
     let cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
 
-    if (cleanedPhone.startsWith('61') || cleanedPhone.startsWith('061')) {
-      cleanedPhone = '+252' + cleanedPhone.replace(/^0?/, '');
-    } else if (cleanedPhone.startsWith('25261')) {
-      cleanedPhone = '+' + cleanedPhone;
-    } else if (!cleanedPhone.startsWith('+25261')) {
-      throw new BadRequestException('Invalid Somali phone number format');
+    // ✅ Support all Somali telecom providers
+    // Check if it's a local number (starts with 61, 68, 90, or 63)
+    const validPrefixes = ['61', '68', '90', '63'];
+    let isValidPrefix = false;
+
+    for (const prefix of validPrefixes) {
+      if (cleanedPhone.startsWith(prefix)) {
+        isValidPrefix = true;
+        break;
+      }
+    }
+
+    // If it starts with a valid prefix, format as +252
+    if (isValidPrefix) {
+      cleanedPhone = '+252' + cleanedPhone;
+    }
+    // If it starts with 0 and valid prefix
+    else if (cleanedPhone.startsWith('0') && cleanedPhone.length >= 3) {
+      const withoutZero = cleanedPhone.substring(1);
+      for (const prefix of validPrefixes) {
+        if (withoutZero.startsWith(prefix)) {
+          cleanedPhone = '+252' + withoutZero;
+          isValidPrefix = true;
+          break;
+        }
+      }
+    }
+    // If it already has +252 prefix with valid prefix
+    else if (cleanedPhone.startsWith('+252') && cleanedPhone.length >= 7) {
+      const withoutPlus = cleanedPhone.substring(4);
+      for (const prefix of validPrefixes) {
+        if (withoutPlus.startsWith(prefix)) {
+          isValidPrefix = true;
+          break;
+        }
+      }
+    }
+
+    // ✅ Validate the final phone number
+    if (!isValidPrefix || !cleanedPhone.startsWith('+252')) {
+      throw new BadRequestException(
+        'Invalid Somali phone number format. Supported: 61, 63, 68, 90',
+      );
+    }
+
+    // ✅ Validate length (should be +252 + 9 digits = 13 chars)
+    if (cleanedPhone.length !== 13) {
+      throw new BadRequestException(
+        'Phone number must be exactly 9 digits after the country code',
+      );
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
