@@ -1,3 +1,4 @@
+// lib/features/product/presentation/blocs/address_event.dart
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/address.dart';
 

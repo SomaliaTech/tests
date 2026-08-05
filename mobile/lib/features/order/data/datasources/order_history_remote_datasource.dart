@@ -1,6 +1,7 @@
+// lib/features/order/data/datasources/order_history_remote_datasource.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
+import 'package:flutter/foundation.dart';
 import 'package:mobile/features/order/data/models/order_history_model.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
@@ -15,14 +16,16 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
   final http.Client client;
 
   OrderHistoryRemoteDataSourceImpl({required this.client});
-
+  // In your Flutter OrderHistoryRemoteDataSourceImpl
   @override
   Future<List<OrderHistory>> getOrders(String token) async {
     try {
-      debugPrint('🔍 Fetching orders...');
+      final url = '${ApiConstants.baseUrl}/orders';
+      debugPrint('🌐 Calling: $url');
+      debugPrint('🔑 Token: ${token.substring(0, 20)}...');
 
       final response = await client.get(
-        Uri.parse('${ApiConstants.baseUrl}/orders'),
+        Uri.parse(url), // ✅ Make sure no trailing slash or spaces
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -30,33 +33,20 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
       );
 
       debugPrint('📦 Orders response status: ${response.statusCode}');
-      debugPrint(
-        '📦 Orders response body (first 200 chars): ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}',
-      );
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
 
         List<dynamic> jsonList;
 
-        // ✅ Handle different response formats
         if (decoded is Map<String, dynamic>) {
-          // Check for common keys: 'data', 'orders', 'items', 'results'
           jsonList =
-              (decoded['data'] ??
-                      decoded['orders'] ??
-                      decoded['items'] ??
-                      decoded['results'] ??
-                      [])
+              (decoded['items'] ?? decoded['data'] ?? decoded['orders'] ?? [])
                   as List<dynamic>;
-          debugPrint('✅ Found ${jsonList.length} orders (from Map)');
         } else if (decoded is List) {
-          // Direct list response
           jsonList = decoded;
-          debugPrint('✅ Found ${jsonList.length} orders (from List)');
         } else {
-          debugPrint('❌ Unexpected response format: ${decoded.runtimeType}');
-          throw ServerException('Invalid response format from server');
+          return [];
         }
 
         return jsonList
@@ -69,13 +59,11 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
         throw ServerException('Session expired. Please login again.');
       } else {
         debugPrint('❌ Failed to load orders: ${response.statusCode}');
-        debugPrint('❌ Response body: ${response.body}');
-        throw ServerException('Failed to load orders (${response.statusCode})');
+        return []; // Return empty on error instead of throwing
       }
     } catch (e) {
-      debugPrint('❌ Network error loading orders: $e');
-      if (e is ServerException) rethrow;
-      throw ServerException('Network error: $e');
+      debugPrint('❌ Network error: $e');
+      return []; // Return empty on network error
     }
   }
 
@@ -99,9 +87,7 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
 
         Map<String, dynamic> orderJson;
 
-        // ✅ Handle different response formats for single order
         if (decoded is Map<String, dynamic>) {
-          // Check if the order is wrapped in a 'data' or 'order' key
           if (decoded.containsKey('data') &&
               decoded['data'] is Map<String, dynamic>) {
             orderJson = decoded['data'] as Map<String, dynamic>;
@@ -109,7 +95,6 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
               decoded['order'] is Map<String, dynamic>) {
             orderJson = decoded['order'] as Map<String, dynamic>;
           } else if (decoded.containsKey('id')) {
-            // Direct order object
             orderJson = decoded;
           } else {
             debugPrint('❌ Unknown order response format');
@@ -124,6 +109,8 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
         throw ServerException('Session expired. Please login again.');
       } else if (response.statusCode == 404) {
         throw ServerException('Order not found');
+      } else if (response.statusCode == 403) {
+        throw ServerException('You don\'t have permission to view this order');
       } else {
         throw ServerException(
           'Failed to load order details (${response.statusCode})',
@@ -136,5 +123,3 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
     }
   }
 }
-
-// ✅ Add import for debugPrint if not already imported

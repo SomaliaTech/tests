@@ -1,3 +1,4 @@
+// lib/features/product/presentation/widgets/address_card.dart
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
@@ -83,7 +84,7 @@ class AddressCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  address.fullAddress,
+                  address.phoneNumber,
                   style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
               ],

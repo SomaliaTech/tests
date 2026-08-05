@@ -1,8 +1,13 @@
 // lib/features/admin/presentation/screens/admin_product_details_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:get_it/get_it.dart';
 import 'package:mobile/core/theme/theme.dart';
+import 'package:mobile/core/services/permission_service.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
+import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/features/admin/domain/entities/admin_product_entity.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_event.dart';
@@ -21,14 +26,58 @@ class AdminProductDetailsScreen extends StatefulWidget {
 }
 
 class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
-  // ✅ FIX: Cache the product to prevent UI disappearing during refresh
   AdminProductEntity? _cachedProduct;
   bool _isInitialLoad = true;
+
+  // ✅ Permission state
+  bool _canUpdate = false;
+  bool _canDelete = false;
+  bool _permissionsLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _loadProduct();
+    _loadPermissions();
+  }
+
+  // ✅ Load permissions
+  Future<void> _loadPermissions() async {
+    try {
+      final storageService = sl<StorageService>();
+      final permissionService = GetIt.instance<PermissionService>();
+
+      final isSuper = await storageService.getIsSuperAdmin();
+      final perms = await permissionService.loadPermissions(
+        forceRefresh: false,
+      );
+
+      bool has(String p) {
+        if (isSuper) return true;
+        if (perms.contains('*')) return true;
+        if (perms.contains(p)) return true;
+        final module = p.split(':').first;
+        return perms.contains('$module:manage');
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _canUpdate = has('product:update');
+        _canDelete = has('product:delete');
+        _permissionsLoaded = true;
+      });
+
+      debugPrint(
+        '🔐 [ProductDetails] canUpdate: $_canUpdate, canDelete: $_canDelete',
+      );
+    } catch (e) {
+      debugPrint('❌ [ProductDetails] Permission load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _permissionsLoaded = true;
+      });
+    }
   }
 
   void _loadProduct() {
@@ -75,10 +124,12 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Iconsax.edit, color: AppTheme.primaryColor),
-            onPressed: _navigateToEdit,
-          ),
+          // ✅ Only show edit in app bar if user has update permission
+          if (_canUpdate)
+            IconButton(
+              icon: const Icon(Iconsax.edit, color: AppTheme.primaryColor),
+              onPressed: _navigateToEdit,
+            ),
         ],
       ),
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
@@ -86,49 +137,41 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
           debugPrint('📢 [AdminProductDetails] State: $state');
 
           if (state is AdminProductDetailsLoaded) {
-            // ✅ Update cache when new data arrives
             setState(() {
               _cachedProduct = state.product;
               _isInitialLoad = false;
             });
           } else if (state is AdminProductOperationSuccess) {
-            // Handle delete success specifically
             if (state.message.contains('deleted')) {
               _showToast(state.message, true);
               Future.delayed(const Duration(milliseconds: 500), () {
                 if (mounted) {
-                  // Return true to trigger refresh in parent list
                   Navigator.pop(context, true);
                 }
               });
             }
           } else if (state is AdminProductsError) {
-            // Only show error toast if we don't have cached data (initial load fail)
             if (_cachedProduct == null) {
               _showToast(state.message, false);
             }
           }
         },
         builder: (context, state) {
-          // ✅ Determine what to show based on state and cache
           final isLoading =
               state is AdminProductDetailsLoading ||
               (state is! AdminProductDetailsLoaded &&
                   state is! AdminProductDetailsError);
 
-          // Use cached product if available, otherwise use state product
           final product = state is AdminProductDetailsLoaded
               ? state.product
               : _cachedProduct;
 
-          // 1. Show Loading Spinner ONLY if it's the initial load and no cache exists
           if (isLoading && _cachedProduct == null) {
             return const Center(
               child: CircularProgressIndicator(color: AppTheme.primaryColor),
             );
           }
 
-          // 2. Show Error ONLY if no cache exists
           if (state is AdminProductDetailsError && _cachedProduct == null) {
             return Center(
               child: Column(
@@ -159,12 +202,10 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
             );
           }
 
-          // 3. Show Content (either fresh from state or cached)
           if (product != null) {
             return RefreshIndicator(
               onRefresh: () async {
                 _loadProduct();
-                // Wait a bit to simulate refresh visual
                 await Future.delayed(const Duration(milliseconds: 800));
               },
               color: AppTheme.primaryColor,
@@ -282,64 +323,144 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
                       ),
                       const SizedBox(height: 16),
                     ],
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _navigateToEdit,
-                            icon: const Icon(Iconsax.edit_2),
-                            label: const Text('Edit'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              elevation: 0,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              _showDeleteConfirmation(product);
-                            },
-                            icon: const Icon(Iconsax.trash, color: Colors.red),
-                            label: const Text(
-                              'Delete',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Colors.red),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+
+                    // ✅ PERMISSION-BASED ACTION BUTTONS
+                    if (_canUpdate || _canDelete) ...[
+                      _buildActionButtons(product),
+                    ] else ...[
+                      // ✅ Show read-only info box if no permissions
+                      _buildReadOnlyInfoBox(),
+                    ],
                   ],
                 ),
               ),
             );
           }
 
-          // Fallback (should rarely happen due to caching logic)
           return const SizedBox.shrink();
         },
       ),
     );
   }
 
-  // ✅ Fixed Navigation Logic
+  // ✅ Permission-based action buttons
+  Widget _buildActionButtons(AdminProductEntity product) {
+    // If both permissions exist, show side by side
+    if (_canUpdate && _canDelete) {
+      return Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _navigateToEdit,
+              icon: const Icon(Iconsax.edit_2),
+              label: const Text('Edit'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _showDeleteConfirmation(product),
+              icon: const Icon(Iconsax.trash, color: Colors.red),
+              label: const Text('Delete', style: TextStyle(color: Colors.red)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // If only update permission
+    if (_canUpdate) {
+      return SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _navigateToEdit,
+          icon: const Icon(Iconsax.edit_2),
+          label: const Text('Edit Product'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            elevation: 0,
+          ),
+        ),
+      );
+    }
+
+    // If only delete permission
+    if (_canDelete) {
+      return SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => _showDeleteConfirmation(product),
+          icon: const Icon(Iconsax.trash, color: Colors.red),
+          label: const Text(
+            'Delete Product',
+            style: TextStyle(color: Colors.red),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: const BorderSide(color: Colors.red),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  // ✅ Read-only info box when user has no edit/delete permission
+  Widget _buildReadOnlyInfoBox() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Iconsax.info_circle, color: Colors.blue[400], size: 20),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'You have view-only access to this product.',
+              style: TextStyle(
+                color: Colors.blue,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _navigateToEdit() async {
     debugPrint('📝 [AdminProductDetails] Navigating to edit screen');
 
-    // Pass current product to edit screen if needed, or just ID
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -351,11 +472,9 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
       '↩️ [AdminProductDetails] Returned from edit with result: $result',
     );
 
-    // ✅ If edited successfully, reload details
     if (result == true && mounted) {
       debugPrint('🔄 [AdminProductDetails] Reloading product after edit');
       _loadProduct();
-      // Note: We don't show a toast here because EditProductScreen already shows one
     }
   }
 
@@ -591,8 +710,6 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
               context.read<AdminProductBloc>().add(
                 DeleteAdminProductEvent(product.id),
               );
-              // Optional: Show loading indicator on delete
-              // setState(() => _isLoading = true);
             },
             style: TextButton.styleFrom(
               backgroundColor: Colors.red.withOpacity(0.1),

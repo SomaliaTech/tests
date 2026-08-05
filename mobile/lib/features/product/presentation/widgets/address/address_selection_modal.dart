@@ -1,3 +1,4 @@
+// lib/features/product/presentation/widgets/address_selection_modal.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -61,6 +62,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(16),
+
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
       ),
@@ -81,13 +83,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   }
 
   Widget _buildAddressList() {
-    return BlocConsumer<AddressBloc, AddressState>(
-      listener: (context, state) {
-        // ✅ FIX: When new address is added, close modal first, then notify parent
-        if (state is AddressAdded) {
-          _selectAddressAndClose(state.address);
-        }
-      },
+    return BlocBuilder<AddressBloc, AddressState>(
       builder: (context, state) {
         if (state is AddressLoading) {
           return const Center(
@@ -133,6 +129,17 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
                 Text(
                   state.message,
                   style: const TextStyle(color: Color(0xFF6B7280)),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    _addressBloc.add(LoadAddressesEvent());
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2ED573),
+                  ),
+                  child: const Text('Retry'),
                 ),
               ],
             ),
@@ -145,7 +152,6 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
 
   Widget _buildAddressCard(Address address) {
     return GestureDetector(
-      // ✅ FIX: Use helper method for consistent behavior
       onTap: () => _selectAddressAndClose(address),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -159,7 +165,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           ),
           borderRadius: BorderRadius.circular(12),
           color: address.isDefault
-              ? const Color(0xFF2ED573).withValues(alpha: 0.05)
+              ? const Color(0xFF2ED573).withOpacity(0.05)
               : Colors.white,
         ),
         child: Row(
@@ -168,7 +174,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+                color: const Color(0xFF2ED573).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -202,9 +208,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF2ED573,
-                            ).withValues(alpha: 0.1),
+                            color: const Color(0xFF2ED573).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -248,6 +252,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   Widget _buildAddButton() {
     return Container(
       padding: const EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: 46),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
       ),
@@ -271,17 +276,20 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
     );
   }
 
+  // ✅ Show add address form
   void _showAddAddressForm() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AddAddressForm(
-        onAddressAdded: (newAddress) {
-          // Just dispatch event - the BlocConsumer listener handles the rest
-          _addressBloc.add(AddAddressEvent(newAddress));
-          Navigator.pop(context); // Close the form modal
-        },
+      useSafeArea: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: const AddAddressForm(
+          onAddressAdded: null, // We don't need this anymore
+        ),
       ),
     );
   }

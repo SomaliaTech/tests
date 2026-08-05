@@ -1,3 +1,4 @@
+// lib/features/product/presentation/blocs/address_state.dart
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/address.dart';
 
@@ -26,7 +27,6 @@ class AddressAdded extends AddressState {
   List<Object?> get props => [address];
 }
 
-// ✅ ADDED: Missing state
 class AddressDeleted extends AddressState {}
 
 class AddressError extends AddressState {

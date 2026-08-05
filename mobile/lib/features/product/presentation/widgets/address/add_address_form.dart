@@ -1,14 +1,18 @@
+// lib/features/product/presentation/widgets/add_address_form.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
+import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
+import 'package:mobile/features/product/presentation/blocs/address_event.dart';
 
 class AddAddressForm extends StatefulWidget {
-  final Function(Address) onAddressAdded;
+  final Function(Address)? onAddressAdded;
 
-  const AddAddressForm({super.key, required this.onAddressAdded});
+  const AddAddressForm({super.key, this.onAddressAdded});
 
   @override
   State<AddAddressForm> createState() => _AddAddressFormState();
@@ -47,7 +51,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
     });
   }
 
-  // ✅ Extract phone from any valid auth state
   String _extractPhoneNumber(AuthState state) {
     if (state is Authenticated) return state.user.phoneNumber;
     if (state is OtpVerified) return state.user.phoneNumber;
@@ -71,18 +74,36 @@ class _AddAddressFormState extends State<AddAddressForm> {
         phoneNumber: _phoneController.text,
         isDefault: _isDefault,
       );
-      widget.onAddressAdded(newAddress);
 
+      print('📦 Submitting address: ${newAddress.toJson()}');
+
+      // ✅ Dispatch to AddressBloc
+      context.read<AddressBloc>().add(AddAddressEvent(newAddress));
+
+      // Clear form
       _fullAddressController.clear();
       setState(() {
         _selectedLabel = null;
         _isDefault = false;
       });
 
+      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Address added successfully'),
+          content: Text('Address added successfully!'),
           backgroundColor: Color(0xFF2ED573),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      // ✅ Close the modal after adding
+      Navigator.pop(context);
+    } else {
+      // Show validation error
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all required fields'),
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -95,9 +116,12 @@ class _AddAddressFormState extends State<AddAddressForm> {
     final padding = MediaQuery.of(context).padding;
     final isSmallScreen = screenHeight < 700;
     final availableHeight = screenHeight - padding.top - padding.bottom;
+
+    final bottomPadding = padding.bottom > 0 ? padding.bottom + 16 : 32.0;
+
     final modalHeight = isSmallScreen
         ? availableHeight * 0.95
-        : screenHeight * 0.8;
+        : screenHeight * 0.85;
 
     return Container(
       height: modalHeight,
@@ -150,7 +174,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
                           color: Color(0xFF1F2937),
                         ),
                       ),
-                      SizedBox(height: 20),
+                      SizedBox(height: 34),
                       Text(
                         'Where should we deliver?',
                         style: TextStyle(
@@ -175,11 +199,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
 
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
 
-          // ✅ Form with proper keyboard handling
+          // Form with proper keyboard handling
           Expanded(
             child: SingleChildScrollView(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                bottom: viewInsets.bottom > 0
+                    ? viewInsets.bottom + 20
+                    : bottomPadding,
               ),
               physics: const BouncingScrollPhysics(),
               child: Padding(
@@ -266,22 +292,21 @@ class _AddAddressFormState extends State<AddAddressForm> {
                       _buildInputField(
                         controller: _fullAddressController,
                         label: 'Full Address',
-                        hint: 'Faldan gali goobta aad si alaabta lagugu keeno ',
+                        hint: "Fadlan geli goobta lagugu keenayo alaabta",
                         icon: Iconsax.location,
                         iconColor: const Color(0xFF3B82F6),
                         maxLines: 3,
                         validator: (value) => value?.isEmpty ?? true
-                            ? 'Faldan gali meesha aad joogto'
+                            ? 'Fadlan geli meesha alaabta lagugu keenayo.'
                             : null,
                       ),
                       const SizedBox(height: 20),
 
-                      // Phone Number (Auto-filled)
+                      // Phone Number
                       BlocBuilder<AuthBloc, AuthState>(
                         builder: (context, authState) {
                           final phoneNumber = _extractPhoneNumber(authState);
 
-                          // Auto-update controller
                           if (phoneNumber.isNotEmpty &&
                               _phoneController.text != phoneNumber) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -511,9 +536,10 @@ class _AddAddressFormState extends State<AddAddressForm> {
                           ),
                         ),
                       ),
+
                       const SizedBox(height: 24),
 
-                      // ✅ Add Button with gradient - Full width and responsive
+                      // Add Button
                       SizedBox(
                         width: double.infinity,
                         height: 54,
@@ -556,7 +582,8 @@ class _AddAddressFormState extends State<AddAddressForm> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+
+                      SizedBox(height: bottomPadding),
                     ],
                   ),
                 ),
