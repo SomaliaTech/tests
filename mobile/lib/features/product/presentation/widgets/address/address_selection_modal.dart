@@ -1,8 +1,13 @@
 // lib/features/product/presentation/widgets/address_selection_modal.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/core/common/widgets/shared/checkout_payment_modal.dart';
+import 'package:mobile/features/admin/domain/entities/market_entity.dart';
+import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
+import 'package:mobile/features/product/domain/entities/product.dart';
 import 'package:mobile/features/product/presentation/blocs/address_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/address_event.dart';
 import 'package:mobile/features/product/presentation/blocs/address_state.dart';
@@ -11,8 +16,25 @@ import 'add_address_form.dart';
 
 class AddressSelectionModal extends StatefulWidget {
   final Function(Address) onAddressSelected;
+  final List<MarketEntity>? availableMarkets;
+  final String? userMarketId;
+  final Product? product;
+  final String? selectedColor;
+  final String? selectedSize;
+  final int quantity;
+  final List<CartItem>? cartItems;
 
-  const AddressSelectionModal({super.key, required this.onAddressSelected});
+  const AddressSelectionModal({
+    super.key,
+    required this.onAddressSelected,
+    this.availableMarkets,
+    this.userMarketId,
+    this.product,
+    this.selectedColor,
+    this.selectedSize,
+    this.quantity = 1,
+    this.cartItems,
+  });
 
   @override
   State<AddressSelectionModal> createState() => _AddressSelectionModalState();
@@ -27,15 +49,46 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
     _addressBloc = sl<AddressBloc>()..add(LoadAddressesEvent());
   }
 
-  // ✅ Helper: Close modal first, then notify parent on next frame
   void _selectAddressAndClose(Address address) {
-    // 1. Close this modal FIRST
     Navigator.pop(context);
-
-    // 2. Notify parent AFTER the modal is gone
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onAddressSelected(address);
     });
+  }
+
+  void _navigateToCheckout(Address address) {
+    // Close the modal
+    Navigator.pop(context);
+
+    Widget checkoutScreen;
+    if (widget.cartItems != null && widget.cartItems!.isNotEmpty) {
+      checkoutScreen = CheckoutScreen.fromCart(
+        cartItems: widget.cartItems!,
+        availableMarkets: widget.availableMarkets!,
+        userMarketId: widget.userMarketId,
+        savedAddress: address,
+      );
+    } else if (widget.product != null) {
+      checkoutScreen = CheckoutScreen(
+        product: widget.product,
+        selectedColor: widget.selectedColor,
+        selectedSize: widget.selectedSize,
+        quantity: widget.quantity,
+        availableMarkets: widget.availableMarkets!,
+        userMarketId: widget.userMarketId,
+        savedAddress: address,
+      );
+    } else {
+      checkoutScreen = CheckoutScreen(
+        availableMarkets: widget.availableMarkets!,
+        userMarketId: widget.userMarketId,
+        savedAddress: address,
+      );
+    }
+
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => checkoutScreen));
   }
 
   @override
@@ -62,7 +115,6 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.all(16),
-
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
       ),
@@ -89,9 +141,9 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           return const Center(
             child: CircularProgressIndicator(color: Color(0xFF2ED573)),
           );
-        } else if (state is AddressesLoaded) {
-          final addresses = state.addresses;
-          if (addresses.isEmpty) {
+        }
+        if (state is AddressesLoaded) {
+          if (state.addresses.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -113,13 +165,12 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: addresses.length,
-            itemBuilder: (context, index) {
-              final address = addresses[index];
-              return _buildAddressCard(address);
-            },
+            itemCount: state.addresses.length,
+            itemBuilder: (context, index) =>
+                _buildAddressCard(state.addresses[index]),
           );
-        } else if (state is AddressError) {
+        }
+        if (state is AddressError) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -133,9 +184,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () {
-                    _addressBloc.add(LoadAddressesEvent());
-                  },
+                  onPressed: () => _addressBloc.add(LoadAddressesEvent()),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2ED573),
                   ),
@@ -152,7 +201,13 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
 
   Widget _buildAddressCard(Address address) {
     return GestureDetector(
-      onTap: () => _selectAddressAndClose(address),
+      onTap: () {
+        if (widget.availableMarkets != null) {
+          _navigateToCheckout(address);
+        } else {
+          _selectAddressAndClose(address);
+        }
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
@@ -252,7 +307,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   Widget _buildAddButton() {
     return Container(
       padding: const EdgeInsets.all(16),
-      margin: EdgeInsets.only(bottom: 46),
+      margin: const EdgeInsets.only(bottom: 50),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
       ),
@@ -276,21 +331,32 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
     );
   }
 
-  // ✅ Show add address form
   void _showAddAddressForm() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: const AddAddressForm(
-          onAddressAdded: null, // We don't need this anymore
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: AddAddressForm(
+          navigateToCheckout:
+              false, // ✅ Set to false so it just closes the form
+          availableMarkets: widget.availableMarkets,
+          userMarketId: widget.userMarketId,
+          product: widget.product,
+          selectedColor: widget.selectedColor,
+          selectedSize: widget.selectedSize,
+          quantity: widget.quantity,
+          cartItems: widget.cartItems,
+          onAddressAdded: (address) {
+            // Optional: You can leave this empty
+          },
         ),
       ),
-    );
+    ).then((_) {
+      // ✅ Reload the address list when the form closes so the new address appears
+      _addressBloc.add(LoadAddressesEvent());
+    });
   }
 }

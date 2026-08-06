@@ -1,14 +1,16 @@
 // lib/features/product/presentation/screens/category_view.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/core/common/widgets/shared/products_grid_skeleton.dart';
+import 'package:mobile/features/product/domain/entities/product.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/core/services/connectivity_service.dart';
 import 'package:mobile/features/product/presentation/blocs/category_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/category_event.dart';
 import 'package:mobile/features/product/presentation/blocs/category_state.dart';
-import 'package:mobile/features/product/presentation/widgets/loading/loading_product_card.dart';
-import 'package:mobile/features/product/presentation/widgets/loading/loading_subcategories.dart';
+import 'package:mobile/features/product/presentation/widgets/loading/subcategories_skeleton.dart';
 import '../blocs/product_bloc.dart';
 import '../blocs/product_event.dart';
 import '../blocs/product_state.dart';
@@ -32,48 +34,111 @@ class _CategoryViewState extends State<CategoryView> {
   String _selectedSubCategoryId = 'all';
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _wasOffline = false;
+  bool _isInitialLoad = true;
+  bool _isSubcategoriesLoading = true;
+  String? _previousCategoryId;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadInitialData();
+    _scrollController.addListener(_onScroll);
   }
 
-  void _loadData() {
+  void _loadInitialData() {
+    setState(() {
+      _isInitialLoad = true;
+      _isSubcategoriesLoading = true;
+    });
+
+    // Load subcategories
     context.read<CategoryBloc>().add(
       GetCategorySubcategoriesEvent(widget.categoryId),
     );
-    context.read<ProductBloc>().add(
-      GetProductsByCategoryEvent(widget.categoryId),
-    );
+    // Load products for "all" initially
+    _loadProducts(widget.categoryId);
   }
 
-  void _onSearch(String query) {
-    setState(() => _searchQuery = query);
-    if (query.isNotEmpty) {
-      context.read<ProductBloc>().add(SearchProductsEvent(query: query));
+  void _loadProducts(String targetId) {
+    if (_searchQuery.isNotEmpty) {
+      context.read<ProductBloc>().add(
+        SearchProductsEvent(query: _searchQuery, categoryId: targetId),
+      );
     } else {
-      final targetId = _selectedSubCategoryId == 'all'
-          ? widget.categoryId
-          : _selectedSubCategoryId;
       context.read<ProductBloc>().add(GetProductsByCategoryEvent(targetId));
     }
   }
 
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      // Implement pagination if needed
+    }
+  }
+
+  void _onSearch(String query) {
+    setState(() => _searchQuery = query);
+
+    if (query.isEmpty) {
+      _loadProducts(
+        _selectedSubCategoryId == 'all'
+            ? widget.categoryId
+            : _selectedSubCategoryId,
+      );
+      return;
+    }
+
+    // Debounce search
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (_searchQuery == query) {
+        context.read<ProductBloc>().add(
+          SearchProductsEvent(query: query, categoryId: widget.categoryId),
+        );
+      }
+    });
+  }
+
   void _onSubCategorySelected(String subCategoryId) {
+    if (_selectedSubCategoryId == subCategoryId) return;
+
     setState(() {
       _selectedSubCategoryId = subCategoryId;
       _searchQuery = '';
       _searchController.clear();
+      _isInitialLoad = true; // Show skeleton when switching subcategories
     });
+
     final targetId = subCategoryId == 'all' ? widget.categoryId : subCategoryId;
-    context.read<ProductBloc>().add(GetProductsByCategoryEvent(targetId));
+    _loadProducts(targetId);
+  }
+
+  void _retryLoad() {
+    _loadInitialData();
+  }
+
+  @override
+  void didUpdateWidget(CategoryView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Handle navigation to same view with different category
+    if (widget.categoryId != oldWidget.categoryId) {
+      _previousCategoryId = oldWidget.categoryId;
+      setState(() {
+        _selectedSubCategoryId = 'all';
+        _searchQuery = '';
+        _searchController.clear();
+        _isInitialLoad = true;
+        _isSubcategoriesLoading = true;
+      });
+      _loadInitialData();
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -85,8 +150,12 @@ class _CategoryViewState extends State<CategoryView> {
       body: Consumer<ConnectivityService>(
         builder: (context, connectivity, _) {
           final isOnline = connectivity.status == ConnectionStatus.online;
+
+          // Handle reconnection
           if (isOnline && _wasOffline) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _retryLoad();
+            });
           }
           _wasOffline = !isOnline;
 
@@ -94,7 +163,7 @@ class _CategoryViewState extends State<CategoryView> {
             children: [
               _buildSearchBar(),
               _buildSubCategories(),
-              Expanded(child: _buildProductsGrid()),
+              Expanded(child: _buildMainContent()),
             ],
           );
         },
@@ -118,6 +187,16 @@ class _CategoryViewState extends State<CategoryView> {
         icon: const Icon(Icons.arrow_back, color: Colors.black87),
         onPressed: () => Navigator.pop(context),
       ),
+      actions: [
+        IconButton(
+          icon: const Icon(Iconsax.sort, color: Colors.black87),
+          onPressed: _showSortOptions,
+        ),
+        IconButton(
+          icon: const Icon(Iconsax.filter, color: Colors.black87),
+          onPressed: _showFilterOptions,
+        ),
+      ],
     );
   }
 
@@ -162,16 +241,29 @@ class _CategoryViewState extends State<CategoryView> {
   }
 
   Widget _buildSubCategories() {
-    return BlocBuilder<CategoryBloc, CategoryState>(
-      buildWhen: (p, c) =>
-          c is CategorySubcategoriesLoading ||
-          c is CategorySubcategoriesLoaded ||
-          c is CategoryError,
+    return BlocConsumer<CategoryBloc, CategoryState>(
+      listener: (context, state) {
+        if (state is CategorySubcategoriesLoaded || state is CategoryError) {
+          setState(() => _isSubcategoriesLoading = false);
+        }
+      },
+      buildWhen: (previous, current) =>
+          current is CategorySubcategoriesLoading ||
+          current is CategorySubcategoriesLoaded ||
+          current is CategoryError,
       builder: (context, state) {
-        if (state is CategorySubcategoriesLoading)
-          return const LoadingSubcategories();
+        // Show skeleton while loading
+        if (state is CategorySubcategoriesLoading && _isSubcategoriesLoading) {
+          return const SubcategoriesSkeleton();
+        }
+
         if (state is CategorySubcategoriesLoaded) {
           final subCategories = state.subcategories;
+
+          if (subCategories.isEmpty) {
+            return const SizedBox.shrink();
+          }
+
           return Container(
             height: 50,
             margin: const EdgeInsets.only(bottom: 8),
@@ -181,134 +273,153 @@ class _CategoryViewState extends State<CategoryView> {
               itemCount: subCategories.length + 1,
               itemBuilder: (context, index) {
                 if (index == 0) {
-                  final isSelected = _selectedSubCategoryId == 'all';
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FilterChip(
-                      label: const Text('All'),
-                      selected: isSelected,
-                      onSelected: (s) {
-                        if (s) _onSubCategorySelected('all');
-                      },
-                      selectedColor: const Color(0xFF2ED573),
-                      showCheckmark: false,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black87,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.normal,
-                      ),
-                      backgroundColor: Colors.grey[100],
-                      shape: StadiumBorder(
-                        side: BorderSide(
-                          color: isSelected
-                              ? const Color(0xFF2ED573)
-                              : Colors.transparent,
-                        ),
-                      ),
-                    ),
+                  return _buildSubCategoryChip(
+                    id: 'all',
+                    name: 'All ',
+                    isSelected: _selectedSubCategoryId == 'all',
                   );
                 }
                 final sub = subCategories[index - 1];
-                final isSelected = _selectedSubCategoryId == sub.id;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FilterChip(
-                    label: Text(sub.name),
-                    selected: isSelected,
-                    onSelected: (s) {
-                      if (s) _onSubCategorySelected(sub.id);
-                    },
-                    selectedColor: const Color(0xFF2ED573),
-                    showCheckmark: false,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                    ),
-                    backgroundColor: Colors.grey[100],
-                    shape: StadiumBorder(
-                      side: BorderSide(
-                        color: isSelected
-                            ? const Color(0xFF2ED573)
-                            : Colors.transparent,
-                      ),
-                    ),
-                  ),
+                return _buildSubCategoryChip(
+                  id: sub.id,
+                  name: sub.name,
+                  isSelected: _selectedSubCategoryId == sub.id,
                 );
               },
             ),
           );
         }
+
+        if (state is CategoryError) {
+          return const SizedBox.shrink();
+        }
+
         return const SizedBox.shrink();
       },
     );
   }
 
-  Widget _buildProductsGrid() {
-    return BlocConsumer<ProductBloc, ProductState>(
-      listener: (context, state) {},
-      builder: (context, state) {
-        if (state is ProductLoading) {
-          return GridView.builder(
-            padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 15,
-              mainAxisExtent: 250,
-            ),
-            itemCount: 6,
-            itemBuilder: (_, __) => const LoadingProductCard(),
-          );
-        }
-        if (state is ProductError) return _buildErrorState(state.message);
-        if (state is ProductsLoaded) {
-          final products = state.products;
-          var filtered = products;
-          if (_searchQuery.isNotEmpty) {
-            filtered = products
-                .where(
-                  (p) =>
-                      p.name.toLowerCase().contains(
-                        _searchQuery.toLowerCase(),
-                      ) ||
-                      p.description.toLowerCase().contains(
-                        _searchQuery.toLowerCase(),
-                      ) ||
-                      (p.brand?.toLowerCase().contains(
-                            _searchQuery.toLowerCase(),
-                          ) ??
-                          false),
-                )
-                .toList();
-          }
-          if (filtered.isEmpty) return _buildEmptyState();
-          return GridView.builder(
-            padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 15,
-              mainAxisExtent: 250,
-            ),
-            itemCount: filtered.length,
-            itemBuilder: (_, i) => ProductCard(product: filtered[i]),
-          );
-        }
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 15,
-            mainAxisExtent: 250,
+  Widget _buildSubCategoryChip({
+    required String id,
+    required String name,
+    required bool isSelected,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: FilterChip(
+        label: Text(
+          name,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.black87,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            fontSize: 13,
           ),
-          itemCount: 6,
-          itemBuilder: (_, __) => const LoadingProductCard(),
+        ),
+        selected: isSelected,
+        onSelected: (selected) {
+          if (selected) _onSubCategorySelected(id);
+        },
+        selectedColor: const Color(0xFF2ED573),
+        showCheckmark: false,
+        backgroundColor: Colors.grey[100],
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: isSelected ? const Color(0xFF2ED573) : Colors.transparent,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return BlocConsumer<ProductBloc, ProductState>(
+      listener: (context, state) {
+        if (state is ProductsLoaded) {
+          setState(() => _isInitialLoad = false);
+        }
+        if (state is ProductError) {
+          setState(() => _isInitialLoad = false);
+        }
+      },
+      buildWhen: (previous, current) {
+        // Always rebuild on state change
+        return true;
+      },
+      builder: (context, state) {
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: _buildProductState(state),
         );
       },
+    );
+  }
+
+  Widget _buildProductState(ProductState state) {
+    // Show skeleton during initial load or when switching subcategories
+    if (_isInitialLoad) {
+      return const ProductsGridSkeleton(
+        key: ValueKey('products_skeleton'),
+        itemCount: 6,
+      );
+    }
+
+    // Error state
+    if (state is ProductError) {
+      return _buildErrorState(state.message);
+    }
+
+    // Loaded state
+    if (state is ProductsLoaded) {
+      final products = _getFilteredProducts(state.products);
+
+      if (products.isEmpty) {
+        return _buildEmptyState();
+      }
+
+      return _buildProductsGrid(products);
+    }
+
+    // Fallback - show skeleton
+    return const ProductsGridSkeleton(
+      key: ValueKey('products_fallback_skeleton'),
+      itemCount: 6,
+    );
+  }
+
+  List<Product> _getFilteredProducts(List<Product> products) {
+    if (_searchQuery.isEmpty) return products;
+
+    final query = _searchQuery.toLowerCase();
+    return products.where((p) {
+      return p.name.toLowerCase().contains(query) ||
+          p.description.toLowerCase().contains(query) ||
+          (p.brand?.toLowerCase().contains(query) ?? false);
+    }).toList();
+  }
+
+  Widget _buildProductsGrid(List<Product> products) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        _retryLoad();
+      },
+      color: const Color(0xFF2ED573),
+      child: GridView.builder(
+        key: ValueKey('products_grid_${_selectedSubCategoryId}'),
+        controller: _scrollController,
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 15,
+          mainAxisExtent: 250,
+        ),
+        itemCount: products.length,
+        itemBuilder: (context, index) {
+          return ProductCard(product: products[index]);
+        },
+      ),
     );
   }
 
@@ -317,8 +428,9 @@ class _CategoryViewState extends State<CategoryView> {
         message.toLowerCase().contains('internet') ||
         message.toLowerCase().contains('network') ||
         message.toLowerCase().contains('connection');
+
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -394,7 +506,7 @@ class _CategoryViewState extends State<CategoryView> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _loadData,
+                onPressed: _retryLoad,
                 icon: const Icon(Iconsax.refresh, size: 20),
                 label: const Text('Try Again'),
                 style: ElevatedButton.styleFrom(
@@ -423,7 +535,7 @@ class _CategoryViewState extends State<CategoryView> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -487,6 +599,112 @@ class _CategoryViewState extends State<CategoryView> {
           ],
         ),
       ),
+    );
+  }
+
+  void _showSortOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Sort by',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                _buildSortOption('Newest', Iconsax.clock),
+                _buildSortOption('Price: Low to High', Iconsax.arrow_up),
+                _buildSortOption('Price: High to Low', Iconsax.arrow_down),
+                _buildSortOption('Popular', Iconsax.star),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSortOption(String title, IconData icon) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.grey[700]),
+      title: Text(title),
+      onTap: () => Navigator.pop(context),
+    );
+  }
+
+  void _showFilterOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Filters',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Reset'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Price Range',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                RangeSlider(
+                  values: const RangeValues(0, 1000),
+                  onChanged: (values) {},
+                  min: 0,
+                  max: 1000,
+                  activeColor: const Color(0xFF2ED573),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2ED573),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Apply Filters'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

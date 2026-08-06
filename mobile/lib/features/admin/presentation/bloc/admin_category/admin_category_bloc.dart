@@ -17,7 +17,6 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     on<DeleteCategoryEvent>(_onDelete);
     on<DeleteCategoryWithTransferEvent>(_onDeleteWithTransfer);
     on<FetchCategoriesForTransferEvent>(_onFetchForTransfer);
-    on<CancelDeleteEvent>(_onCancelDelete); // ✅ NEW
   }
 
   Future<void> _onFetchTree(
@@ -45,10 +44,8 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     CreateCategoryEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
-    // ✅ Don't emit loading - just do the operation silently
     try {
       await repository.createCategory(event.data);
-      // Reload silently
       final categories = await repository.getCategoriesTree();
       emit(AdminCategoryOperationSuccess('Category created successfully'));
       emit(AdminCategoriesLoaded(categories));
@@ -75,12 +72,8 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     DeleteCategoryEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
-    // ✅ Store current state before attempting delete
-    final previousState = state;
-
     try {
       await repository.deleteCategory(event.categoryId);
-      // Success - reload
       final categories = await repository.getCategoriesTree();
       emit(AdminCategoryOperationSuccess('Category deleted successfully'));
       emit(AdminCategoriesLoaded(categories));
@@ -88,18 +81,9 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
       print('❌ [AdminCategoryBloc] Delete failed: $e');
       final errorMessage = e.toString();
 
-      // Check if category has subcategories or products
       if (errorMessage.contains('subcategories') ||
           errorMessage.contains('products') ||
           errorMessage.contains('Cannot delete')) {
-        // ✅ CRITICAL: First restore previous state (keep screen working)
-        if (previousState is AdminCategoriesLoaded) {
-          emit(previousState);
-        }
-
-        // Then emit has products state for dialog
-        // Use a microtask to ensure the previous state is processed first
-        await Future.microtask(() {});
         emit(
           AdminCategoryHasProducts(
             categoryId: event.categoryId,
@@ -107,10 +91,6 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
           ),
         );
       } else {
-        // Other error - restore previous state first
-        if (previousState is AdminCategoriesLoaded) {
-          emit(previousState);
-        }
         emit(AdminCategoriesError(errorMessage));
       }
     }
@@ -120,13 +100,18 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
     DeleteCategoryWithTransferEvent event,
     Emitter<AdminCategoryState> emit,
   ) async {
-    final previousState = state;
-
     try {
       await repository.deleteCategoryWithTransfer(
         event.categoryId,
         event.targetCategoryId,
       );
+
+      // Emit loading first to trigger dialog close
+      emit(AdminCategoriesLoading());
+
+      // Small delay to ensure dialog closes properly
+      await Future.delayed(const Duration(milliseconds: 100));
+
       final categories = await repository.getCategoriesTree();
       emit(
         AdminCategoryOperationSuccess(
@@ -135,10 +120,6 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
       );
       emit(AdminCategoriesLoaded(categories));
     } catch (e) {
-      // Restore previous state on error
-      if (previousState is AdminCategoriesLoaded) {
-        emit(previousState);
-      }
       emit(AdminCategoriesError(e.toString()));
     }
   }
@@ -151,20 +132,6 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
       final categories = await repository.getAllCategories();
       emit(AdminCategoriesForTransfer(categories));
     } catch (e) {
-      emit(AdminCategoriesError(e.toString()));
-    }
-  }
-
-  // ✅ NEW: Handle cancel delete - restore to loaded state
-  Future<void> _onCancelDelete(
-    CancelDeleteEvent event,
-    Emitter<AdminCategoryState> emit,
-  ) async {
-    try {
-      final categories = await repository.getCategoriesTree();
-      emit(AdminCategoriesLoaded(categories));
-    } catch (e) {
-      // If reload fails, at least try to emit what we had
       emit(AdminCategoriesError(e.toString()));
     }
   }

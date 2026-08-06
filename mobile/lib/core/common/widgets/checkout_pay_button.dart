@@ -84,7 +84,7 @@ class CheckoutPayButton extends StatelessWidget {
       return 'Lambar aan sax ahayn'; // Invalid Phone Number
     }
 
-    return 'Bixi \$${totalAmount.toStringAsFixed(2)}'; // Pay
+    return 'Pay \$${totalAmount.toStringAsFixed(2)}'; // Pay
   }
 
   Color get _buttonColor {

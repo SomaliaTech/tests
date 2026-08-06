@@ -1,4 +1,5 @@
 // lib/features/product/presentation/blocs/address_bloc.dart
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/product/domain/usecases/add_address.dart';
 import 'package:mobile/features/product/domain/usecases/delete_address.dart';
@@ -30,19 +31,11 @@ class AddressBloc extends Bloc<AddressEvent, AddressState> {
     LoadAddressesEvent event,
     Emitter<AddressState> emit,
   ) async {
-    print('📋 [Bloc] Loading addresses...');
     emit(AddressLoading());
-
     final result = await getAddresses();
     result.fold(
-      (failure) {
-        print('❌ [Bloc] Failed to load: ${failure.message}');
-        emit(AddressError(failure.message));
-      },
-      (addresses) {
-        print('✅ [Bloc] Loaded ${addresses.length} addresses');
-        emit(AddressesLoaded(addresses));
-      },
+      (failure) => emit(AddressError(failure.message)),
+      (addresses) => emit(AddressesLoaded(addresses)),
     );
   }
 
@@ -50,44 +43,24 @@ class AddressBloc extends Bloc<AddressEvent, AddressState> {
     AddAddressEvent event,
     Emitter<AddressState> emit,
   ) async {
-    print('📦 [Bloc] Adding address: ${event.address.fullAddress}');
-    emit(AddressLoading());
-
+    // ✅ Don't emit loading - just process and emit result
     final result = await addAddress(event.address);
-    result.fold(
-      (failure) {
-        print('❌ [Bloc] Failed to add: ${failure.message}');
-        emit(AddressError(failure.message));
-      },
-      (address) {
-        print('✅ [Bloc] Address added: ${address.fullAddress}');
-        // ✅ First emit the added state
-        emit(AddressAdded(address));
-
-        // ✅ Then reload all addresses
-        print('🔄 [Bloc] Reloading addresses...');
-        add(LoadAddressesEvent());
-      },
-    );
+    result.fold((failure) => emit(AddressError(failure.message)), (address) {
+      emit(AddressAdded(address));
+      // Reload in background
+      add(LoadAddressesEvent());
+    });
   }
 
   Future<void> _onSetDefault(
     SetDefaultAddressEvent event,
     Emitter<AddressState> emit,
   ) async {
-    print('📌 [Bloc] Setting default address: ${event.addressId}');
     emit(AddressLoading());
-
     final result = await setDefaultAddress(event.addressId);
     result.fold(
-      (failure) {
-        print('❌ [Bloc] Failed to set default: ${failure.message}');
-        emit(AddressError(failure.message));
-      },
-      (_) {
-        print('✅ [Bloc] Default address set');
-        add(LoadAddressesEvent());
-      },
+      (failure) => emit(AddressError(failure.message)),
+      (_) => add(LoadAddressesEvent()),
     );
   }
 
@@ -95,20 +68,11 @@ class AddressBloc extends Bloc<AddressEvent, AddressState> {
     DeleteAddressEvent event,
     Emitter<AddressState> emit,
   ) async {
-    print('🗑️ [Bloc] Deleting address: ${event.addressId}');
     emit(AddressLoading());
-
     final result = await deleteAddress(event.addressId);
-    result.fold(
-      (failure) {
-        print('❌ [Bloc] Failed to delete: ${failure.message}');
-        emit(AddressError(failure.message));
-      },
-      (_) {
-        print('✅ [Bloc] Address deleted');
-        emit(AddressDeleted());
-        add(LoadAddressesEvent());
-      },
-    );
+    result.fold((failure) => emit(AddressError(failure.message)), (_) {
+      emit(AddressDeleted());
+      add(LoadAddressesEvent());
+    });
   }
 }

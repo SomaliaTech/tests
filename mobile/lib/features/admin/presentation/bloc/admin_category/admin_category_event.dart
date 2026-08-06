@@ -46,6 +46,3 @@ class DeleteCategoryWithTransferEvent extends AdminCategoryEvent {
 }
 
 class FetchCategoriesForTransferEvent extends AdminCategoryEvent {}
-
-// ✅ NEW: Cancel delete event
-class CancelDeleteEvent extends AdminCategoryEvent {}

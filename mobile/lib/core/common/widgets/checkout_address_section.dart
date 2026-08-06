@@ -264,7 +264,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
     return _buildSectionCard(
       icon: Iconsax.location,
       iconColor: const Color(0xFF2ED573),
-      title: 'Cinwaanka Bixinta',
+      title: 'Delivery Address',
       children: [
         const SizedBox(height: 12),
         Container(

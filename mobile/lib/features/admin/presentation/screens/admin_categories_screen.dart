@@ -26,21 +26,19 @@ class AdminCategoriesScreen extends StatefulWidget {
 }
 
 class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
-  bool _isInitialLoad = true;
-  bool _showSuccessMessage = false;
-  String _successMessage = '';
-  bool _canCreate = false;
-  bool _canUpdate = false;
-  bool _canDelete = false;
+  final _permissions = <String, bool>{};
+  bool _isLoadingPermissions = true;
+
   @override
   void initState() {
     super.initState();
-    _loadPermissions();
+    _initialize();
+  }
 
-    // ✅ Load only once on init
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent());
-    });
+  Future<void> _initialize() async {
+    await _loadPermissions();
+    if (!mounted) return;
+    context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent());
   }
 
   Future<void> _loadPermissions() async {
@@ -53,63 +51,49 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
         forceRefresh: false,
       );
 
-      bool has(String p) {
-        if (isSuper) return true;
-        if (perms.contains('*')) return true;
-        if (perms.contains(p)) return true;
-        final module = p.split(':').first;
-        return perms.contains('$module:manage');
-      }
-
       if (!mounted) return;
 
       setState(() {
-        _canCreate = has('category:create');
-        _canUpdate = has('category:update');
-        _canDelete = has('category:delete');
+        _permissions['create'] = _hasPermission(
+          perms,
+          isSuper,
+          'category:create',
+        );
+        _permissions['update'] = _hasPermission(
+          perms,
+          isSuper,
+          'category:update',
+        );
+        _permissions['delete'] = _hasPermission(
+          perms,
+          isSuper,
+          'category:delete',
+        );
+        _isLoadingPermissions = false;
       });
     } catch (e) {
       debugPrint('❌ [Categories] Permission load failed: $e');
+      if (mounted) setState(() => _isLoadingPermissions = false);
     }
   }
 
-  void _showAddCategoryDialog({AdminCategoryEntity? parentCategory}) {
-    showDialog(
-      context: context,
-      builder: (context) => _AddEditCategoryDialog(
-        parentCategory: parentCategory,
-        onSubmit: (data) {
-          context.read<AdminCategoryBloc>().add(CreateCategoryEvent(data));
-          // ✅ Show success after dialog closes
-          _successMessage = parentCategory != null
-              ? 'Subcategory created successfully'
-              : 'Category created successfully';
-        },
-      ),
-    );
+  bool _hasPermission(List<String> perms, bool isSuper, String permission) {
+    if (isSuper) return true;
+    if (perms.contains('*')) return true;
+    if (perms.contains(permission)) return true;
+    final module = permission.split(':').first;
+    return perms.contains('$module:manage');
   }
 
-  void _showEditCategoryDialog(AdminCategoryEntity category) {
-    showDialog(
-      context: context,
-      builder: (context) => _AddEditCategoryDialog(
-        category: category,
-        onSubmit: (data) {
-          context.read<AdminCategoryBloc>().add(
-            UpdateCategoryEvent(category.id, data),
-          );
-          _successMessage = 'Category updated successfully';
-        },
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(AdminCategoryEntity category) {
+  void _handleDeleteCategory(AdminCategoryEntity category) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Category'),
-        content: Text('Are you sure you want to delete "${category.name}"?'),
+        content: Text(
+          'Are you sure you want to delete "${category.name}"?\n\n'
+          'If this category has products, you will be prompted to transfer them.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -129,244 +113,36 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
     );
   }
 
-  String _getCategoryName(String categoryId) {
-    final state = context.read<AdminCategoryBloc>().state;
-    if (state is AdminCategoriesLoaded) {
-      final category = _findCategoryById(state.categories, categoryId);
-      return category?.name ?? 'Unknown';
-    }
-    return 'Unknown';
-  }
-
-  AdminCategoryEntity? _findCategoryById(
-    List<AdminCategoryEntity> categories,
-    String id,
-  ) {
-    for (final category in categories) {
-      if (category.id == id) return category;
-      final found = _findCategoryById(category.children, id);
-      if (found != null) return found;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingPermissions) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        appBar: _buildAppBar(),
+        body: const Center(
+          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Categories',
-          style: TextStyle(
-            color: Colors.black87,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Iconsax.refresh, color: Colors.black87),
-            onPressed: () {
-              _isInitialLoad = true;
-              context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent());
-            },
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(),
       body: BlocConsumer<AdminCategoryBloc, AdminCategoryState>(
-        // In your AdminCategoriesScreen, replace the BlocConsumer listener with this:
         listener: (context, state) {
-          if (state is AdminCategoriesLoaded) {
-            setState(() => _isInitialLoad = false);
-          }
-
           if (state is AdminCategoryOperationSuccess) {
             ToastHelper.showSuccess(context, state.message);
-          }
-
-          if (state is AdminCategoriesError) {
-            setState(() => _isInitialLoad = false);
-            if (_isInitialLoad) {
-              ToastHelper.showError(context, state.message);
-            }
-          }
-
-          if (state is AdminCategoryHasProducts) {
-            // ✅ Show transfer dialog WITHOUT setting loading state
-            showDialog(
-              context: context,
-              barrierDismissible: false, // ✅ Prevent dismiss by tapping outside
-              builder: (_) => TransferProductsDialog(
-                categoryId: state.categoryId,
-                categoryName: _getCategoryName(state.categoryId),
-              ),
-            );
+          } else if (state is AdminCategoriesError) {
+            ToastHelper.showError(context, state.message);
+          } else if (state is AdminCategoryHasProducts) {
+            _showTransferDialog(state);
           }
         },
         builder: (context, state) {
-          // ✅ Initial loading
-          if (state is AdminCategoriesLoading && _isInitialLoad) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppTheme.primaryColor),
-            );
-          }
-
-          // ✅ Error on first load
-          if (state is AdminCategoriesError && _isInitialLoad) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Iconsax.warning_2,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Failed to load categories',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      state.message,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[500]),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() => _isInitialLoad = true);
-                        context.read<AdminCategoryBloc>().add(
-                          FetchCategoriesTreeEvent(),
-                        );
-                      },
-                      icon: const Icon(Iconsax.refresh, size: 18),
-                      label: const Text('Retry'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          // ✅ Show loaded categories
-          if (state is AdminCategoriesLoaded) {
-            if (state.categories.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Iconsax.category, size: 80, color: Colors.grey[300]),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No categories yet',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Create your first category to get started',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            return Stack(
-              children: [
-                ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                  itemCount: state.categories.length,
-                  itemBuilder: (context, index) {
-                    final category = state.categories[index];
-                    return _buildCategoryCard(category, 0);
-                  },
-                ),
-                // ✅ Show loading indicator at bottom during operations
-                if (state is AdminCategoriesLoading && !_isInitialLoad)
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, -2),
-                          ),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                          SizedBox(width: 12),
-                          Text(
-                            'Processing...',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          }
-
-          // ✅ Fallback
-          return const Center(
-            child: CircularProgressIndicator(color: AppTheme.primaryColor),
-          );
+          return _buildBody(state);
         },
       ),
-      floatingActionButton: _canCreate
+      floatingActionButton: _permissions['create'] == true
           ? FloatingActionButton.extended(
               onPressed: () => _showAddCategoryDialog(),
               backgroundColor: AppTheme.primaryColor,
@@ -379,7 +155,166 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
                 ),
               ),
             )
-          : null, // Add this line to handle the case when _canCreate is false
+          : null,
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      leading: IconButton(
+        icon: const Icon(Iconsax.arrow_left, color: Colors.black87),
+        onPressed: () => Navigator.pop(context),
+      ),
+      title: const Text(
+        'Categories',
+        style: TextStyle(
+          color: Colors.black87,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      centerTitle: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Iconsax.refresh, color: Colors.black87),
+          onPressed: () =>
+              context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent()),
+        ),
+      ],
+    );
+  }
+
+  void _showTransferDialog(AdminCategoryHasProducts state) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => TransferProductsDialog(
+        categoryId: state.categoryId,
+        categoryName: _getCategoryName(state.categoryId),
+      ),
+    );
+  }
+
+  Widget _buildBody(AdminCategoryState state) {
+    if (state is AdminCategoriesLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryColor),
+      );
+    }
+
+    if (state is AdminCategoriesError) {
+      return _buildErrorView(state.message);
+    }
+
+    if (state is AdminCategoriesLoaded) {
+      if (state.categories.isEmpty) {
+        return _buildEmptyView();
+      }
+      return _buildCategoriesList(state.categories);
+    }
+
+    // Fallback for other states
+    if (state is AdminCategoryInitial ||
+        state is AdminCategoryHasProducts ||
+        state is AdminCategoriesForTransfer) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryColor),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildErrorView(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load categories',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () => context.read<AdminCategoryBloc>().add(
+                FetchCategoriesTreeEvent(),
+              ),
+              icon: const Icon(Iconsax.refresh, size: 18),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Iconsax.category, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 16),
+          Text(
+            'No categories yet',
+            style: TextStyle(color: Colors.grey[600], fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Create your first category to get started',
+            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoriesList(List<AdminCategoryEntity> categories) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<AdminCategoryBloc>().add(FetchCategoriesTreeEvent());
+      },
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          return _buildCategoryCard(categories[index], 0);
+        },
+      ),
     );
   }
 
@@ -405,111 +340,9 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
               children: [
                 _buildCategoryIcon(category),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        category.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      if (category.description != null &&
-                          category.description!.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          category.description!,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        'Slug: ${category.slug}',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                      ),
-                      if (category.children.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${category.children.length} subcategor${category.children.length == 1 ? 'y' : 'ies'}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.blue,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (_canCreate || _canUpdate || _canDelete)
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'add_subcategory':
-                          _showAddCategoryDialog(parentCategory: category);
-                        case 'edit':
-                          _showEditCategoryDialog(category);
-                        case 'delete':
-                          _showDeleteConfirmation(category);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      if (_canCreate)
-                        const PopupMenuItem(
-                          value: 'add_subcategory',
-                          child: Row(
-                            children: [
-                              Icon(Iconsax.add_circle, size: 18),
-                              SizedBox(width: 8),
-                              Text('Add Subcategory'),
-                            ],
-                          ),
-                        ),
-                      if (_canUpdate)
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(Iconsax.edit, size: 18),
-                              SizedBox(width: 8),
-                              Text('Edit'),
-                            ],
-                          ),
-                        ),
-                      if (_canDelete)
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Iconsax.trash, size: 18, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
+                Expanded(child: _buildCategoryInfo(category)),
+                if (_permissions.values.any((v) => v))
+                  _buildPopupMenu(category),
               ],
             ),
           ),
@@ -521,6 +354,108 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildCategoryInfo(AdminCategoryEntity category) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          category.name,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        if (category.description != null &&
+            category.description!.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            category.description!,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        const SizedBox(height: 4),
+        Text(
+          'Slug: ${category.slug}',
+          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+        ),
+        if (category.children.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${category.children.length} subcategor${category.children.length == 1 ? 'y' : 'ies'}',
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.blue,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPopupMenu(AdminCategoryEntity category) {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'add_subcategory':
+            _showAddCategoryDialog(parentCategory: category);
+            break;
+          case 'edit':
+            _showEditCategoryDialog(category);
+            break;
+          case 'delete':
+            _handleDeleteCategory(category);
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        if (_permissions['create'] == true)
+          const PopupMenuItem(
+            value: 'add_subcategory',
+            child: Row(
+              children: [
+                Icon(Iconsax.add_circle, size: 18),
+                SizedBox(width: 8),
+                Text('Add Subcategory'),
+              ],
+            ),
+          ),
+        if (_permissions['update'] == true)
+          const PopupMenuItem(
+            value: 'edit',
+            child: Row(
+              children: [
+                Icon(Iconsax.edit, size: 18),
+                SizedBox(width: 8),
+                Text('Edit'),
+              ],
+            ),
+          ),
+        if (_permissions['delete'] == true)
+          const PopupMenuItem(
+            value: 'delete',
+            child: Row(
+              children: [
+                Icon(Iconsax.trash, size: 18, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete', style: TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -555,11 +490,52 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
       ),
     );
   }
+
+  void _showAddCategoryDialog({AdminCategoryEntity? parentCategory}) {
+    showDialog(
+      context: context,
+      builder: (context) => _AddEditCategoryDialog(
+        parentCategory: parentCategory,
+        onSubmit: (data) {
+          context.read<AdminCategoryBloc>().add(CreateCategoryEvent(data));
+        },
+      ),
+    );
+  }
+
+  void _showEditCategoryDialog(AdminCategoryEntity category) {
+    showDialog(
+      context: context,
+      builder: (context) => _AddEditCategoryDialog(
+        category: category,
+        onSubmit: (data) {
+          context.read<AdminCategoryBloc>().add(
+            UpdateCategoryEvent(category.id, data),
+          );
+        },
+      ),
+    );
+  }
+
+  String _getCategoryName(String categoryId) {
+    final state = context.read<AdminCategoryBloc>().state;
+    if (state is AdminCategoriesLoaded) {
+      return _findCategoryName(state.categories, categoryId);
+    }
+    return 'Unknown';
+  }
+
+  String _findCategoryName(List<AdminCategoryEntity> categories, String id) {
+    for (final category in categories) {
+      if (category.id == id) return category.name;
+      final found = _findCategoryName(category.children, id);
+      if (found != 'Unknown') return found;
+    }
+    return 'Unknown';
+  }
 }
 
-// ==========================================
-// _AddEditCategoryDialog - KEEP EXACTLY AS IS
-// ==========================================
+// Add/Edit Category Dialog
 class _AddEditCategoryDialog extends StatefulWidget {
   final AdminCategoryEntity? category;
   final AdminCategoryEntity? parentCategory;

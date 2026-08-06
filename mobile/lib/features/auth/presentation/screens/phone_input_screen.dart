@@ -1,3 +1,4 @@
+// lib/features/auth/presentation/screens/phone_input_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,6 +19,75 @@ class PhoneInputScreen extends StatefulWidget {
 class _PhoneInputScreenState extends State<PhoneInputScreen> {
   late final TextEditingController _phoneController;
   final FocusNode _phoneFocusNode = FocusNode();
+
+  // ✅ Somali telecom providers
+  final List<ProviderInfo> _providers = const [
+    ProviderInfo(
+      prefix: '61',
+      name: 'Hormuud',
+      color: Color(0xFF2ED573),
+      icon: Iconsax.mobile,
+    ),
+    ProviderInfo(
+      prefix: '68',
+      name: 'Somnet',
+      color: Color(0xFF3B82F6),
+      icon: Iconsax.wifi,
+    ),
+    ProviderInfo(
+      prefix: '90',
+      name: 'Golis',
+      color: Color(0xFFF59E0B),
+      icon: Iconsax.wallet,
+    ),
+    ProviderInfo(
+      prefix: '63',
+      name: 'Telisom',
+      color: Color(0xFF8B5CF6),
+      icon: Iconsax.money,
+    ),
+  ];
+
+  // ✅ Detect provider from phone number
+  String? _detectProvider(String phone) {
+    if (phone.length < 2) return null;
+    for (final provider in _providers) {
+      if (phone.startsWith(provider.prefix)) {
+        return provider.name;
+      }
+    }
+    return null;
+  }
+
+  // ✅ Get provider color
+  Color? _getProviderColor(String phone) {
+    if (phone.length < 2) return null;
+    for (final provider in _providers) {
+      if (phone.startsWith(provider.prefix)) {
+        return provider.color;
+      }
+    }
+    return null;
+  }
+
+  // ✅ Format phone number for API
+  String _formatPhoneForApi(String phone) {
+    String cleaned = phone.trim().replaceAll(RegExp(r'\s+'), '');
+    // If it starts with +252, return as is
+    if (cleaned.startsWith('+252')) {
+      return cleaned;
+    }
+    // If it starts with 252, add +
+    if (cleaned.startsWith('252')) {
+      return '+$cleaned';
+    }
+    // If it starts with 0, remove 0 and add +252
+    if (cleaned.startsWith('0')) {
+      return '+252${cleaned.substring(1)}';
+    }
+    // Otherwise, assume it's a local number and add +252
+    return '+252$cleaned';
+  }
 
   @override
   void initState() {
@@ -57,13 +127,14 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             RegExp(r'\D'),
             '',
           );
-          final normalizedPhone = '+252$rawPhone';
+          // ✅ Format phone for API
+          final formattedPhone = _formatPhoneForApi(rawPhone);
 
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) =>
-                  OtpVerificationScreen(phoneNumber: normalizedPhone),
+                  OtpVerificationScreen(phoneNumber: formattedPhone),
             ),
           );
         } else if (state is AuthError) {
@@ -82,10 +153,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              // ✅ Modern Header
               _buildHeader(),
-
-              // ✅ Content
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
@@ -93,13 +161,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                   child: Column(
                     children: [
                       const SizedBox(height: 32),
-
-                      // ✅ Icon
                       _buildIcon(),
-
                       const SizedBox(height: 24),
-
-                      // ✅ Title
                       const Text(
                         'Welcome!',
                         textAlign: TextAlign.center,
@@ -120,25 +183,15 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                           height: 1.5,
                         ),
                       ),
-
                       const SizedBox(height: 40),
-
-                      // ✅ Phone Input Card
                       _buildPhoneInput(),
-
-                      const SizedBox(height: 32),
-
-                      // ✅ Send OTP Button
-                      _buildSendButton(),
-
-                      const SizedBox(height: 32),
-
-                      // ✅ Info Card
-                      _buildInfoCard(),
-
+                      const SizedBox(height: 12),
+                      _buildProviderDetection(),
                       const SizedBox(height: 24),
-
-                      // ✅ Terms text
+                      _buildSendButton(),
+                      const SizedBox(height: 32),
+                      _buildInfoCard(),
+                      const SizedBox(height: 24),
                       Text(
                         'By continuing, you agree to our Terms of Service and Privacy Policy',
                         textAlign: TextAlign.center,
@@ -148,7 +201,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                           height: 1.5,
                         ),
                       ),
-
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -168,7 +220,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       child: Row(
         children: [
           const Spacer(),
-          // Progress indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -211,7 +262,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+            color: const Color(0xFF2ED573).withOpacity(0.3),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -222,15 +273,23 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   }
 
   Widget _buildPhoneInput() {
+    final phone = _phoneController.text;
+    final providerColor = _getProviderColor(phone);
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: providerColor ?? const Color(0xFFE5E7EB),
+          width: providerColor != null ? 2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color:
+                providerColor?.withOpacity(0.2) ??
+                Colors.black.withOpacity(0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -238,7 +297,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       ),
       child: Row(
         children: [
-          // ✅ Country code section
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
@@ -248,7 +306,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Somali flag emoji or icon
                 Container(
                   width: 28,
                   height: 20,
@@ -278,15 +335,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               ],
             ),
           ),
-
           const SizedBox(width: 12),
-
-          // ✅ Divider
           Container(width: 1, height: 30, color: const Color(0xFFE5E7EB)),
-
           const SizedBox(width: 12),
-
-          // ✅ Phone input
           Expanded(
             child: TextField(
               controller: _phoneController,
@@ -294,10 +345,10 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               keyboardType: TextInputType.phone,
               maxLength: 9,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1F2937),
+                color: providerColor ?? const Color(0xFF1F2937),
                 letterSpacing: 1.2,
               ),
               decoration: InputDecoration(
@@ -311,6 +362,91 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
+              onChanged: (value) {
+                setState(() {});
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderDetection() {
+    final phone = _phoneController.text;
+    final detectedProvider = _detectProvider(phone);
+    final providerColor = _getProviderColor(phone);
+
+    if (phone.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Icon(Iconsax.info_circle, size: 14, color: Colors.grey.shade400),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Enter a phone number to detect your provider',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (detectedProvider != null && phone.length >= 2) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: providerColor?.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                _providers.firstWhere((p) => p.name == detectedProvider).icon,
+                size: 14,
+                color: providerColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '📱 $detectedProvider detected',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: providerColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (phone.length >= 2 && phone.length < 9)
+              Text(
+                '${phone.length}/9',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Icon(Iconsax.warning_2, size: 14, color: Colors.orange.shade400),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Please enter a valid Somali phone number',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange.shade600,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -322,25 +458,30 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, state) {
         final isLoading = state is AuthLoading;
+        final phone = _phoneController.text.trim();
+
+        // ✅ Validate phone - must start with valid prefix and have 9 digits
+        final isValid = phone.length == 9 && _detectProvider(phone) != null;
+
         return SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: isLoading
+            onPressed: isLoading || !isValid
                 ? null
                 : () {
                     final rawPhone = _phoneController.text.trim();
 
-                    if (!rawPhone.startsWith('61') || rawPhone.length != 9) {
+                    if (!isValid) {
                       HapticFeedback.heavyImpact();
                       toastification.show(
                         context: context,
                         title: const Text('Invalid Number'),
                         description: const Text(
-                          'Please enter a valid 9-digit number starting with 61',
+                          'Please enter a valid 9-digit Somali phone number.\nSupported: 61 (EVC), 63 (Telisom), 68 (Somnet), 90 (Golis)',
                         ),
                         type: ToastificationType.warning,
-                        autoCloseDuration: const Duration(seconds: 3),
+                        autoCloseDuration: const Duration(seconds: 4),
                       );
                       return;
                     }
@@ -355,14 +496,18 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
-              elevation: 8,
-              shadowColor: const Color(0xFF2ED573).withValues(alpha: 0.4),
+              elevation: isValid ? 8 : 0,
+              shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
             ),
             child: Ink(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-                ),
+                gradient: isValid
+                    ? const LinearGradient(
+                        colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFF9CA3AF), Color(0xFFD1D5DB)],
+                      ),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
@@ -375,19 +520,21 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Row(
+                    : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Send OTP',
-                            style: TextStyle(
+                            isValid ? 'Send OTP' : 'Enter Valid Number',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.3,
                             ),
                           ),
-                          SizedBox(width: 8),
-                          Icon(Iconsax.arrow_right_2, size: 20),
+                          if (isValid) ...[
+                            const SizedBox(width: 8),
+                            const Icon(Iconsax.arrow_right_2, size: 20),
+                          ],
                         ],
                       ),
               ),
@@ -406,59 +553,80 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF2ED573).withValues(alpha: 0.08),
-            const Color(0xFF1ABC9C).withValues(alpha: 0.05),
+            const Color(0xFF2ED573).withOpacity(0.08),
+            const Color(0xFF1ABC9C).withOpacity(0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF2ED573).withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.2)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF2ED573).withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2ED573).withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: const Icon(
-              Iconsax.shield_tick,
-              color: Color(0xFF2ED573),
-              size: 22,
-            ),
+                child: const Icon(
+                  Iconsax.shield_tick,
+                  color: Color(0xFF2ED573),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Secure Verification',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'We\'ll send you a 6-digit code via SMS',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Secure Verification',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1F2937),
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'We\'ll send you a 6-digit code via SMS',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
         ],
       ),
     );
   }
+}
+
+// ✅ Provider info model
+class ProviderInfo {
+  final String prefix;
+  final String name;
+  final Color color;
+  final IconData icon;
+
+  const ProviderInfo({
+    required this.prefix,
+    required this.name,
+    required this.color,
+    required this.icon,
+  });
 }

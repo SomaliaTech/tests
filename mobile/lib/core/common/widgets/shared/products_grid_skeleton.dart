@@ -1,3 +1,5 @@
+// lib/features/product/presentation/widgets/loading/products_grid_skeleton.dart
+
 import 'package:flutter/material.dart';
 import 'product_card_skeleton.dart';
 
@@ -11,7 +13,7 @@ class ProductsGridSkeleton extends StatelessWidget {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(1),
+      padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
