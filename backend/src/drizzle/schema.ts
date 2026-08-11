@@ -66,10 +66,54 @@ export const banners = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
+    hasDiscount: boolean('has_discount').default(false).notNull(),
+    discountPercentage: decimal('discount_percentage', {
+      precision: 5,
+      scale: 2,
+    }),
+    discountAmount: decimal('discount_amount', {
+      precision: 10,
+      scale: 2,
+    }),
+    discountCode: varchar('discount_code', { length: 50 }),
+    discountStartDate: timestamp('discount_start_date', {
+      withTimezone: true,
+    }),
+    discountEndDate: timestamp('discount_end_date', {
+      withTimezone: true,
+    }),
+    isFlashSale: boolean('is_flash_sale').default(false).notNull(),
+    flashSaleStartTime: timestamp('flash_sale_start_time', {
+      withTimezone: true,
+    }),
+    flashSaleEndTime: timestamp('flash_sale_end_time', {
+      withTimezone: true,
+    }),
+    flashSaleQuantity: integer('flash_sale_quantity'),
+    flashSalePrice: decimal('flash_sale_price', {
+      precision: 10,
+      scale: 2,
+    }),
   },
   (table) => ({
     activeIdx: index('banner_active_idx').on(table.isActive),
     orderIdx: index('banner_order_idx').on(table.order),
+    discountIdx: index('banner_discount_idx').on(
+      table.hasDiscount,
+      table.isActive,
+    ),
+    flashSaleIdx: index('banner_flash_sale_idx').on(
+      table.isFlashSale,
+      table.isActive,
+    ),
+    discountDateIdx: index('banner_discount_date_idx').on(
+      table.discountStartDate,
+      table.discountEndDate,
+    ),
+    flashSaleTimeIdx: index('banner_flash_sale_time_idx').on(
+      table.flashSaleStartTime,
+      table.flashSaleEndTime,
+    ),
   }),
 );
 
@@ -223,11 +267,12 @@ export const productVariants = pgTable(
 // ==========================================
 // USERS TABLE (FIXED - REMOVED GIN INDEXES)
 // ==========================================
+// src/drizzle/schema.ts - Update users table
 export const users = pgTable(
   'users',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    phoneNumber: varchar('phone_number', { length: 20 }).notNull().unique(),
+    phoneNumber: varchar('phone_number', { length: 20 }).unique(), // ✅ Remove .notNull()
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 255 }),
     profileImage: varchar('profile_image', { length: 500 }),
@@ -249,6 +294,7 @@ export const users = pgTable(
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
+    emailIdx: index('users_email_idx').on(table.email), // ✅ Add email index
     marketIdIdx: index('users_market_id_idx').on(table.marketId),
     adminActiveIdx: index('idx_users_admin_active').on(
       table.isAdmin,

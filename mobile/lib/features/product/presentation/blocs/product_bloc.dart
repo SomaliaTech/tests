@@ -2,6 +2,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/product/domain/usecases/get_categories.dart';
 import 'package:mobile/features/product/domain/usecases/get_featured_products.dart';
+import 'package:mobile/features/product/domain/usecases/get_latest_products.dart';
 import 'package:mobile/features/product/domain/usecases/get_product_by_id.dart';
 import 'package:mobile/features/product/domain/usecases/get_products_by_category.dart';
 import 'package:mobile/features/product/domain/usecases/get_subcategories.dart';
@@ -16,12 +17,15 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final GetProductsByCategory getProductsByCategory;
   final SearchProducts searchProducts;
   final GetProductById getProductById;
+  final GetLatestProducts getLatestProducts; // ✅ Added field
 
   ProductBloc({
     required this.getCategories,
     required this.getSubcategories,
     required this.getFeaturedProducts,
     required this.getProductsByCategory,
+    required this.getLatestProducts, // ✅ Added to constructor
+
     required this.searchProducts,
     required this.getProductById,
   }) : super(ProductInitial()) {
@@ -31,6 +35,7 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<GetProductsByCategoryEvent>(_onGetProductsByCategory);
     on<SearchProductsEvent>(_onSearchProducts);
     on<GetProductByIdEvent>(_onGetProductById);
+    on<GetLatestProductsEvent>(_onGetLatestProducts);
   }
 
   // ✅ Helper to create user-friendly error messages
@@ -96,6 +101,30 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
           emit(SubcategoriesError(_getFriendlyErrorMessage(failure.message))),
       (subcategories) => emit(SubcategoriesLoaded(subcategories)),
     );
+  }
+
+  Future<void> _onGetLatestProducts(
+    GetLatestProductsEvent event,
+    Emitter<ProductState> emit,
+  ) async {
+    if (event.forceRefresh) {
+      emit(LatestProductsLoading());
+    } else {
+      final currentState = state;
+      if (currentState is! LatestProductsLoaded) {
+        emit(LatestProductsLoading());
+      }
+    }
+
+    // Assuming you created the GetLatestProducts usecase
+    final result = await getLatestProducts(limit: event.limit ?? 10);
+    if (emit.isDone) return;
+
+    result.fold((failure) {
+      if (state is! LatestProductsLoaded || event.forceRefresh) {
+        emit(LatestProductsError(_getFriendlyErrorMessage(failure.message)));
+      }
+    }, (products) => emit(LatestProductsLoaded(products)));
   }
 
   // In ProductBloc, update _onGetFeaturedProducts

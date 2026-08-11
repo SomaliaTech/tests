@@ -1,56 +1,64 @@
-// lib/features/product/presentation/models/payment_method.dart
+// lib/core/common/widgets/shared/payment_method.dart
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 
 class PaymentMethod {
   final String id;
   final String name;
-  final IconData icon;
-  final Color color;
+  final String prefix;
   final String description;
-  final String prefix; // Only the 2-digit prefix (61, 68, 90, 63)
+  final Color color;
+  final IconData icon;
 
   const PaymentMethod({
     required this.id,
     required this.name,
-    required this.icon,
-    required this.color,
-    required this.description,
     required this.prefix,
+    required this.description,
+    required this.color,
+    required this.icon,
   });
-  // In payment_method.dart
-  static const List<PaymentMethod> methods = [
-    PaymentMethod(
+
+  static List<PaymentMethod> get methods => [
+    const PaymentMethod(
       id: 'evc_plus',
-      name: 'EVC Plus',
-      icon: Iconsax.mobile,
+      name: 'EVC Plus (Hormuud)',
+      prefix: '61',
+      description: 'Bixinta EVC Plus',
       color: Color(0xFF2ED573),
-      description: 'Pay with EVC Plus mobile money',
-      prefix: '61', // ✅ Fixed: EVC Plus is 61
+      icon: Iconsax.wallet,
     ),
-    PaymentMethod(
+    const PaymentMethod(
+      id: 'zaad',
+      name: 'Zaad (Telesom)',
+      prefix: '63',
+      description: 'Bixinta Zaad',
+      color: Color(0xFF8B5CF6),
+      icon: Iconsax.money,
+    ),
+    const PaymentMethod(
       id: 'somnet',
       name: 'Somnet',
-      icon: Iconsax.wifi,
-      color: Color(0xFF3B82F6),
-      description: 'Pay with Somnet mobile money',
       prefix: '68',
+      description: 'Bixinta Somnet',
+      color: Color(0xFF3B82F6),
+      icon: Iconsax.wifi,
     ),
-    PaymentMethod(
-      id: 'golis_telcom',
-      name: 'Golis Telcome',
-      icon: Iconsax.wallet,
-      color: Color(0xFFF59E0B),
-      description: 'Pay with Golis Telcome',
+    const PaymentMethod(
+      id: 'golis',
+      name: 'Golis',
       prefix: '90',
-    ),
-    PaymentMethod(
-      id: 'telisom',
-      name: 'Telisom',
-      icon: Iconsax.money,
-      color: Color(0xFF8B5CF6),
-      description: 'Pay with Telisom',
-      prefix: '63',
+      description: 'Bixinta Golis',
+      color: Color(0xFFF59E0B),
+      icon: Iconsax.card,
     ),
   ];
+
+  static PaymentMethod? getById(String id) {
+    try {
+      return methods.firstWhere((m) => m.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
 }

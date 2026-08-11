@@ -20,6 +20,8 @@ abstract class ProductRemoteDataSource {
     String? sortBy,
   });
   Future<Product> getProductById(String id);
+  Future<List<Product>> getLatestProducts({int limit});
+
   Future<Product> getProductBySlug(String slug);
 }
 
@@ -42,6 +44,29 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
       } else {
         throw ServerException(
           'Failed to load categories: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
+  }
+
+  @override
+  Future<List<Product>> getLatestProducts({int limit = 10}) async {
+    try {
+      final response = await client.get(
+        Uri.parse(
+          '${ApiConstants.baseUrl}${ApiConstants.products}/latest?limit=$limit',
+        ),
+        headers: ApiConstants.headers,
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> jsonList = json.decode(response.body);
+        return jsonList.map((json) => ProductModel.fromJson(json)).toList();
+      } else {
+        throw ServerException(
+          'Failed to load latest products: ${response.statusCode}',
         );
       }
     } catch (e) {
@@ -158,6 +183,7 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   @override
   Future<Product> getProductById(String id) async {
     try {
+      // 1. Try fetching by UUID first
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/$id'),
         headers: ApiConstants.headers,
@@ -165,10 +191,28 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
 
       if (response.statusCode == 200) {
         return ProductModel.fromJson(json.decode(response.body));
-      } else {
-        throw ServerException('Failed to load product: ${response.statusCode}');
       }
+
+      // 2. ✅ SMART FALLBACK: If it failed (400 Bad UUID format or 404 Not Found), try fetching by SLUG
+      if (response.statusCode == 400 || response.statusCode == 404) {
+        final slugResponse = await client.get(
+          Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/slug/$id'),
+          headers: ApiConstants.headers,
+        );
+
+        if (slugResponse.statusCode == 200) {
+          return ProductModel.fromJson(json.decode(slugResponse.body));
+        }
+      }
+
+      // 3. If both failed, throw a clean HTTP error
+      throw ServerException('Failed to load product: ${response.statusCode}');
+    } on ServerException {
+      // ✅ CRITICAL FIX: Re-throw ServerExceptions exactly as they are.
+      // Do NOT wrap them in "Network error", otherwise the UI thinks you are offline!
+      rethrow;
     } catch (e) {
+      // Only actual socket/timeout exceptions should be labeled as network errors
       throw ServerException('Network error: $e');
     }
   }
@@ -186,6 +230,9 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
       } else {
         throw ServerException('Failed to load product: ${response.statusCode}');
       }
+    } on ServerException {
+      // ✅ CRITICAL FIX: Stop masking HTTP errors as network errors
+      rethrow;
     } catch (e) {
       throw ServerException('Network error: $e');
     }

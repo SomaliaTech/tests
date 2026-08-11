@@ -1,32 +1,69 @@
+// lib/features/auth/data/datasources/auth_remote_data_source.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
 
 abstract class AuthRemoteDataSource {
-  Future<Map<String, dynamic>> sendOtp(
-    String phoneNumber,
-  ); // Changed to return Map
+  Future<Map<String, dynamic>> sendOtp(String phoneNumber);
   Future<Map<String, dynamic>> verifyOtp(String phoneNumber, String otpCode);
+
+  // ✅ Add phoneNumber parameter
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-
     String marketId,
     String? profileImageUrl,
+    String? phoneNumber, // ✅ Add this
   );
 
   Future<Map<String, dynamic>> getCurrentUser(String token);
   Future<Map<String, dynamic>> uploadProfileImage(
     String token,
     String base64Image,
-  ); // Changed to return Map
+  );
+  Future<Map<String, dynamic>> googleSignIn(
+    String idToken,
+    String email,
+    String name,
+    String? photoUrl,
+  );
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final http.Client client;
 
   AuthRemoteDataSourceImpl({required this.client});
+
+  @override
+  Future<Map<String, dynamic>> googleSignIn(
+    String idToken,
+    String email,
+    String name,
+    String? photoUrl,
+  ) async {
+    try {
+      final response = await client.post(
+        Uri.parse('${ApiConstants.baseUrl}/auth/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'idToken': idToken,
+          'email': email,
+          'name': name,
+          'photoUrl': photoUrl,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw ServerException(error['message'] ?? 'Google sign in failed');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
+  }
 
   @override
   Future<Map<String, dynamic>> sendOtp(String phoneNumber) async {
@@ -67,21 +104,25 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<Map<String, dynamic>> completeProfile(
     String token,
     String name,
-    String marketId, // ✅ Added
+    String marketId,
     String? profileImageUrl,
+    String? phoneNumber, // ✅ Add this parameter
   ) async {
+    final Map<String, dynamic> body = {
+      'name': name,
+      'marketId': marketId,
+      if (profileImageUrl != null) 'profileImage': profileImageUrl,
+      if (phoneNumber != null && phoneNumber.isNotEmpty)
+        'phoneNumber': phoneNumber, // ✅ Send phone if provided
+    };
+
     final response = await client.post(
       Uri.parse('${ApiConstants.baseUrl}/auth/complete-profile'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: json.encode({
-        'name': name,
-
-        'marketId': marketId, // ✅ Always send marketId
-        if (profileImageUrl != null) 'profileImage': profileImageUrl,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
       return json.decode(response.body);
@@ -102,15 +143,13 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         print("user ${response.body}");
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
-        // 🚨 Throw specific exception for 401
         throw UnauthorizedException('Token expired or invalid');
       } else {
         throw ServerException('Failed to get user: ${response.statusCode}');
       }
     } on UnauthorizedException {
-      rethrow; // Pass it up to the repository
+      rethrow;
     } catch (e) {
-      // This catches SocketException (no internet)
       throw ServerException('Network error: $e');
     }
   }

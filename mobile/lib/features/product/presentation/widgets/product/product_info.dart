@@ -4,11 +4,19 @@ import 'package:mobile/features/product/domain/entities/product.dart';
 
 class ProductInfo extends StatelessWidget {
   final Product product;
+  final double? currentPrice; // ✅ ADDED: Dynamic variant price
 
-  const ProductInfo({super.key, required this.product});
+  const ProductInfo({
+    super.key,
+    required this.product,
+    this.currentPrice, // ✅ ADDED
+  });
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Use currentPrice if provided, otherwise fallback to base product.price
+    final displayPrice = currentPrice ?? product.price;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: const BoxDecoration(
@@ -24,13 +32,26 @@ class ProductInfo extends StatelessWidget {
           Row(
             children: [
               Text(
-                "\$${product.price.toStringAsFixed(2)}",
+                "\$${displayPrice.toStringAsFixed(2)}", // ✅ USE DYNAMIC PRICE
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF2ED573),
                 ),
               ),
+              // ✅ Optional: Show original price as strikethrough if variant price differs
+              if (currentPrice != null && currentPrice! < product.price) ...[
+                const SizedBox(width: 10),
+                Text(
+                  "\$${product.price.toStringAsFixed(2)}",
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF9CA3AF),
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 8),
@@ -43,7 +64,6 @@ class ProductInfo extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-
           const SizedBox(height: 15),
           const Divider(color: Color(0xFFEEEEEE), height: 1),
         ],

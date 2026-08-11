@@ -24,17 +24,20 @@ class VerifyOtpEvent extends AuthEvent {
   List<Object?> get props => [phoneNumber, otpCode];
 }
 
+// lib/features/auth/presentation/bloc/auth_event.dart
 class CompleteProfileEvent extends AuthEvent {
   final String name;
-  final String? email; // ✅ Make email nullable
+  final String? email;
   final String marketId;
   final String? profileImageUrl;
+  final String? phoneNumber; // ✅ Add phone number
 
   const CompleteProfileEvent({
     required this.name,
-    this.email, // ✅ Now optional
+    this.email,
     required this.marketId,
     this.profileImageUrl,
+    this.phoneNumber, // ✅ Add phone number
   });
 }
 
@@ -52,4 +55,9 @@ class CheckAuthStatusEvent extends AuthEvent {
 
 class LogoutEvent extends AuthEvent {
   const LogoutEvent();
+}
+
+// Add to auth_event.dart
+class GoogleSignInEvent extends AuthEvent {
+  const GoogleSignInEvent();
 }

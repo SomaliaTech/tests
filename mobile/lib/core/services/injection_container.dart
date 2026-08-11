@@ -8,6 +8,7 @@ import 'package:mobile/core/services/admin_injection.dart';
 import 'package:mobile/core/services/admin_role_ijection.dart';
 import 'package:mobile/core/services/analytics_injection.dart';
 import 'package:mobile/core/services/auth_ijdection.dart';
+import 'package:mobile/core/services/banner_injection.dart';
 import 'package:mobile/core/services/cart_injection.dart';
 import 'package:mobile/core/services/dashboard_injection.dart';
 import 'package:mobile/core/services/notification_injection.dart';
@@ -89,4 +90,6 @@ Future<void> initDependencies() async {
   registerAdminFaqDependencies(sl);
   registerAnalyticsDependencies(sl);
   registerAdminRoleDependencies(sl);
+  // Banner
+  registerBannerDependencies(sl);
 }

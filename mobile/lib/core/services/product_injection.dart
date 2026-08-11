@@ -6,6 +6,7 @@ import 'package:mobile/features/product/data/datasources/product_remote_datasour
 import 'package:mobile/features/product/data/repositories/product_repository_impl.dart';
 import 'package:mobile/features/product/domain/repositories/product_repository.dart';
 import 'package:mobile/features/product/domain/usecases/get_featured_products.dart';
+import 'package:mobile/features/product/domain/usecases/get_latest_products.dart'; // ✅ Added
 import 'package:mobile/features/product/domain/usecases/get_product_by_id.dart';
 import 'package:mobile/features/product/domain/usecases/get_products_by_category.dart';
 import 'package:mobile/features/product/domain/usecases/search_products.dart';
@@ -36,8 +37,7 @@ void registerProductDependencies(GetIt sl) {
       () => ProductRepositoryImpl(
         remoteDataSource: sl<ProductRemoteDataSource>(),
         localDataSource: sl<ProductLocalDataSource>(),
-        categoryLocalDataSource:
-            sl<CategoryLocalDataSource>(), // ✅ Gets it from category_injection
+        categoryLocalDataSource: sl<CategoryLocalDataSource>(),
       ),
     );
   }
@@ -45,6 +45,9 @@ void registerProductDependencies(GetIt sl) {
   // Use Cases
   if (!sl.isRegistered<GetFeaturedProducts>()) {
     sl.registerLazySingleton(() => GetFeaturedProducts(sl()));
+  }
+  if (!sl.isRegistered<GetLatestProducts>()) {
+    sl.registerLazySingleton(() => GetLatestProducts(sl())); // ✅ Added
   }
   if (!sl.isRegistered<GetProductsByCategory>()) {
     sl.registerLazySingleton(() => GetProductsByCategory(sl()));
@@ -63,6 +66,7 @@ void registerProductDependencies(GetIt sl) {
         getCategories: sl(),
         getSubcategories: sl(),
         getFeaturedProducts: sl(),
+        getLatestProducts: sl(),
         getProductsByCategory: sl(),
         searchProducts: sl(),
         getProductById: sl(),

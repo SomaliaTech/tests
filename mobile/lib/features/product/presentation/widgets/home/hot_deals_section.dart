@@ -32,7 +32,16 @@ class _HotDealsSectionState extends State<HotDealsSection> {
 
   void _loadProducts() {
     if (!mounted) return;
-    context.read<ProductBloc>().add(const GetFeaturedProductsEvent());
+
+    final bloc = context.read<ProductBloc>();
+
+    // ✅ FIX: If data is already loaded in BLoC, do NOT reload
+    if (bloc.state is FeaturedProductsLoaded) {
+      _hasLoadedOnce = true;
+      return;
+    }
+
+    bloc.add(const GetFeaturedProductsEvent());
     _hasLoadedOnce = true;
   }
 
@@ -64,9 +73,7 @@ class _HotDealsSectionState extends State<HotDealsSection> {
               // ✅ Auto-refresh when internet comes back - HERE
               if (isOnline && _wasOffline && _hasLoadedOnce) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _loadProducts(); // This calls: context.read<ProductBloc>().add(const GetFeaturedProductsEvent());
-                  // OR use forceRefresh:
-                  // context.read<ProductBloc>().add(const GetFeaturedProductsEvent(forceRefresh: true));
+                  _loadProducts();
                 });
               }
               _wasOffline = !isOnline;

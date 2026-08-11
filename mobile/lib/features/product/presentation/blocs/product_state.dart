@@ -93,3 +93,21 @@ class ProductDetailLoaded extends ProductState {
   @override
   List<Object?> get props => [product];
 }
+
+class LatestProductsLoading extends ProductState {}
+
+class LatestProductsLoaded extends ProductState {
+  final List<Product> products;
+  const LatestProductsLoaded(this.products);
+
+  @override
+  List<Object?> get props => [products]; // ✅ Added
+}
+
+class LatestProductsError extends ProductState {
+  final String message;
+  const LatestProductsError(this.message);
+
+  @override
+  List<Object?> get props => [message]; // ✅ Added
+}

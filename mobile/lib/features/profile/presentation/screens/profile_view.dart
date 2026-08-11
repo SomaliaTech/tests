@@ -285,6 +285,16 @@ class _ProfileViewState extends State<ProfileView> {
             _currentMarketId = state.profile.marketId;
             _profileLoaded = true;
 
+            // ✅ Debug: Check if Google user
+            debugPrint(
+              '📱 Profile loaded - Phone: "${state.profile.phoneNumber}"',
+            );
+            debugPrint('📱 Profile loaded - Email: "${state.profile.email}"');
+            debugPrint('📱 Profile loaded - isAdmin: ${state.profile.isAdmin}');
+            debugPrint(
+              '📱 Profile loaded - isSuperAdmin: ${state.profile.isSuperAdmin}',
+            );
+
             setState(() {});
             _tryPreSelectMarket();
           }

@@ -4,6 +4,7 @@ import { OrdersController } from './orders.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { WaafiPayService } from 'src/payment/waafipay.service';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     forwardRef(() => NotificationsModule),
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [OrdersService, WaafiPayService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

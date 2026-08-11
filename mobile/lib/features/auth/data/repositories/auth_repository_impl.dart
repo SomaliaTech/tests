@@ -106,10 +106,59 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  ResultFuture<({String token, User user})> googleSignIn(
+    String idToken,
+    String email,
+    String name,
+    String? photoUrl,
+  ) async {
+    try {
+      final data = await remoteDataSource.googleSignIn(
+        idToken,
+        email,
+        name,
+        photoUrl,
+      );
+
+      final user = User(
+        id: data['user']['id'],
+        phoneNumber: data['user']['phoneNumber'] ?? '',
+        name: data['user']['name'],
+        profileImage: data['user']['profileImage'],
+        isVerified: data['user']['isVerified'] ?? false,
+        hasProfile: data['user']['hasProfile'] ?? false,
+        isAdmin: data['user']['isAdmin'] ?? false,
+        isSuperAdmin: data['user']['isSuperAdmin'] ?? false,
+        marketId: data['user']['marketId'],
+        email: data['user']['email'],
+      );
+
+      await storageService.saveAuthToken(data['token']);
+      await storageService.saveUserId(user.id);
+      await storageService.saveLoginStatus(true);
+      await storageService.saveUserName(user.name ?? '');
+      if (user.phoneNumber.isNotEmpty) {
+        await storageService.saveUserPhone(user.phoneNumber);
+      }
+      if (user.profileImage != null) {
+        await storageService.saveUserProfileImage(user.profileImage!);
+      }
+      await storageService.saveIsAdmin(user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
+
+      return Right((token: data['token'], user: user));
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  // In auth_repository_impl.dart - Update completeProfile method
+  @override
   ResultFuture<({String token, User user})> completeProfile({
     required String name,
     required String marketId,
     String? profileImageUrl,
+    String? phoneNumber, // ✅ Add this
   }) async {
     try {
       final token = await storageService.getAuthToken();
@@ -122,25 +171,28 @@ class AuthRepositoryImpl implements AuthRepository {
         name,
         marketId,
         profileImageUrl,
+        phoneNumber, // ✅ Pass phone number
       );
       final user = UserModel.fromJson(data['user']);
       final newToken = data['token'] as String;
 
       await storageService.saveAuthToken(newToken);
-
-      // ✅ Fix: Handle nullable bool with null safety
       await storageService.saveIsAdmin(user.isAdmin ?? false);
       await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
-
       await storageService.saveUserName(user.name ?? name);
       await storageService.saveUserMarketId(marketId);
+
+      // ✅ Save phone number if provided
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        await storageService.saveUserPhone(phoneNumber);
+      }
 
       if (profileImageUrl != null) {
         await storageService.saveUserProfileImage(profileImageUrl);
       }
 
       developer.log(
-        '👑 CompleteProfile - Saved isAdmin: ${user.isAdmin ?? false}, isSuperAdmin: ${user.isSuperAdmin ?? false}',
+        '👑 CompleteProfile - isAdmin: ${user.isAdmin ?? false}, isSuperAdmin: ${user.isSuperAdmin ?? false}',
       );
 
       return Right((token: newToken, user: user));

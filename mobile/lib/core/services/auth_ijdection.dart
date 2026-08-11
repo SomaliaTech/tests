@@ -1,6 +1,5 @@
 // lib/core/services/auth_injection.dart (rename from auth_ijdection.dart)
 import 'package:get_it/get_it.dart';
-import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:mobile/features/auth/data/repositories/auth_repository_impl.dart';
@@ -8,6 +7,7 @@ import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mobile/features/auth/domain/usecases/check_auth_status.dart';
 import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
 import 'package:mobile/features/auth/domain/usecases/get_current_user.dart';
+import 'package:mobile/features/auth/domain/usecases/google_sign_in.dart';
 import 'package:mobile/features/auth/domain/usecases/logout.dart';
 import 'package:mobile/features/auth/domain/usecases/send_otp.dart';
 import 'package:mobile/features/auth/domain/usecases/upload_profile_image.dart';
@@ -30,7 +30,9 @@ void authRegisterDependencies(GetIt sl) {
       () => AuthRemoteDataSourceImpl(client: sl()),
     );
   }
-
+  if (!sl.isRegistered<GoogleSignIn>()) {
+    sl.registerLazySingleton(() => GoogleSignIn(sl()));
+  }
   // Repositories
   if (!sl.isRegistered<AuthRepository>()) {
     sl.registerLazySingleton<AuthRepository>(
@@ -62,6 +64,7 @@ void authRegisterDependencies(GetIt sl) {
   }
 
   // BLoC
+  // In your auth_di.dart or wherever you register dependencies
   sl.registerFactory(
     () => AuthBloc(
       sendOtp: sl(),
@@ -73,6 +76,7 @@ void authRegisterDependencies(GetIt sl) {
       logout: sl(),
       storageService: sl(),
       chatSocketService: sl<ChatSocketService>(),
+      googleSignInUseCase: sl(), // ✅ Add this
     ),
   );
 

@@ -1,3 +1,4 @@
+// lib/features/auth/domain/usecases/complete_profile.dart
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
@@ -11,13 +12,15 @@ class CompleteProfile {
 
   ResultFuture<({String token, User user})> call({
     required String name,
-    required String marketId, // ✅ Added
+    required String marketId,
     String? profileImageUrl,
-  }) async {
-    return await repository.completeProfile(
+    String? phoneNumber, // ✅ Add this
+  }) {
+    return repository.completeProfile(
       name: name,
       marketId: marketId,
       profileImageUrl: profileImageUrl,
+      phoneNumber: phoneNumber, // ✅ Pass phone number
     );
   }
 }

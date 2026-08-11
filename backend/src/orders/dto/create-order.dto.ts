@@ -1,110 +1,79 @@
+// src/orders/dto/create-order.dto.ts
 import {
   IsString,
   IsArray,
-  ValidateNested,
   IsOptional,
-  IsNotEmpty,
   IsNumber,
-  IsBoolean,
+  ValidateNested,
+  IsNotEmpty,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
-export class OrderItemDto {
-  @ApiPropertyOptional({
-    description:
-      'Product variant UUID (optional - leave empty for base product)',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-  })
-  @IsString()
-  @IsOptional()
-  productVariantId?: string;
-
-  @ApiProperty({
-    description: 'Product ID (required for base products without variants)',
-    example: '550e8400-e29b-41d4-a716-446655440001',
-  })
+class OrderItemDto {
+  @ApiProperty({ description: 'Product ID' })
   @IsString()
   @IsNotEmpty()
   productId: string;
 
-  @ApiProperty({
-    description: 'Quantity of the product',
-    example: 2,
-    minimum: 1,
-  })
+  @ApiProperty({ description: 'Product variant ID', required: false })
+  @IsOptional()
+  @IsString()
+  productVariantId?: string;
+
+  @ApiProperty({ description: 'Quantity' })
   @IsNumber()
+  @Min(1)
   quantity: number;
 }
 
-export class AddressDto {
+class ShippingAddressDto {
   @ApiProperty({ description: 'Address label', example: 'Home' })
   @IsString()
   @IsNotEmpty()
   label: string;
 
-  @ApiProperty({
-    description: 'Full street address',
-    example: '123 Main Street, Mogadishu, Somalia',
-  })
+  @ApiProperty({ description: 'Full address' })
   @IsString()
   @IsNotEmpty()
   fullAddress: string;
 
-  @ApiProperty({
-    description: 'Phone number in international format',
-    example: '+252612345678',
-  })
+  @ApiProperty({ description: 'Phone number' })
   @IsString()
   @IsNotEmpty()
   phoneNumber: string;
-
-  @ApiProperty({
-    description: 'Set as default address',
-    example: true,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  isDefault?: boolean;
 }
 
 export class CreateOrderDto {
-  @ApiProperty({ description: 'Array of order items', type: [OrderItemDto] })
+  @ApiProperty({ description: 'Order items', type: [OrderItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 
-  @ApiProperty({
-    description: 'Shipping address for the order',
-    type: AddressDto,
-  })
+  @ApiProperty({ description: 'Shipping address', type: ShippingAddressDto })
   @ValidateNested()
-  @Type(() => AddressDto)
-  shippingAddress: AddressDto;
+  @Type(() => ShippingAddressDto)
+  shippingAddress: ShippingAddressDto; // ✅ Now allowed
 
   @ApiProperty({ description: 'Payment method', example: 'evc_plus' })
   @IsString()
   @IsNotEmpty()
   paymentMethod: string;
 
-  @ApiProperty({
-    description: 'Order notes',
-    example: 'Please deliver after 5 PM',
-    required: false,
-  })
+  @ApiProperty({ description: 'Phone number for payment', required: false })
+  @IsOptional()
   @IsString()
-  @IsOptional()
-  notes?: string;
+  phoneNumber?: string; // ✅ Now allowed
 
-  // ✅ NEW: Delivery fee field
-  @ApiPropertyOptional({
-    description: 'Delivery fee for the order',
-    example: 10.0,
-    default: 0,
-  })
-  @IsNumber()
+  @ApiProperty({ description: 'Delivery fee', required: false })
   @IsOptional()
-  deliveryFee?: number;
+  @IsNumber()
+  deliveryFee?: number; // ✅ Now allowed
+
+  @ApiProperty({ description: 'Order notes', required: false })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

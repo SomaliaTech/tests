@@ -28,6 +28,7 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UploadProfileImageDto } from './dto/upload-profile-image.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -117,6 +118,10 @@ export class AuthController {
     return this.authService.completeProfile(req.user.userId, body);
   }
 
+  @Post('google')
+  async googleSignIn(@Body() dto: GoogleAuthDto) {
+    return this.authService.googleSignIn(dto);
+  }
   @Post('upload-profile-image')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image'))

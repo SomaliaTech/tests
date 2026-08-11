@@ -1,9 +1,10 @@
+// lib/features/order/data/repositories/order_repository_impl.dart
+import 'dart:developer' as developer;
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/services/storage/storage_service.dart';
 import '../../../../core/utils/typedefs.dart';
-import '../../domain/entities/order.dart' as domain;
 import '../../domain/repositories/order_repository.dart';
 import '../datasources/order_remote_datasource.dart';
 
@@ -16,39 +17,15 @@ class OrderRepositoryImpl implements OrderRepository {
     required this.storageService,
   });
 
-  Future<String?> _getToken() async => await storageService.getAuthToken();
-
   @override
-  ResultFuture<domain.DomainOrder> createOrder(
+  ResultFuture<Map<String, dynamic>> createOrder(
     Map<String, dynamic> orderData,
   ) async {
     try {
-      final token = await _getToken();
+      final token = await storageService.getAuthToken();
       if (token == null) return Left(ServerFailure('Not authenticated'));
-      final order = await remoteDataSource.createOrder(token, orderData);
-      return Right(order);
-    } on ServerException catch (e) {
-      return Left(ServerFailure(e.message));
-    } catch (e) {
-      return Left(ServerFailure('Unexpected error: $e'));
-    }
-  }
 
-  @override
-  ResultFuture<Map<String, dynamic>> processPayment(
-    String orderId,
-    String paymentMethod, {
-    String? phoneNumber,
-  }) async {
-    try {
-      final token = await _getToken();
-      if (token == null) return Left(ServerFailure('Not authenticated'));
-      final result = await remoteDataSource.processPayment(
-        token,
-        orderId,
-        paymentMethod,
-        phoneNumber: phoneNumber,
-      );
+      final result = await remoteDataSource.createOrder(token, orderData);
       return Right(result);
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));

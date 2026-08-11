@@ -6,6 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/network/internet_banner.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/banner/admin_banner_bloc.dart';
+import 'package:mobile/features/product/presentation/blocs/banner/banner_bloc.dart';
+import 'package:mobile/features/product/presentation/screens/category_view.dart';
+import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -236,6 +240,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (context) => sl<AdminMarketBloc>()),
           BlocProvider(create: (context) => sl<AdminRoleBloc>()),
           BlocProvider(create: (_) => sl<FaqBloc>()),
+          BlocProvider(create: (_) => sl<AdminBannerBloc>()),
+          BlocProvider(create: (_) => sl<BannerBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
           Provider<StorageService>.value(value: sl<StorageService>()),
         ],
@@ -293,6 +299,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             },
           ),
+
+          onGenerateRoute: (settings) {
+            if (settings.name == '/product-details') {
+              final args = settings.arguments as Map<String, dynamic>?;
+              final productId = args?['productId'] as String? ?? '';
+
+              return MaterialPageRoute(
+                builder: (context) => ProductDetailScreen(productId: productId),
+              );
+            }
+
+            if (settings.name == '/category-products') {
+              final args = settings.arguments as Map<String, dynamic>?;
+              final categoryId = args?['categoryId'] as String? ?? '';
+              final categoryName =
+                  args?['categoryName'] as String? ?? 'Products';
+
+              return MaterialPageRoute(
+                builder: (context) => CategoryView(
+                  categoryId: categoryId,
+                  categoryName: categoryName,
+                ),
+              );
+            }
+
+            // Fallback for any other undefined routes
+            return null;
+          },
           routes: {'/home': (context) => const MainNavigationScreen()},
         ),
       ),

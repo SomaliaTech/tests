@@ -7,7 +7,6 @@ import 'package:mobile/features/order/domain/repositories/order_details_reposito
 import 'package:mobile/features/order/domain/repositories/order_repository.dart';
 import 'package:mobile/features/order/domain/usecases/create_order.dart';
 import 'package:mobile/features/order/domain/usecases/get_order_details.dart';
-import 'package:mobile/features/order/domain/usecases/process_payment.dart';
 import 'package:mobile/features/order/presentation/bloc/order_bloc.dart';
 import 'package:mobile/features/order/presentation/bloc/order_details_bloc.dart';
 import 'package:mobile/features/order/data/datasources/order_history_remote_datasource.dart';
@@ -56,11 +55,9 @@ void orderRegisterDependencies(GetIt sl) {
     () => OrderDetailsBloc(getOrderDetails: sl(), storageService: sl()),
   );
   sl.registerLazySingleton(() => CreateOrder(sl()));
-  sl.registerLazySingleton(() => ProcessPayment(sl()));
+  // sl.registerLazySingleton(() => ProcessPayment(sl()));
 
   // FIXED: Use registerLazySingleton instead of registerFactory
   // This keeps the Bloc alive and preserves state across the app
-  sl.registerLazySingleton<OrderBloc>(
-    () => OrderBloc(createOrder: sl(), processPayment: sl()),
-  );
+  sl.registerLazySingleton<OrderBloc>(() => OrderBloc(createOrder: sl()));
 }

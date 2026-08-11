@@ -18,13 +18,14 @@ import 'package:mobile/features/admin/presentation/bloc/analytics/analytics_stat
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_banners_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_categories_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_colors_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_faq_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_markets_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/admin_more_dashboard_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_sizes_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_users_screen.dart';
-import 'package:mobile/features/admin/presentation/screens/admin_revenue_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/modern_analytics_screen.dart';
 import 'package:mobile/features/admin/presentation/widgets/dashboard_widgets.dart';
@@ -52,6 +53,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _hasLoadedOnce = false;
   bool _isCheckingAdmin = true;
   bool _isAdmin = false;
+  bool _isSuperAdmin = false; // ✅ ADD THIS
 
   // ✅ Permission-related fields
   List<String> _permissions = [];
@@ -80,6 +82,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       setState(() {
         _isAdmin = true;
         _isCheckingAdmin = false;
+        _isSuperAdmin = isSuperAdmin; // ✅ ADD THIS
       });
 
       _loadDashboardData();
@@ -275,18 +278,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    const SizedBox(height: 16),
                     _buildPeriodSelector(context),
                     const SizedBox(height: 16),
                     _buildStatsSection(context),
                     const SizedBox(height: 16),
                     _buildChartsSection(context),
                     const SizedBox(height: 16),
-                    _buildAnalyticsSection(context),
-                    const SizedBox(height: 16),
                     _buildSectionTitle('Quick Management'),
                     const SizedBox(height: 8),
                     _buildQuickActions(context),
                     const SizedBox(height: 16),
+                    _buildAnalyticsSection(context),
+                    const SizedBox(height: 16),
+
                     if (_can(AdminPermissions.orderView)) ...[
                       _buildSectionTitle('Recent Orders'),
                       const SizedBox(height: 8),
@@ -1408,7 +1413,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-  // ✅ Quick Actions with permission-based visibility
   Widget _buildQuickActions(BuildContext context) {
     final actions = <_QuickAction>[
       _QuickAction(
@@ -1425,7 +1429,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       _QuickAction(
         'Categories',
-        Iconsax.category,
+        Iconsax.cake,
         Colors.purpleAccent,
         AdminPermissions.categoryView,
         () {
@@ -1462,18 +1466,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         },
       ),
       _QuickAction(
-        'Users',
-        Iconsax.profile_2user,
-        Colors.orange,
-        AdminPermissions.userView,
-        () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
-          );
-        },
-      ),
-      _QuickAction(
         'Sizes',
         Iconsax.ruler,
         Colors.indigo,
@@ -1487,7 +1479,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
     ];
 
-    final visible = actions.where((a) => _can(a.permission)).toList();
+    // ✅ ONLY add "More" if the user is a Super Admin
+    if (_isSuperAdmin) {
+      actions.add(
+        _QuickAction(
+          'More',
+          Iconsax
+              .category, // 💡 Changed to 'more' icon for better UX (was 'category')
+          Colors.orange,
+          'SUPER_ADMIN_ONLY', // Custom flag (bypasses normal permission check)
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminMoreDashboardScreen(),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // ✅ Filter based on permissions (and our custom Super Admin flag)
+    final visible = actions.where((a) {
+      if (a.permission == 'SUPER_ADMIN_ONLY') return true;
+      return _can(a.permission);
+    }).toList();
+
     if (visible.isEmpty) return const SizedBox.shrink();
 
     final rows = <Widget>[];

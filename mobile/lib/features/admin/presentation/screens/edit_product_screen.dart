@@ -36,7 +36,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final List<AdminProductImageEntity> _existingImages = [];
   final List<File> _newImages = [];
   final List<String> _deletedImageIds = [];
-
+  bool _syncPriceToVariants = false;
   // ✅ Updated: Use Map for editable existing variants
   final List<Map<String, dynamic>> _existingVariants = [];
   final List<Map<String, dynamic>> _newVariants = [];
@@ -274,7 +274,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
       ToastHelper.showError(context, 'Please fill all required fields');
       return;
     }
-
     if (_selectedCategory == null) {
       ToastHelper.showWarning(context, 'Please select a category');
       return;
@@ -282,11 +281,22 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
     HapticFeedback.mediumImpact();
     final categoryId = _selectedSubcategory?.id ?? _selectedCategory!.id;
+    final basePrice = double.parse(_priceController.text); // ✅ Get base price
+
+    // ✅ NEW: If toggle is on, force all variants to use the base price
+    if (_syncPriceToVariants) {
+      for (var v in _existingVariants) {
+        v['price'] = basePrice;
+      }
+      for (var v in _newVariants) {
+        v['price'] = basePrice;
+      }
+    }
 
     final updateData = {
       'name': _nameController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'price': double.parse(_priceController.text),
+      'price': basePrice,
       'stock': int.parse(_stockController.text),
       'categoryId': categoryId,
       'brand': _brandController.text.trim(),
@@ -294,17 +304,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
       'isActive': _isActive,
     };
 
-    // ✅ Send updated existing variants (without variantId for the API)
     final updatedExistingVariants = _existingVariants.map((v) {
       final clean = Map<String, dynamic>.from(v);
-      clean.remove('variantId');
+      // ✅ KEEP the variantId and map it to 'id' so the backend knows exactly which row to update!
+      clean['id'] = clean['variantId'];
       return clean;
     }).toList();
-
-    print('📤 [EditProduct] Sending update data');
-    print('   - Existing variants: ${updatedExistingVariants.length}');
-    print('   - New variants: ${_newVariants.length}');
-    print('   - Deleted variant IDs: ${_deletedVariantIds.length}');
 
     context.read<AdminProductBloc>().add(
       UpdateAdminProductEvent(
@@ -386,17 +391,89 @@ class _EditProductScreenState extends State<EditProductScreen> {
                               icon: Iconsax.info_circle,
                               child: Column(
                                 children: [
-                                  _buildTextField(
-                                    controller: _nameController,
-                                    label: 'Product Name',
-                                    hint: 'Enter product name',
-                                    icon: Iconsax.box_1,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Product name is required';
-                                      }
-                                      return null;
-                                    },
+                                  _buildSectionCard(
+                                    title: 'Basic Information',
+                                    icon: Iconsax.info_circle,
+                                    child: Column(
+                                      children: [
+                                        _buildTextField(
+                                          controller: _nameController,
+                                          label: 'Product Name',
+                                          hint: 'Enter product name',
+                                          icon: Iconsax.box_1,
+                                          validator: (value) {
+                                            if (value == null || value.isEmpty)
+                                              return 'Product name is required';
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 16),
+                                        _buildTextField(
+                                          controller: _descriptionController,
+                                          label: 'Description',
+                                          hint: 'Enter product description',
+                                          icon: Iconsax.document_text,
+                                          maxLines: 4,
+                                        ),
+                                        const SizedBox(height: 16),
+
+                                        // ✅ Price & Stock Row
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _buildTextField(
+                                                controller: _priceController,
+                                                label: 'Base Price',
+                                                hint: '0.00',
+                                                icon: Iconsax.money_tick,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                validator: (value) {
+                                                  if (value == null ||
+                                                      value.isEmpty)
+                                                    return 'Price is required';
+                                                  if (double.tryParse(value) ==
+                                                      null)
+                                                    return 'Invalid price';
+                                                  return null;
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            Expanded(
+                                              child: _buildTextField(
+                                                controller: _stockController,
+                                                label: 'Base Stock',
+                                                hint: '0',
+                                                icon: Iconsax.box,
+                                                keyboardType:
+                                                    TextInputType.number,
+                                                validator: (value) {
+                                                  if (value == null ||
+                                                      value.isEmpty)
+                                                    return 'Stock is required';
+                                                  if (int.tryParse(value) ==
+                                                      null)
+                                                    return 'Invalid stock';
+                                                  return null;
+                                                },
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+
+                                        // ✅ NEW: Sync Price Toggle
+                                        const SizedBox(height: 16),
+                                        _buildSwitchTile(
+                                          label:
+                                              'Apply base price to all variants',
+                                          value: _syncPriceToVariants,
+                                          onChanged: (value) => setState(
+                                            () => _syncPriceToVariants = value,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   const SizedBox(height: 16),
                                   _buildTextField(

@@ -8,6 +8,7 @@ import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import 'otp_verification_screen.dart';
+import 'complete_profile_screen.dart';
 
 class PhoneInputScreen extends StatefulWidget {
   const PhoneInputScreen({super.key});
@@ -20,7 +21,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   late final TextEditingController _phoneController;
   final FocusNode _phoneFocusNode = FocusNode();
 
-  // ✅ Somali telecom providers
   final List<ProviderInfo> _providers = const [
     ProviderInfo(
       prefix: '61',
@@ -48,44 +48,27 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     ),
   ];
 
-  // ✅ Detect provider from phone number
   String? _detectProvider(String phone) {
     if (phone.length < 2) return null;
     for (final provider in _providers) {
-      if (phone.startsWith(provider.prefix)) {
-        return provider.name;
-      }
+      if (phone.startsWith(provider.prefix)) return provider.name;
     }
     return null;
   }
 
-  // ✅ Get provider color
   Color? _getProviderColor(String phone) {
     if (phone.length < 2) return null;
     for (final provider in _providers) {
-      if (phone.startsWith(provider.prefix)) {
-        return provider.color;
-      }
+      if (phone.startsWith(provider.prefix)) return provider.color;
     }
     return null;
   }
 
-  // ✅ Format phone number for API
   String _formatPhoneForApi(String phone) {
     String cleaned = phone.trim().replaceAll(RegExp(r'\s+'), '');
-    // If it starts with +252, return as is
-    if (cleaned.startsWith('+252')) {
-      return cleaned;
-    }
-    // If it starts with 252, add +
-    if (cleaned.startsWith('252')) {
-      return '+$cleaned';
-    }
-    // If it starts with 0, remove 0 and add +252
-    if (cleaned.startsWith('0')) {
-      return '+252${cleaned.substring(1)}';
-    }
-    // Otherwise, assume it's a local number and add +252
+    if (cleaned.startsWith('+252')) return cleaned;
+    if (cleaned.startsWith('252')) return '+$cleaned';
+    if (cleaned.startsWith('0')) return '+252${cleaned.substring(1)}';
     return '+252$cleaned';
   }
 
@@ -108,10 +91,27 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
-      listenWhen: (previous, current) =>
-          current is OtpSent && previous is! OtpSent,
       listener: (context, state) {
+        // ✅ Log EVERY state change
+        debugPrint('🔔🔔🔔 LISTENER TRIGGERED: ${state.runtimeType} 🔔🔔🔔');
+
+        if (state is AuthLoading) {
+          debugPrint('⏳ AuthLoading - no navigation');
+          return;
+        }
+
+        if (state is AuthInitial) {
+          debugPrint('🔹 AuthInitial - no navigation');
+          return;
+        }
+
+        if (state is AuthChecking) {
+          debugPrint('🔹 AuthChecking - no navigation');
+          return;
+        }
+
         if (state is OtpSent) {
+          debugPrint('✅ OtpSent - navigating to OTP screen');
           HapticFeedback.mediumImpact();
           toastification.show(
             context: context,
@@ -127,17 +127,78 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             RegExp(r'\D'),
             '',
           );
-          // ✅ Format phone for API
           final formattedPhone = _formatPhoneForApi(rawPhone);
 
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  OtpVerificationScreen(phoneNumber: formattedPhone),
-            ),
+          Future.microtask(() {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      OtpVerificationScreen(phoneNumber: formattedPhone),
+                ),
+              );
+            }
+          });
+        } else if (state is Authenticated) {
+          debugPrint('✅ Authenticated - navigating to HOME');
+          HapticFeedback.mediumImpact();
+          toastification.show(
+            context: context,
+            title: const Text('✅ Welcome!'),
+            description: Text('Signed in as ${state.user.name ?? 'User'}'),
+            type: ToastificationType.success,
+            autoCloseDuration: const Duration(seconds: 3),
+            style: ToastificationStyle.fillColored,
+            alignment: Alignment.topCenter,
           );
+
+          Future.microtask(() {
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/home');
+            }
+          });
+        } else if (state is OtpVerified) {
+          debugPrint('✅✅✅ OtpVerified - NAVIGATING TO COMPLETE PROFILE ✅✅✅');
+          debugPrint('  Token: ${state.token}');
+          debugPrint('  User name: ${state.user.name}');
+          debugPrint('  User email: ${state.user.email}');
+          debugPrint('  User phone: ${state.user.phoneNumber}');
+          debugPrint('  Has profile: ${state.user.hasProfile}');
+          debugPrint('  Market ID: ${state.user.marketId}');
+
+          HapticFeedback.mediumImpact();
+
+          final isGoogleUser =
+              state.user.email != null && state.user.email!.isNotEmpty;
+          debugPrint('  Is Google user: $isGoogleUser');
+
+          Future.microtask(() {
+            if (mounted) {
+              debugPrint(
+                '🚀🚀🚀 EXECUTING NAVIGATION TO CompleteProfileScreen 🚀🚀🚀',
+              );
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CompleteProfileScreen(
+                    token: state.token,
+                    user: state.user,
+                    isGoogleSignIn: isGoogleUser,
+                  ),
+                ),
+              );
+            }
+          });
+        } else if (state is ProfileCompleted) {
+          debugPrint('✅ ProfileCompleted - navigating to HOME');
+          Future.microtask(() {
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/home');
+            }
+          });
         } else if (state is AuthError) {
+          debugPrint('❌ Auth Error: ${state.message}');
           HapticFeedback.heavyImpact();
           toastification.show(
             context: context,
@@ -146,8 +207,39 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             type: ToastificationType.error,
             autoCloseDuration: const Duration(seconds: 3),
           );
+        } else if (state is GoogleSignInSuccess) {
+          debugPrint('✅ GoogleSignInSuccess - checking profile...');
+          if (!state.user.hasProfile || state.user.marketId == null) {
+            debugPrint('  -> Needs profile completion');
+            final isGoogleUser =
+                state.user.email != null && state.user.email!.isNotEmpty;
+            Future.microtask(() {
+              if (mounted) {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompleteProfileScreen(
+                      token: state.token,
+                      user: state.user,
+                      isGoogleSignIn: isGoogleUser,
+                    ),
+                  ),
+                );
+              }
+            });
+          } else {
+            debugPrint('  -> Profile complete, going home');
+            Future.microtask(() {
+              if (mounted) {
+                Navigator.pushReplacementNamed(context, '/home');
+              }
+            });
+          }
+        } else {
+          debugPrint('⚠️ UNHANDLED STATE: ${state.runtimeType}');
         }
       },
+
       child: Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         body: SafeArea(
@@ -189,7 +281,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       _buildProviderDetection(),
                       const SizedBox(height: 24),
                       _buildSendButton(),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 16),
+                      _buildDivider(),
+                      const SizedBox(height: 16),
+                      _buildGoogleSignInButton(),
+                      const SizedBox(height: 24),
                       _buildInfoCard(),
                       const SizedBox(height: 24),
                       Text(
@@ -362,9 +458,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              onChanged: (value) {
-                setState(() {});
-              },
+              onChanged: (value) => setState(() {}),
             ),
           ),
         ],
@@ -459,8 +553,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
       builder: (context, state) {
         final isLoading = state is AuthLoading;
         final phone = _phoneController.text.trim();
-
-        // ✅ Validate phone - must start with valid prefix and have 9 digits
         final isValid = phone.length == 9 && _detectProvider(phone) != null;
 
         return SizedBox(
@@ -471,7 +563,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 ? null
                 : () {
                     final rawPhone = _phoneController.text.trim();
-
                     if (!isValid) {
                       HapticFeedback.heavyImpact();
                       toastification.show(
@@ -485,7 +576,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       );
                       return;
                     }
-
                     HapticFeedback.lightImpact();
                     context.read<AuthBloc>().add(SendOtpEvent(rawPhone));
                   },
@@ -545,6 +635,77 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     );
   }
 
+  Widget _buildDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'OR',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ),
+          Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGoogleSignInButton() {
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        final isLoading = state is AuthLoading;
+        return SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: OutlinedButton.icon(
+            onPressed: isLoading
+                ? null
+                : () {
+                    debugPrint('🔵 Google Sign-In button pressed');
+                    HapticFeedback.lightImpact();
+                    context.read<AuthBloc>().add(const GoogleSignInEvent());
+                  },
+            icon: isLoading
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.grey,
+                    ),
+                  )
+                : Image.network(
+                    'https://www.google.com/favicon.ico',
+                    height: 24,
+                    width: 24,
+                  ),
+            label: Text(
+              isLoading ? 'Signing in...' : 'Continue with Google',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF3C4043),
+              side: const BorderSide(color: Color(0xFFDADCE0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 0,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildInfoCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -560,69 +721,59 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.2)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2ED573).withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF2ED573).withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
-                child: const Icon(
-                  Iconsax.shield_tick,
-                  color: Color(0xFF2ED573),
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Secure Verification',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'We\'ll send you a 6-digit code via SMS',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
+            child: const Icon(
+              Iconsax.shield_tick,
+              color: Color(0xFF2ED573),
+              size: 22,
+            ),
           ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Secure Sign In',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Use your phone number or Google account',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ✅ Provider info model
 class ProviderInfo {
   final String prefix;
   final String name;
   final Color color;
   final IconData icon;
-
   const ProviderInfo({
     required this.prefix,
     required this.name,

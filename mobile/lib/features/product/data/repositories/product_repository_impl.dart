@@ -70,6 +70,29 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
+  ResultFuture<List<Product>> getLatestProducts({int limit = 10}) async {
+    try {
+      final cachedProducts = await localDataSource.getCachedLatestProducts();
+      try {
+        final remoteProducts = await remoteDataSource.getLatestProducts(
+          limit: limit,
+        );
+        await localDataSource.cacheLatestProducts(remoteProducts);
+        return Right(remoteProducts);
+      } catch (e) {
+        if (cachedProducts.isNotEmpty) {
+          return Right(cachedProducts);
+        }
+        rethrow;
+      }
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    } catch (e) {
+      return Left(ServerFailure('Unexpected error: $e'));
+    }
+  }
+
+  @override
   ResultFuture<List<Product>> getFeaturedProducts({int limit = 10}) async {
     try {
       final cachedProducts = await localDataSource.getCachedFeaturedProducts();

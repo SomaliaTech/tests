@@ -1,3 +1,4 @@
+// lib/features/auth/domain/repositories/auth_repository.dart
 import '../../../../core/utils/typedefs.dart';
 import '../entities/user.dart';
 
@@ -7,16 +8,24 @@ abstract class AuthRepository {
     String phoneNumber,
     String otpCode,
   );
+
+  // ✅ Add phoneNumber parameter
   ResultFuture<({String token, User user})> completeProfile({
     required String name,
     required String marketId,
     String? profileImageUrl,
+    String? phoneNumber, // ✅ Add this
   });
+
   ResultFuture<User> getCurrentUser();
   ResultFuture<String> uploadProfileImage(String base64Image);
   ResultFuture<bool> checkAuthStatus();
   ResultFuture<void> logout();
-  // Add this method
-  Future<bool>
-  isAuthenticated(); // Note: not wrapped in ResultFuture because it's a local check
+  Future<bool> isAuthenticated();
+  ResultFuture<({String token, User user})> googleSignIn(
+    String idToken,
+    String email,
+    String name,
+    String? photoUrl,
+  );
 }

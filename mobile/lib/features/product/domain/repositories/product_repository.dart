@@ -17,4 +17,5 @@ abstract class ProductRepository {
   });
   ResultFuture<Product> getProductById(String id);
   ResultFuture<Product> getProductBySlug(String slug);
+  ResultFuture<List<Product>> getLatestProducts({int limit}); // ✅ Added
 }

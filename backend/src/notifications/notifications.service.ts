@@ -78,7 +78,172 @@ export class NotificationsService {
 
     return notification;
   }
+  async notifyAllUsersOfNewBanner(banner: any) {
+    this.logger.log(`📢 Sending new banner notification to all users...`);
 
+    // 1. Fetch all user IDs
+    const allUsers = await this.drizzle.db.select({ id: users.id }).from(users);
+
+    const userIds = allUsers.map((u) => u.id);
+    if (userIds.length === 0) {
+      this.logger.log('No users found to notify.');
+      return;
+    }
+
+    this.logger.log(`Found ${userIds.length} users to notify.`);
+
+    const notificationTitle = banner.title;
+    const notificationMessage =
+      banner.subtitle || 'Check out our latest promotion!';
+    const actionText = banner.buttonText || 'View Now';
+    const actionLink = banner.actionLink || null;
+
+    // 2. Bulk insert notifications into DB (chunked to avoid SQL query limits)
+    const dbChunkSize = 100;
+    for (let i = 0; i < userIds.length; i += dbChunkSize) {
+      const chunk = userIds.slice(i, i + dbChunkSize);
+      const notificationValues = chunk.map((userId) => ({
+        id: uuidv4(),
+        userId,
+        type: NotificationType.PROMOTION,
+        title: notificationTitle,
+        message: notificationMessage,
+        isRead: false,
+        actionText,
+        actionLink,
+        createdAt: new Date(),
+      }));
+
+      await this.drizzle.db.insert(notifications).values(notificationValues);
+    }
+    this.logger.log(
+      `✅ Saved ${userIds.length} promotion notifications to DB.`,
+    );
+
+    // 3. Fetch all active device tokens for push notification
+    const tokensResult = await this.drizzle.db
+      .select({ token: deviceTokens.token })
+      .from(deviceTokens)
+      .where(eq(deviceTokens.isActive, true));
+
+    const allTokens = tokensResult.map((t) => t.token).filter(Boolean);
+
+    if (allTokens.length > 0) {
+      const data: Record<string, string> = {
+        type: NotificationType.PROMOTION,
+        bannerId: banner.id,
+      };
+      if (actionLink) {
+        data.actionLink = actionLink;
+      }
+
+      // Firebase multicast limit is 500 tokens per request
+      const pushChunkSize = 500;
+      let successCount = 0;
+      let failureCount = 0;
+
+      for (let i = 0; i < allTokens.length; i += pushChunkSize) {
+        const tokenChunk = allTokens.slice(i, i + pushChunkSize);
+        const result = await this.firebaseService.sendMulticastNotification(
+          tokenChunk,
+          notificationTitle,
+          notificationMessage,
+          data,
+        );
+        successCount += result.successCount || 0;
+        failureCount += result.failureCount || 0;
+      }
+
+      this.logger.log(
+        `✅ Push notifications sent: ${successCount} succeeded, ${failureCount} failed.`,
+      );
+    } else {
+      this.logger.log('No active device tokens found for push notifications.');
+    }
+
+    // 4. Emit WebSocket to all currently connected users
+    try {
+      this.chatGateway.server.emit('new_notification', {
+        type: NotificationType.PROMOTION,
+        title: notificationTitle,
+        message: notificationMessage,
+        actionText,
+        actionLink,
+        bannerId: banner.id,
+        createdAt: new Date().toISOString(),
+        isRead: false,
+      });
+    } catch (error) {
+      this.logger.warn(`WebSocket broadcast failed: ${error}`);
+    }
+  }
+  async broadcastToAllUsers(dto: {
+    title: string;
+    message: string;
+    actionText?: string;
+    actionLink?: string;
+  }) {
+    this.logger.log(`📢 Broadcasting custom notification to all users...`);
+
+    const allUsers = await this.drizzle.db.select({ id: users.id }).from(users);
+    const userIds = allUsers.map((u) => u.id);
+    if (userIds.length === 0) return { message: 'No users to notify' };
+
+    const title = dto.title;
+    const message = dto.message;
+    const actionText = dto.actionText || 'View';
+    const actionLink = dto.actionLink || null;
+
+    // 1. Save to DB (Chunked)
+    const dbChunkSize = 100;
+    for (let i = 0; i < userIds.length; i += dbChunkSize) {
+      const chunk = userIds.slice(i, i + dbChunkSize);
+      const values = chunk.map((userId) => ({
+        id: uuidv4(),
+        userId,
+        type: NotificationType.PROMOTION,
+        title,
+        message,
+        isRead: false,
+        actionText,
+        actionLink,
+        createdAt: new Date(),
+      }));
+      await this.drizzle.db.insert(notifications).values(values);
+    }
+
+    // 2. Send FCM Push (Chunked)
+    const tokensResult = await this.drizzle.db
+      .select({ token: deviceTokens.token })
+      .from(deviceTokens)
+      .where(eq(deviceTokens.isActive, true));
+    const allTokens = tokensResult.map((t) => t.token).filter(Boolean);
+    if (allTokens.length > 0) {
+      const data = { type: 'broadcast', actionLink: actionLink || '' };
+      const pushChunkSize = 500;
+      for (let i = 0; i < allTokens.length; i += pushChunkSize) {
+        await this.firebaseService.sendMulticastNotification(
+          allTokens.slice(i, i + pushChunkSize),
+          title,
+          message,
+          data,
+        );
+      }
+    }
+
+    // 3. WebSocket Broadcast
+    this.chatGateway.server.emit('new_notification', {
+      type: NotificationType.PROMOTION,
+      title,
+      message,
+      actionText,
+      actionLink,
+      createdAt: new Date().toISOString(),
+      isRead: false,
+    });
+
+    return { message: `Successfully sent to ${userIds.length} users` };
+  }
   /**
    * ✅ Bulk create notifications
    */

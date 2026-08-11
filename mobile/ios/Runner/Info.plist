@@ -69,6 +69,18 @@
 	
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to change profile picture</string>
+
+<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleTypeRole</key>
+    <string>Editor</string>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>com.googleusercontent.apps.YOUR-CLIENT-ID</string>
+    </array>
+  </dict>
+</array>
 	
 	<!-- Network Security -->
 	<key>NSAppTransportSecurity</key>

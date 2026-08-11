@@ -18,13 +18,9 @@ import '../widgets/shared/product_card.dart';
 
 class CategoryView extends StatefulWidget {
   final String categoryId;
-  final String categoryName;
+  final String? categoryName;
 
-  const CategoryView({
-    super.key,
-    required this.categoryId,
-    required this.categoryName,
-  });
+  const CategoryView({super.key, required this.categoryId, this.categoryName});
 
   @override
   State<CategoryView> createState() => _CategoryViewState();
@@ -174,7 +170,7 @@ class _CategoryViewState extends State<CategoryView> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       title: Text(
-        widget.categoryName,
+        widget.categoryName ?? 'Products', // ✅ Added '?? "Products"' fallback
         style: const TextStyle(
           color: Colors.black87,
           fontWeight: FontWeight.bold,
@@ -187,16 +183,6 @@ class _CategoryViewState extends State<CategoryView> {
         icon: const Icon(Icons.arrow_back, color: Colors.black87),
         onPressed: () => Navigator.pop(context),
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Iconsax.sort, color: Colors.black87),
-          onPressed: _showSortOptions,
-        ),
-        IconButton(
-          icon: const Icon(Iconsax.filter, color: Colors.black87),
-          onPressed: _showFilterOptions,
-        ),
-      ],
     );
   }
 
@@ -599,112 +585,6 @@ class _CategoryViewState extends State<CategoryView> {
           ],
         ),
       ),
-    );
-  }
-
-  void _showSortOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Sort by',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                _buildSortOption('Newest', Iconsax.clock),
-                _buildSortOption('Price: Low to High', Iconsax.arrow_up),
-                _buildSortOption('Price: High to Low', Iconsax.arrow_down),
-                _buildSortOption('Popular', Iconsax.star),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSortOption(String title, IconData icon) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.grey[700]),
-      title: Text(title),
-      onTap: () => Navigator.pop(context),
-    );
-  }
-
-  void _showFilterOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Filters',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Reset'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Price Range',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                RangeSlider(
-                  values: const RangeValues(0, 1000),
-                  onChanged: (values) {},
-                  min: 0,
-                  max: 1000,
-                  activeColor: const Color(0xFF2ED573),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2ED573),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text('Apply Filters'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

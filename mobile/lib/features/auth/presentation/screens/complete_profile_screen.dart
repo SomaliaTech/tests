@@ -1,18 +1,41 @@
-// lib/features/profile/presentation/screens/complete_profile_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:iconsax/iconsax.dart';
 import 'package:toastification/toastification.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
+import '../../domain/entities/user.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 
+class ProviderInfo {
+  final String prefix;
+  final String name;
+  final Color color;
+  final IconData icon;
+  const ProviderInfo({
+    required this.prefix,
+    required this.name,
+    required this.color,
+    required this.icon,
+  });
+}
+
 class CompleteProfileScreen extends StatefulWidget {
   final String token;
-  const CompleteProfileScreen({super.key, required this.token});
+  final User user;
+  final bool isGoogleSignIn;
+
+  const CompleteProfileScreen({
+    super.key,
+    required this.token,
+    required this.user,
+    this.isGoogleSignIn = false,
+  });
 
   @override
   State<CompleteProfileScreen> createState() => _CompleteProfileScreenState();
@@ -21,25 +44,88 @@ class CompleteProfileScreen extends StatefulWidget {
 class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController nameController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
+  final FocusNode phoneFocusNode = FocusNode();
 
   String? _profileImageUrl;
   bool _uploading = false;
 
-  // Markets data
   List<Map<String, dynamic>> _markets = [];
   String? _selectedMarketId;
   bool _loadingMarkets = false;
 
+  // ✅ Provider detection (same as phone_input_screen)
+  static const List<ProviderInfo> _providers = [
+    ProviderInfo(
+      prefix: '61',
+      name: 'Hormuud',
+      color: Color(0xFF2ED573),
+      icon: Iconsax.mobile,
+    ),
+    ProviderInfo(
+      prefix: '68',
+      name: 'Somnet',
+      color: Color(0xFF3B82F6),
+      icon: Iconsax.wifi,
+    ),
+    ProviderInfo(
+      prefix: '90',
+      name: 'Golis',
+      color: Color(0xFFF59E0B),
+      icon: Iconsax.wallet,
+    ),
+    ProviderInfo(
+      prefix: '63',
+      name: 'Telisom',
+      color: Color(0xFF8B5CF6),
+      icon: Iconsax.money,
+    ),
+  ];
+
   @override
   void initState() {
     super.initState();
+
+    if (widget.user.name != null && widget.user.name!.isNotEmpty) {
+      nameController.text = widget.user.name!;
+    }
+
+    if (widget.user.profileImage != null &&
+        widget.user.profileImage!.isNotEmpty) {
+      _profileImageUrl = widget.user.profileImage;
+    }
+
+    // Pre-fill phone for OTP users
+    if (!widget.isGoogleSignIn && widget.user.phoneNumber.isNotEmpty) {
+      phoneController.text = widget.user.phoneNumber.replaceAll('+252', '');
+    }
+
     _fetchMarkets();
   }
 
   @override
   void dispose() {
     nameController.dispose();
+    phoneController.dispose();
+    phoneFocusNode.dispose();
     super.dispose();
+  }
+
+  // ✅ Provider detection helpers
+  String? _detectProvider(String phone) {
+    if (phone.length < 2) return null;
+    for (final provider in _providers) {
+      if (phone.startsWith(provider.prefix)) return provider.name;
+    }
+    return null;
+  }
+
+  Color? _getProviderColor(String phone) {
+    if (phone.length < 2) return null;
+    for (final provider in _providers) {
+      if (phone.startsWith(provider.prefix)) return provider.color;
+    }
+    return null;
   }
 
   Future<void> _fetchMarkets() async {
@@ -53,13 +139,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           'Authorization': 'Bearer ${widget.token}',
         },
       );
-
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final dynamic responseData = json.decode(response.body);
-
-        // Handle both array and paginated response
         List<dynamic> data;
         if (responseData is Map && responseData.containsKey('items')) {
           data = responseData['items'] as List<dynamic>;
@@ -72,8 +155,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         setState(() {
           _markets = data.cast<Map<String, dynamic>>();
           _loadingMarkets = false;
-
-          // Auto-select first market if only one available
           if (_markets.length == 1) {
             _selectedMarketId = _markets[0]['id'] as String?;
           }
@@ -84,15 +165,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingMarkets = false);
-      if (mounted) {
-        toastification.show(
-          context: context,
-          title: const Text('Error'),
-          description: Text('Failed to load markets: $e'),
-          type: ToastificationType.error,
-          autoCloseDuration: const Duration(seconds: 4),
-        );
-      }
+      toastification.show(
+        context: context,
+        title: const Text('Error'),
+        description: Text('Failed to load markets: $e'),
+        type: ToastificationType.error,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
     }
   }
 
@@ -107,11 +186,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     if (picked != null) {
       if (!mounted) return;
       setState(() => _uploading = true);
-
       try {
         final bytes = await picked.readAsBytes();
         final base64Image = base64Encode(bytes);
-
         if (!mounted) return;
         context.read<AuthBloc>().add(UploadProfileImageEvent(base64Image));
       } catch (e) {
@@ -125,6 +202,27 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         );
       }
     }
+  }
+
+  String? _validatePhone(String? value) {
+    if (!widget.isGoogleSignIn) return null;
+    if (value == null || value.isEmpty) return 'Phone number is required';
+
+    String cleaned = value.trim().replaceAll(RegExp(r'\s+'), '');
+    if (cleaned.length != 9) return 'Phone number must be 9 digits';
+
+    bool isValidPrefix = _providers.any((p) => cleaned.startsWith(p.prefix));
+    if (!isValidPrefix) return 'Must start with 61, 63, 68, or 90';
+
+    return null;
+  }
+
+  String _formatPhoneForApi(String phone) {
+    String cleaned = phone.trim().replaceAll(RegExp(r'\s+'), '');
+    if (cleaned.startsWith('+252')) return cleaned;
+    if (cleaned.startsWith('252')) return '+$cleaned';
+    if (cleaned.startsWith('0')) return '+252${cleaned.substring(1)}';
+    return '+252$cleaned';
   }
 
   void _submitProfile() {
@@ -141,11 +239,28 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       return;
     }
 
+    String? phoneNumber;
+    if (widget.isGoogleSignIn) {
+      final phoneText = phoneController.text.trim();
+      if (phoneText.isEmpty) {
+        toastification.show(
+          context: context,
+          title: const Text('Error'),
+          description: const Text('Phone number is required'),
+          type: ToastificationType.error,
+          autoCloseDuration: const Duration(seconds: 3),
+        );
+        return;
+      }
+      phoneNumber = _formatPhoneForApi(phoneText);
+    }
+
     context.read<AuthBloc>().add(
       CompleteProfileEvent(
         name: nameController.text.trim(),
         marketId: _selectedMarketId!,
         profileImageUrl: _profileImageUrl,
+        phoneNumber: phoneNumber,
       ),
     );
   }
@@ -155,7 +270,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Complete Profile'),
+        title: Text(
+          widget.isGoogleSignIn ? 'Complete Your Profile' : 'Complete Profile',
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
       ),
@@ -183,12 +300,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               type: ToastificationType.success,
               autoCloseDuration: const Duration(seconds: 3),
             );
-            // Navigate to home and clear the navigation stack
             Navigator.of(
               context,
             ).pushNamedAndRemoveUntil('/home', (route) => false);
           } else if (state is AuthError) {
             if (!mounted) return;
+            setState(() => _uploading = false);
             toastification.show(
               context: context,
               title: const Text('Error'),
@@ -196,7 +313,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               type: ToastificationType.error,
               autoCloseDuration: const Duration(seconds: 4),
             );
-            setState(() => _uploading = false);
           }
         },
         child: SingleChildScrollView(
@@ -206,13 +322,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 20),
-
-                // Profile Image Section
                 _buildProfileImageSection(),
-
                 const SizedBox(height: 32),
 
-                // Full Name Field
+                // Full Name
                 TextFormField(
                   controller: nameController,
                   decoration: _inputDecoration(
@@ -221,22 +334,24 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     'Enter your full name',
                   ),
                   validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return 'Name is required';
-                    }
-                    if (v.trim().length < 2) {
+                    if (v == null || v.isEmpty) return 'Name is required';
+                    if (v.trim().length < 2)
                       return 'Name must be at least 2 characters';
-                    }
                     return null;
                   },
                   textCapitalization: TextCapitalization.words,
                 ),
 
+                // ✅ Smart Phone Input - ONLY for Google users
+                if (widget.isGoogleSignIn) ...[
+                  const SizedBox(height: 20),
+                  _buildSmartPhoneInput(),
+                  const SizedBox(height: 8),
+                  _buildProviderDetection(),
+                ],
+
                 const SizedBox(height: 20),
-
-                // Market Selection Section
                 _buildMarketSelection(),
-
                 const SizedBox(height: 40),
 
                 // Submit Button
@@ -266,9 +381,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                                 ),
                               ),
                             )
-                          : const Text(
-                              'Complete Profile',
-                              style: TextStyle(
+                          : Text(
+                              widget.isGoogleSignIn
+                                  ? 'Save & Continue'
+                                  : 'Complete Profile',
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -276,12 +393,183 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     );
                   },
                 ),
-
                 const SizedBox(height: 20),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ✅ Smart phone input matching phone_input_screen style
+  Widget _buildSmartPhoneInput() {
+    final phone = phoneController.text;
+    final providerColor = _getProviderColor(phone);
+
+    return Container(
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: providerColor ?? const Color(0xFFE5E7EB),
+          width: providerColor != null ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:
+                providerColor?.withOpacity(0.2) ??
+                Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 8),
+                const Text(
+                  '+252',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Iconsax.arrow_down_1,
+                  size: 14,
+                  color: Color(0xFF9CA3AF),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(width: 1, height: 30, color: const Color(0xFFE5E7EB)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              controller: phoneController,
+              focusNode: phoneFocusNode,
+              keyboardType: TextInputType.phone,
+              maxLength: 9,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: _validatePhone,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: providerColor ?? const Color(0xFF1F2937),
+                letterSpacing: 1.2,
+              ),
+              decoration: InputDecoration(
+                hintText: '61 XXX XXXX',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF9CA3AF),
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.2,
+                ),
+                counterText: '',
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onChanged: (value) => setState(() {}),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Live provider detection indicator
+  Widget _buildProviderDetection() {
+    final phone = phoneController.text;
+    final detectedProvider = _detectProvider(phone);
+    final providerColor = _getProviderColor(phone);
+
+    if (phone.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Icon(Iconsax.info_circle, size: 14, color: Colors.grey.shade400),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Enter a phone number to detect your provider',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (detectedProvider != null && phone.length >= 2) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: providerColor?.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                _providers.firstWhere((p) => p.name == detectedProvider).icon,
+                size: 14,
+                color: providerColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '📱 $detectedProvider detected',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: providerColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (phone.length < 9)
+              Text(
+                '${phone.length}/9',
+                style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Icon(Iconsax.warning_2, size: 14, color: Colors.orange.shade400),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Please enter a valid Somali phone number',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.orange.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -424,44 +712,27 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           )
         else
           DropdownButtonFormField<String>(
-            value:
-                _selectedMarketId, // ✅ Fixed: using 'value' instead of 'initialValue'
+            value: _selectedMarketId,
             decoration: _inputDecoration(
               'Market *',
               Icons.location_city,
               'Select your market',
             ),
             items: _markets.map<DropdownMenuItem<String>>((market) {
-              final marketName = market['name'] ?? 'Unknown Market';
-              final city = market['city'];
-              final userCount =
-                  market['userCount'] ?? market['user_count'] ?? 0;
-
               return DropdownMenuItem<String>(
                 value: market['id'] as String,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      marketName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  market['name'] ?? 'Unknown Market',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               );
             }).toList(),
-            onChanged: (value) {
-              setState(() => _selectedMarketId = value);
-            },
-            validator: (v) {
-              if (v == null || v.isEmpty) {
-                return 'Please select a market';
-              }
-              return null;
-            },
+            onChanged: (value) => setState(() => _selectedMarketId = value),
+            validator: (v) =>
+                (v == null || v.isEmpty) ? 'Please select a market' : null,
             dropdownColor: Colors.white,
             icon: const Icon(Icons.keyboard_arrow_down_rounded),
             isExpanded: true,
@@ -488,7 +759,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Market wuxuu noqon doonaa goobta laguugu keeni doono alaabtaada. Waxaad ka beddeli kartaa Settings-ka haddii aad rabto',
+                    'Market wuxuu noqon doonaa goobta laguugu keeni doono alaabtaada.',
                     style: TextStyle(color: Colors.grey[700], fontSize: 12),
                   ),
                 ),

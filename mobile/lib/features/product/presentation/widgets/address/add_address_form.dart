@@ -1,5 +1,3 @@
-// lib/features/product/presentation/widgets/add_address_form.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -123,7 +121,12 @@ class _AddAddressFormState extends State<AddAddressForm> {
   }
 
   void _navigateToCheckout(Address address) {
-    if (!widget.navigateToCheckout || widget.availableMarkets == null) return;
+    if (!widget.navigateToCheckout ||
+        widget.availableMarkets == null ||
+        widget.availableMarkets!.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
 
     Widget checkoutScreen;
 
@@ -145,30 +148,20 @@ class _AddAddressFormState extends State<AddAddressForm> {
         savedAddress: address,
       );
     } else {
-      checkoutScreen = CheckoutScreen(
-        availableMarkets: widget.availableMarkets!,
-        userMarketId: widget.userMarketId,
-        savedAddress: address,
-      );
+      Navigator.of(context).pop();
+      return;
     }
 
-    // 1. Save the navigator reference before the context is unmounted
-    final navigator = Navigator.of(context);
+    // ✅ INSTANT NAVIGATION: Use Root Navigator to pop BOTH modals and push Checkout
+    final rootNav = Navigator.of(context, rootNavigator: true);
 
-    // 2. Pop the AddAddressForm modal
-    navigator.pop();
+    // 1. Pop AddAddressForm instantly
+    rootNav.pop();
 
-    // 3. Wait for the frame to complete, then pop AddressSelectionModal
+    // 2. In the very next microsecond, pop AddressSelectionModal and push Checkout
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Pop AddressSelectionModal so the user doesn't have to select the address again
-      if (navigator.canPop()) {
-        navigator.pop();
-      }
-
-      // 4. Navigate to checkout after a short delay for a smooth transition
-      Future.delayed(const Duration(milliseconds: 300), () {
-        navigator.push(MaterialPageRoute(builder: (context) => checkoutScreen));
-      });
+      rootNav.pop(); // Pops AddressSelectionModal
+      rootNav.push(MaterialPageRoute(builder: (context) => checkoutScreen));
     });
   }
 
@@ -176,13 +169,9 @@ class _AddAddressFormState extends State<AddAddressForm> {
   Widget build(BuildContext context) {
     return BlocListener<AddressBloc, AddressState>(
       listener: (context, state) {
-        // ✅ Listen ONLY for AddressAdded state
         if (state is AddressAdded) {
-          print(
-            '🎯 [AddAddressForm] AddressAdded received, navigating to checkout',
-          );
+          print('🎯 [AddAddressForm] AddressAdded received');
 
-          // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Address added successfully!'),
@@ -194,10 +183,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
           if (widget.navigateToCheckout) {
             _navigateToCheckout(state.address);
           } else {
+            // ✅ CRITICAL FIX: Safety check to prevent crashes on disposal
+            if (!mounted) return;
             setState(() => _isSubmitting = false);
             Navigator.pop(context);
           }
         } else if (state is AddressError) {
+          if (!mounted) return;
           setState(() => _isSubmitting = false);
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -207,7 +199,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
             ),
           );
         }
-        // ✅ Ignore other states like AddressLoading, AddressesLoaded
       },
       child: Container(
         height: _getModalHeight(),

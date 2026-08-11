@@ -55,7 +55,7 @@ class SupportLocalization {
       : 'Failed to load FAQs';
 
   String get phoneNumber => '2701';
-  String get email => 'support@farxada.com';
+  String get email => ' info@farxada.com';
 }
 
 // Extension for easy access

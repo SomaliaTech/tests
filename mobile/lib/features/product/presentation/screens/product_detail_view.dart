@@ -1,4 +1,3 @@
-// lib/features/product/presentation/screens/product_detail_view.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -184,7 +183,42 @@ class _ProductDetailViewState extends State<ProductDetailView> {
     if (changed) setState(() {});
   }
 
+  // ✅ HELPER: Get the currently selected variant
+  // ✅ HELPER: Get the currently selected variant
+  ProductVariant? _getSelectedVariant(Product product) {
+    if (product.variants.isEmpty) return null;
+
+    // ✅ FIX: If user cleared selection, return null to show base price
+    if (selectedColor == null && selectedSize == null) {
+      return null;
+    }
+
+    try {
+      return product.variants.firstWhere((v) {
+        final colorMatch =
+            selectedColor == null || v.colorName == selectedColor;
+        final sizeMatch = selectedSize == null || v.sizeName == selectedSize;
+        return colorMatch && sizeMatch;
+      });
+    } catch (_) {
+      // No exact match found for current partial selection
+      return null;
+    }
+  }
+
+  // ✅ HELPER: Get the dynamic price based on selected variant
+  double _getCurrentPrice(Product product) {
+    final variant = _getSelectedVariant(product);
+    if (variant != null && variant.price != null && variant.price! > 0) {
+      return variant.price!;
+    }
+    return product.price;
+  }
+
   void _toggleWishlist(Product product) {
+    final currentPrice = _getCurrentPrice(product);
+    final variant = _getSelectedVariant(product);
+
     if (_isInWishlist) {
       context.read<WishlistBloc>().add(RemoveFromWishlistEvent(product.id));
       _showSuccessToast(
@@ -193,27 +227,19 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       );
       setState(() => _isInWishlist = false);
     } else {
-      String variantId = '';
-      if (product.variants.isNotEmpty) {
-        final variant = product.variants.firstWhere(
-          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
-          orElse: () => product.variants.first,
-        );
-        variantId = variant.id;
-      }
       context.read<WishlistBloc>().add(
         AddToWishlistEvent(
           WishlistItem(
             id: product.id,
             name: product.name,
-            price: product.price,
+            price: currentPrice, // ✅ USE DYNAMIC PRICE
             imageUrl: product.imageUrls.isNotEmpty
                 ? product.imageUrls.first
                 : '',
             brand: product.brand,
             rating: product.rating,
             categoryId: product.categoryId,
-            productVariantId: variantId,
+            productVariantId: variant?.id ?? '',
           ),
         ),
       );
@@ -227,16 +253,12 @@ class _ProductDetailViewState extends State<ProductDetailView> {
 
   bool _isProductInStock(Product product) {
     if (product.variants.isEmpty) return product.stock > 0;
-    if (selectedColor != null || selectedSize != null) {
-      try {
-        final v = product.variants.firstWhere(
-          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
-        );
-        return (v.stock ?? 0) > 0;
-      } catch (_) {
-        return product.variants.any((v) => (v.stock ?? 0) > 0);
-      }
+
+    final variant = _getSelectedVariant(product);
+    if (variant != null) {
+      return (variant.stock ?? 0) > 0;
     }
+
     return product.variants.any((v) => (v.stock ?? 0) > 0) || product.stock > 0;
   }
 
@@ -245,45 +267,51 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       : '${selectedColor ?? ''} ${selectedSize ?? ''}'.trim();
 
   void _addToCart(Product product) {
-    ProductVariant? variant;
+    ProductVariant? variant = _getSelectedVariant(product);
     int availableStock = product.stock;
-    double price = product.price;
+    double price = _getCurrentPrice(product);
     bool autoSelected = false;
+
     if (product.variants.isNotEmpty) {
-      if (selectedColor == null &&
-          product.colors != null &&
-          product.colors.isNotEmpty) {
-        selectedColor = product.colors.first;
-        autoSelected = true;
-      }
-      if (selectedSize == null &&
-          product.sizes != null &&
-          product.sizes.isNotEmpty) {
-        selectedSize = product.sizes.first;
-        autoSelected = true;
-      }
-      try {
-        variant = product.variants.firstWhere(
-          (v) => v.colorName == selectedColor && v.sizeName == selectedSize,
-        );
-        availableStock = variant.stock ?? 0;
-        price = variant.price ?? product.price;
-      } catch (_) {
-        if (product.variants.isNotEmpty) {
+      if (variant == null) {
+        if (selectedColor == null &&
+            product.colors != null &&
+            product.colors.isNotEmpty) {
+          selectedColor = product.colors.first;
+          autoSelected = true;
+        }
+        if (selectedSize == null &&
+            product.sizes != null &&
+            product.sizes.isNotEmpty) {
+          selectedSize = product.sizes.first;
+          autoSelected = true;
+        }
+
+        if (autoSelected) {
+          setState(() {});
+          variant = _getSelectedVariant(product);
+        } else {
           variant = product.variants.first;
-          availableStock = variant.stock ?? 0;
-          price = variant.price ?? product.price;
           selectedColor = variant.colorName;
           selectedSize = variant.sizeName;
           autoSelected = true;
+          setState(() {});
         }
       }
-      if (autoSelected)
+
+      availableStock = variant?.stock ?? 0;
+      price = (variant?.price != null && variant!.price! > 0)
+          ? variant.price!
+          : product.price;
+
+      if (autoSelected) {
         _showInfoToast(
           'Auto-Selected',
           'Selected: ${variant?.colorName ?? selectedColor} ${variant?.sizeName ?? selectedSize}',
         );
+      }
     }
+
     if (availableStock <= 0) {
       _showWarningToast(
         'Out of Stock',
@@ -297,6 +325,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       _showWarningToast('Insufficient Stock', 'Only $availableStock available');
       return;
     }
+
     context.read<CartBloc>().add(
       AddToCartEvent(
         CartItem(
@@ -305,7 +334,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           productVariantId: variant?.id ?? '',
           name: product.name,
           imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
-          price: price,
+          price: price, // ✅ USE DYNAMIC PRICE
           quantity: quantity,
           maxStock: availableStock,
           inStock: availableStock > 0,
@@ -343,10 +372,17 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   );
 
   void _proceedToCheckout() async {
+    if (_availableMarkets.isEmpty) {
+      _showLoadingDialog();
+      await _loadMarketsAndUserMarket();
+      if (mounted) Navigator.of(context).pop();
+    }
+
     if (_selectedAddress != null) {
       _showCheckoutScreen();
       return;
     }
+
     if (_isLoadingAddresses) {
       _showLoadingDialog();
       final start = DateTime.now();
@@ -361,21 +397,21 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         return;
       }
     }
+
     _showAddressSelection();
   }
 
-  void _showLoadingDialog() => showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const Center(
-      child: CircularProgressIndicator(color: Color(0xFF2ED573)),
-    ),
-  );
   void _showAddressSelection() => showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => AddressSelectionModal(
+      availableMarkets: _availableMarkets,
+      userMarketId: _userMarketId,
+      product: _currentProduct,
+      selectedColor: selectedColor,
+      selectedSize: selectedSize,
+      quantity: quantity,
       onAddressSelected: (a) {
         Navigator.pop(ctx);
         if (!mounted) return;
@@ -386,6 +422,15 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       },
     ),
   );
+
+  void _showLoadingDialog() => showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const Center(
+      child: CircularProgressIndicator(color: Color(0xFF2ED573)),
+    ),
+  );
+
   void _showCheckoutScreen() {
     if (!mounted || _currentProduct == null || _selectedAddress == null) return;
     if (_availableMarkets.isEmpty) {
@@ -495,7 +540,11 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                     onImageChanged: (i) =>
                                         setState(() => selectedImageIndex = i),
                                   ),
-                                  ProductInfo(product: p),
+                                  // ✅ PASS DYNAMIC PRICE
+                                  ProductInfo(
+                                    product: p,
+                                    currentPrice: _getCurrentPrice(p),
+                                  ),
                                   const SizedBox(height: 8),
                                   if (p.variants.isNotEmpty &&
                                       (selectedColor != null ||
@@ -542,6 +591,9 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                         right: 0,
                         child: BottomActionBar(
                           productName: p.name,
+                          currentPrice: _getCurrentPrice(
+                            p,
+                          ), // ✅ PASS DYNAMIC PRICE
                           isInStock: _isProductInStock(p),
                           isInWishlist: _isInWishlist,
                           isAdmin: _isAdmin,

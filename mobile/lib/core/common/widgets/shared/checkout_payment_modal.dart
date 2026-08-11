@@ -237,7 +237,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
-  // ✅ Updated _processPayment - validates phone and shows error in UI
+  // In checkout_screen.dart - Update _processPayment method
   void _processPayment() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -252,40 +252,35 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final phone = _phoneController.text.trim();
     final cleanPhone = PhoneUtils.cleanPhoneNumber(phone);
 
-    // Check if phone is empty or has less than 7 digits
     if (phone.isEmpty || cleanPhone.length < 7) {
-      // ✅ Show error in the UI below the input field
       final errorMessage = phone.isEmpty
           ? 'Fadlan geli lambarka taleefanka'
-          : 'Lambarka taleefanka waa inuu ka kooban yahay ugu yaraan 7 lambar (waxaad haysaa ${cleanPhone.length})';
-
-      // Call the showError method on the AddressSection
+          : 'Lambarka taleefanka waa inuu ka kooban yahay ugu yaraan 7 lambar';
       _addressSectionKey.currentState?.showError(errorMessage);
-
-      // Scroll to the error
       _scrollToAddressSection();
       return;
     }
 
-    // Check if phone matches the selected provider
+    // ✅ Check if phone matches the selected provider
     if (_selectedPaymentMethod != null) {
       try {
         final method = _paymentMethods.firstWhere(
           (m) => m.id == _selectedPaymentMethod,
         );
-        final isValid = PhoneUtils.matchesProvider(
-          _phoneController.text,
-          method.prefix,
-        );
-        if (!isValid) {
-          // ✅ Show error in the UI below the input field
-          final errorMessage = 'Waa inuu ku bilaabmaa +252 ${method.prefix}';
-          _addressSectionKey.currentState?.showError(errorMessage);
-          _scrollToAddressSection();
-          return;
+        if (method.prefix.isNotEmpty) {
+          final isValid = PhoneUtils.matchesProvider(
+            _phoneController.text,
+            method.prefix,
+          );
+          if (!isValid) {
+            final errorMessage = 'Waa inuu ku bilaabmaa +252 ${method.prefix}';
+            _addressSectionKey.currentState?.showError(errorMessage);
+            _scrollToAddressSection();
+            return;
+          }
         }
       } catch (e) {
-        // Method not found, proceed with caution
+        // Method not found, proceed
       }
     }
 
@@ -341,11 +336,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _executePayment();
   }
 
+  // In checkout_screen.dart - Simplified _executePayment method
   void _executePayment() {
     setState(() => _isProcessing = true);
 
     final formattedPhone = PhoneUtils.formatPhoneForApi(_phoneController.text);
 
+    // ✅ Single order data with payment info included
     final orderData = {
       'items': _orderItems,
       'shippingAddress': {
@@ -353,9 +350,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'fullAddress': _addressController.text,
         'phoneNumber': formattedPhone,
       },
-      'paymentMethod': _selectedPaymentMethod,
+      'paymentMethod': _selectedPaymentMethod ?? 'evc_plus',
+      'phoneNumber': formattedPhone, // ✅ For WaafiPay payment
       'deliveryFee': _deliveryFee,
     };
+
+    // ✅ Single event - backend handles order creation + payment
     context.read<OrderBloc>().add(CreateOrderEvent(orderData));
   }
 
@@ -380,30 +380,38 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
         centerTitle: true,
       ),
-      body: BlocListener<OrderBloc, OrderState>(
+      body: // In checkout_screen.dart - Update BlocListener
+      BlocListener<OrderBloc, OrderState>(
         listener: (context, state) {
-          if (state is OrderCreated) {
-            _createdOrderId = state.order.id;
-            final phoneNumber = _selectedPaymentMethod == 'cash_on_delivery'
-                ? null
-                : PhoneUtils.formatPhoneForApi(_phoneController.text);
-
-            context.read<OrderBloc>().add(
-              ProcessPaymentEvent(
-                orderId: state.order.id,
-                paymentMethod: _selectedPaymentMethod!,
-                phoneNumber: phoneNumber,
-              ),
-            );
-          } else if (state is PaymentProcessed) {
+          if (state is PaymentProcessed) {
             setState(() => _isProcessing = false);
             if (widget.isCartCheckout && mounted) {
               context.read<CartBloc>().add(ClearCartEvent());
             }
-            _navigateToSuccess(_createdOrderId ?? 'N/A');
-          } else if (state is OrderError) {
+            final orderId = state.paymentResult['order']?['id'] ?? '';
+            if (orderId.isNotEmpty) _navigateToSuccess(orderId);
+          } else if (state is OrderCreated) {
             setState(() => _isProcessing = false);
-            _navigateToFailed(state.message);
+            if (widget.isCartCheckout && mounted) {
+              context.read<CartBloc>().add(ClearCartEvent());
+            }
+            final orderId = state.order['id'] as String? ?? '';
+            _navigateToSuccess(orderId);
+          } else if (state is OrderError) {
+            // ✅ ADD THIS BLOCK
+            setState(() => _isProcessing = false); // ✅ Stop the loading spinner
+
+            // Show user-friendly error instead of raw backend message
+            String userMessage = state.message;
+            if (state.message.contains('not authorized') ||
+                state.message.contains('E10015')) {
+              userMessage =
+                  'Payment service is currently unavailable. Please try again later or use a different payment method.';
+            }
+
+            _showPaymentErrorDialog(
+              userMessage,
+            ); // ✅ Reuse your existing dialog
           }
         },
         child: Form(
@@ -533,6 +541,73 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             if (mounted) Navigator.of(context).pop();
           },
         ),
+      ),
+    );
+  }
+
+  void _showPaymentErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Iconsax.warning_2,
+                color: Color(0xFFEF4444),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Payment Failed',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Color(0xFF6B7280)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Go back to checkout
+            },
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0xFF6B7280)),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // Retry payment
+              _executePayment();
+            },
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFF2ED573),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            ),
+            child: const Text(
+              'Try Again',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

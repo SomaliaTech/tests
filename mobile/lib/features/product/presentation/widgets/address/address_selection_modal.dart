@@ -1,5 +1,3 @@
-// lib/features/product/presentation/widgets/address_selection_modal.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -49,6 +47,16 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
     _addressBloc = sl<AddressBloc>()..add(LoadAddressesEvent());
   }
 
+  @override
+  void dispose() {
+    // Only close if registered as factory in your DI container.
+    // If it's a singleton/lazySingleton, remove this line.
+    try {
+      _addressBloc.close();
+    } catch (_) {}
+    super.dispose();
+  }
+
   void _selectAddressAndClose(Address address) {
     Navigator.pop(context);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -57,7 +65,6 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   }
 
   void _navigateToCheckout(Address address) {
-    // Close the modal
     Navigator.pop(context);
 
     Widget checkoutScreen;
@@ -136,6 +143,8 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
 
   Widget _buildAddressList() {
     return BlocBuilder<AddressBloc, AddressState>(
+      // ✅ CRITICAL FIX: Ignore AddressAdded so the list doesn't flash blank/disappear
+      buildWhen: (previous, current) => current is! AddressAdded,
       builder: (context, state) {
         if (state is AddressLoading) {
           return const Center(
@@ -307,7 +316,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   Widget _buildAddButton() {
     return Container(
       padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 50),
+      margin: const EdgeInsets.only(bottom: 40),
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: Color(0xFFEEEEEE))),
       ),
@@ -340,8 +349,10 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: AddAddressForm(
+          // ✅ FIX 3: Force true if we have markets
           navigateToCheckout:
-              false, // ✅ Set to false so it just closes the form
+              widget.availableMarkets != null &&
+              widget.availableMarkets!.isNotEmpty,
           availableMarkets: widget.availableMarkets,
           userMarketId: widget.userMarketId,
           product: widget.product,
@@ -349,14 +360,9 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           selectedSize: widget.selectedSize,
           quantity: widget.quantity,
           cartItems: widget.cartItems,
-          onAddressAdded: (address) {
-            // Optional: You can leave this empty
-          },
+          onAddressAdded: (address) {},
         ),
       ),
-    ).then((_) {
-      // ✅ Reload the address list when the form closes so the new address appears
-      _addressBloc.add(LoadAddressesEvent());
-    });
+    );
   }
 }

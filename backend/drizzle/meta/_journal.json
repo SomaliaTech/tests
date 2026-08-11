@@ -127,6 +127,13 @@
       "when": 1785302661131,
       "tag": "0017_striped_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786352009256,
+      "tag": "0018_ambitious_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

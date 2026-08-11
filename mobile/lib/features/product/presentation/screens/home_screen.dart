@@ -1,11 +1,18 @@
-// lib/features/product/presentation/screens/home_screen.dart
 import 'package:flutter/material.dart';
+import 'package:mobile/features/product/presentation/widgets/home/latest_products_section.dart';
 import 'package:provider/provider.dart';
 import 'package:mobile/core/services/connectivity_service.dart';
 import 'package:mobile/features/product/presentation/screens/search_results_screen.dart';
+
+// BLoC imports
 import '../blocs/product_bloc.dart';
 import '../blocs/product_event.dart';
+import '../blocs/banner/banner_bloc.dart'; // ✅ Added
+import '../blocs/banner/banner_event.dart'; // ✅ Added
+
+// Widget imports
 import '../widgets/home/header.dart';
+import '../widgets/home/banners_carousel.dart'; // ✅ Added
 import '../widgets/home/categories_section.dart';
 import '../widgets/home/hot_deals_section.dart';
 
@@ -22,9 +29,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Initial load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductBloc>().add(const GetFeaturedProductsEvent());
+      context.read<BannerBloc>().add(
+        const LoadBannersEvent(),
+      ); // ✅ Added: Load banners
     });
   }
 
@@ -36,12 +45,15 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, connectivity, _) {
           final isOnline = connectivity.status == ConnectionStatus.online;
 
-          // ✅ Auto-refresh when internet comes back - HERE
+          // Auto-refresh when internet comes back
           if (isOnline && _wasOffline) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               context.read<ProductBloc>().add(
-                const GetFeaturedProductsEvent(forceRefresh: true), // ✅ HERE
+                const GetFeaturedProductsEvent(forceRefresh: true),
               );
+              context.read<BannerBloc>().add(
+                const LoadBannersEvent(),
+              ); // ✅ Added: Refresh banners too
             });
           }
           _wasOffline = !isOnline;
@@ -66,9 +78,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   physics: const BouncingScrollPhysics(),
                   padding: EdgeInsets.zero,
                   children: const [
+                    BannersCarousel(),
+                    SizedBox(height: 16),
                     CategoriesSection(),
                     SizedBox(height: 16),
                     HotDealsSection(),
+                    SizedBox(height: 16),
+                    LatestProductsSection(), // ✅ Added here
                     SizedBox(height: 100),
                   ],
                 ),

@@ -13,7 +13,8 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { NotificationsService } from '../notifications/notifications.service';
-
+import { OAuth2Client } from 'google-auth-library';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 interface User {
   id: string;
   phoneNumber: string;
@@ -32,14 +33,17 @@ interface User {
 
 @Injectable()
 export class AuthService {
+  private googleClient: OAuth2Client;
   constructor(
     private jwtService: JwtService,
-    private configService: ConfigService,
     private drizzle: DrizzleService,
     private cloudflareService: CloudflareService,
     private supabaseService: SupabaseService,
     private notificationsService: NotificationsService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.googleClient = new OAuth2Client(configService.get('GOOGLE_CLIENT_ID'));
+  }
   // auth.service.ts - Updated sendOtp method
 
   async sendOtp(phoneNumber: string) {
@@ -131,6 +135,109 @@ export class AuthService {
       message: 'OTP sent successfully',
       debugOtp: otpCode,
     };
+  }
+
+  // src/auth/auth.service.ts - Replace the googleSignIn method with this
+
+  async googleSignIn(dto: GoogleAuthDto) {
+    try {
+      // Verify the Google ID token
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: dto.idToken,
+        audience: this.configService.get('GOOGLE_CLIENT_ID'),
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedException('Invalid Google token');
+      }
+
+      // Check if user exists by email
+      let user = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.email, dto.email))
+        .limit(1);
+
+      if (user.length === 0) {
+        // Create new user with required phoneNumber field (empty string as placeholder)
+        const newUser = {
+          id: uuidv4(),
+          phoneNumber: '', // ✅ Required field - empty string for Google users
+          email: dto.email,
+          name: dto.name,
+          profileImage: dto.photoUrl || null,
+          isVerified: true,
+          isAdmin: false,
+          isSuperAdmin: false,
+          isActive: true,
+          isOnline: false,
+          marketId: null,
+          otpCode: null,
+          otpExpiresAt: null,
+          lastSeen: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        await this.drizzle.db.insert(users).values(newUser);
+        user = [newUser as any]; // Type assertion to match User interface
+      } else {
+        // Update existing user
+        await this.drizzle.db
+          .update(users)
+          .set({
+            name: dto.name,
+            profileImage: dto.photoUrl || user[0].profileImage,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.email, dto.email));
+
+        // Refetch updated user
+        user = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.email, dto.email))
+          .limit(1);
+      }
+
+      const currentUser = user[0];
+      const hasProfile = !!(
+        currentUser.name &&
+        currentUser.name.trim().length > 0 &&
+        currentUser.marketId // ✅ Check if marketId exists too
+      );
+
+      const token = this.generateToken(
+        currentUser.id,
+        currentUser.phoneNumber || '',
+        currentUser.isAdmin ?? false,
+        currentUser.isSuperAdmin ?? false,
+      );
+
+      // ✅ Don't send empty phoneNumber to the client
+      return {
+        token,
+        user: {
+          id: currentUser.id,
+          phoneNumber: currentUser.phoneNumber || null, // ✅ Send null if empty
+          email: currentUser.email,
+          name: currentUser.name,
+          profileImage: currentUser.profileImage,
+          marketId: currentUser.marketId,
+          isVerified: currentUser.isVerified,
+          hasProfile: hasProfile,
+          isAdmin: currentUser.isAdmin ?? false,
+          isSuperAdmin: currentUser.isSuperAdmin ?? false,
+        },
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Google sign in error:', error);
+      throw new UnauthorizedException('Google authentication failed');
+    }
   }
 
   async verifyOtp(phoneNumber: string, otpCode: string) {
@@ -236,11 +343,14 @@ export class AuthService {
     }
   }
 
+  // src/auth/auth.service.ts - Update the completeProfile method
+
   async completeProfile(
     userId: string,
     data: {
       name: string;
       marketId: string;
+      phoneNumber?: string; // ✅ Add phone number for Google users
       profileImage?: string;
     },
   ) {
@@ -249,6 +359,26 @@ export class AuthService {
 
     if (!data.name || !data.marketId) {
       throw new BadRequestException('Name and market are required');
+    }
+
+    // ✅ For Google users, phone number is also required
+    // Check if user exists and has empty phone number (Google user)
+    const [existingUser] = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (
+      existingUser &&
+      (!existingUser.phoneNumber || existingUser.phoneNumber.trim() === '')
+    ) {
+      // This is a Google user - phone number is required
+      if (!data.phoneNumber || data.phoneNumber.trim() === '') {
+        throw new BadRequestException(
+          'Phone number is required for Google sign-in users',
+        );
+      }
     }
 
     const marketResult = await this.drizzle.db
@@ -271,6 +401,41 @@ export class AuthService {
       isVerified: true,
       updatedAt: new Date(),
     };
+
+    // ✅ Save phone number if provided (for Google users)
+    if (data.phoneNumber && data.phoneNumber.trim().length > 0) {
+      // Validate Somali phone number format
+      const cleanedPhone = data.phoneNumber.trim();
+      const validPrefixes = ['61', '68', '90', '63'];
+      let isValid = false;
+
+      for (const prefix of validPrefixes) {
+        if (
+          cleanedPhone.startsWith('+252' + prefix) ||
+          cleanedPhone.startsWith(prefix)
+        ) {
+          isValid = true;
+          break;
+        }
+      }
+
+      if (!isValid) {
+        throw new BadRequestException('Invalid Somali phone number format');
+      }
+
+      // Format to +252 if needed
+      let formattedPhone = cleanedPhone;
+      if (!formattedPhone.startsWith('+252')) {
+        if (formattedPhone.startsWith('0')) {
+          formattedPhone = '+252' + formattedPhone.substring(1);
+        } else {
+          formattedPhone = '+252' + formattedPhone;
+        }
+      }
+
+      updateData.phoneNumber = formattedPhone;
+      console.log('📱 Phone number updated:', formattedPhone);
+    }
 
     if (data.profileImage) {
       try {
@@ -298,12 +463,13 @@ export class AuthService {
     }
 
     console.log('✅ Profile completed successfully');
+    console.log('📱 Final phone number:', updatedUser.phoneNumber);
 
     const token = this.jwtService.sign({
       sub: updatedUser.id,
       phoneNumber: updatedUser.phoneNumber,
       isAdmin: updatedUser.isAdmin ?? false,
-      isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
+      isSuperAdmin: updatedUser.isSuperAdmin ?? false,
     });
 
     await this.notificationsService.createSystemNotification(
@@ -319,12 +485,13 @@ export class AuthService {
         id: updatedUser.id,
         name: updatedUser.name,
         phoneNumber: updatedUser.phoneNumber,
+        email: updatedUser.email,
         profileImage: updatedUser.profileImage,
         marketId: updatedUser.marketId,
         isVerified: updatedUser.isVerified,
         hasProfile: true,
         isAdmin: updatedUser.isAdmin ?? false,
-        isSuperAdmin: updatedUser.isSuperAdmin ?? false, // ✅ ADD THIS
+        isSuperAdmin: updatedUser.isSuperAdmin ?? false,
       },
     };
   }

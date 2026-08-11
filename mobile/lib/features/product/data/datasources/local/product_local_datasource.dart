@@ -16,14 +16,45 @@ abstract class ProductLocalDataSource {
   Future<Product?> getCachedProduct(String productId);
   Future<void> cacheProduct(Product product);
   Future<void> clearCache();
+  Future<List<Product>> getCachedLatestProducts();
+  Future<void> cacheLatestProducts(List<Product> products);
 }
 
 class ProductLocalDataSourceImpl implements ProductLocalDataSource {
   static const String _productBox = 'product_cache';
   static const String _featuredKey = 'featured_products';
+  static const String _latestKey =
+      'latest_products'; // ✅ Consistent naming with _featuredKey
 
-  // ✅ Use Hive.box() instead of openBox() since box is already open
   Box<String> get _box => Hive.box<String>(_productBox);
+
+  // ✅ FIXED: Use Hive instead of non-existent sharedPreferences
+  @override
+  Future<List<Product>> getCachedLatestProducts() async {
+    try {
+      final jsonString = _box.get(_latestKey);
+      if (jsonString != null) {
+        final List<dynamic> jsonList = json.decode(jsonString);
+        return jsonList
+            .map((json) => ProductModel.fromJson(json as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('❌ Error reading cached latest products: $e');
+    }
+    return [];
+  }
+
+  // ✅ FIXED: Use Hive and reuse _productToJson helper
+  @override
+  Future<void> cacheLatestProducts(List<Product> products) async {
+    try {
+      final jsonList = products.map((p) => _productToJson(p)).toList();
+      await _box.put(_latestKey, json.encode(jsonList));
+    } catch (e) {
+      debugPrint('❌ Error caching latest products: $e');
+    }
+  }
 
   @override
   Future<List<Product>> getCachedFeaturedProducts() async {

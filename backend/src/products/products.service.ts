@@ -277,7 +277,33 @@ export class ProductsService {
     this.logger.log(`Uploaded base64 image for product ${productId}`);
     return image;
   }
+  async getLatestProducts(limit: number = 10) {
+    const productsList = await this.drizzle.db.query.products.findMany({
+      where: eq(products.isActive, true),
+      orderBy: [desc(products.createdAt), desc(products.id)], // ✅ Sort by newest
+      limit: Math.min(limit, 50),
+      with: {
+        category: true,
+        images: {
+          orderBy: [desc(mediaAssets.isMain), desc(mediaAssets.order)],
+        },
+      },
+      extras: this._reviewStatsExtras,
+    });
 
+    // Batch load variants just like in getFeaturedProducts
+    const productIds = productsList.map((p) => p.id);
+    if (productIds.length > 0) {
+      const variantsMap = await this.variantsLoader.loadMany(productIds);
+
+      return productsList.map((product, index) => ({
+        ...product,
+        variants: Array.isArray(variantsMap[index]) ? variantsMap[index] : [],
+      }));
+    }
+
+    return productsList;
+  }
   // ==========================================
   // VARIANT MANAGEMENT
   // ==========================================

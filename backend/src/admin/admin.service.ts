@@ -1985,38 +1985,30 @@ export class AdminService {
     const product = await this.drizzle.db.query.products.findFirst({
       where: eq(products.id, productId),
     });
-
     if (!product) throw new NotFoundException('Product not found');
 
     // ✅ Use transaction for all database operations
     await this.drizzle.db.transaction(async (tx) => {
       // 1. Update basic product info
-      if (
-        updateData.name !== undefined ||
-        updateData.price !== undefined ||
-        updateData.stock !== undefined
-      ) {
-        const updateValues: Record<string, unknown> = { updatedAt: new Date() };
-        if (updateData.name !== undefined) updateValues.name = updateData.name;
-        if (updateData.description !== undefined)
-          updateValues.description = updateData.description;
-        if (updateData.price !== undefined)
-          updateValues.price = updateData.price.toString();
-        if (updateData.stock !== undefined)
-          updateValues.stock = updateData.stock;
-        if (updateData.categoryId !== undefined)
-          updateValues.categoryId = updateData.categoryId;
-        if (updateData.brand !== undefined)
-          updateValues.brand = updateData.brand;
-        if (updateData.tags !== undefined) updateValues.tags = updateData.tags;
-        if (updateData.isActive !== undefined)
-          updateValues.isActive = updateData.isActive;
+      const updateValues: Record<string, unknown> = { updatedAt: new Date() };
 
-        await tx
-          .update(products)
-          .set(updateValues)
-          .where(eq(products.id, productId));
-      }
+      if (updateData.name !== undefined) updateValues.name = updateData.name;
+      if (updateData.description !== undefined)
+        updateValues.description = updateData.description;
+      if (updateData.price !== undefined)
+        updateValues.price = updateData.price.toString();
+      if (updateData.stock !== undefined) updateValues.stock = updateData.stock;
+      if (updateData.categoryId !== undefined)
+        updateValues.categoryId = updateData.categoryId;
+      if (updateData.brand !== undefined) updateValues.brand = updateData.brand;
+      if (updateData.tags !== undefined) updateValues.tags = updateData.tags;
+      if (updateData.isActive !== undefined)
+        updateValues.isActive = updateData.isActive;
+
+      await tx
+        .update(products)
+        .set(updateValues)
+        .where(eq(products.id, productId));
 
       // 2. Delete images marked for deletion
       if (updateData.deleted_image_ids?.length > 0) {
@@ -2042,15 +2034,32 @@ export class AdminService {
           .where(inArray(mediaAssets.id, updateData.deleted_image_ids));
       }
 
-      // 3. ✅ FORCE DELETE variants (skip order history check)
+      // 3. ✅ SAFE DELETE variants (Handle foreign key constraints)
       if (updateData.deleted_variant_ids?.length > 0) {
         console.log(
-          `🗑️ Force deleting ${updateData.deleted_variant_ids.length} variants`,
+          `🗑️ Attempting to delete ${updateData.deleted_variant_ids.length} variants`,
         );
-
-        await tx
-          .delete(productVariants)
-          .where(inArray(productVariants.id, updateData.deleted_variant_ids));
+        try {
+          await tx
+            .delete(productVariants)
+            .where(inArray(productVariants.id, updateData.deleted_variant_ids));
+        } catch (error: any) {
+          // Postgres error 23503 = foreign_key_violation (variant already ordered)
+          if (error.code === '23503') {
+            console.warn(
+              '⚠️ Cannot delete variant(s) because they have existing orders. Setting stock to 0 instead.',
+            );
+            // Fallback: just set stock to 0 so it can't be purchased anymore
+            await tx
+              .update(productVariants)
+              .set({ stock: 0, updatedAt: new Date() })
+              .where(
+                inArray(productVariants.id, updateData.deleted_variant_ids),
+              );
+          } else {
+            throw error; // Re-throw if it's a different error
+          }
+        }
       }
 
       // 4. Update existing variants
@@ -2058,13 +2067,15 @@ export class AdminService {
         console.log(
           `✏️ Updating ${updateData.existing_variants.length} variants`,
         );
-
         for (const variant of updateData.existing_variants) {
+          // ✅ CRITICAL FIX: Check both variantId AND id to support frontend sync
           const vId = variant.variantId || variant.id;
+
           if (vId) {
             const variantUpdate: Record<string, unknown> = {
               updatedAt: new Date(),
             };
+
             if (variant.colorId) variantUpdate.colorId = variant.colorId;
             if (variant.sizeId) variantUpdate.sizeId = variant.sizeId;
             if (variant.sku !== undefined) variantUpdate.sku = variant.sku;
@@ -2077,6 +2088,11 @@ export class AdminService {
               .update(productVariants)
               .set(variantUpdate)
               .where(eq(productVariants.id, vId));
+          } else {
+            console.warn(
+              '⚠️ Skipping variant update: Missing variant ID',
+              variant,
+            );
           }
         }
       }
@@ -2086,7 +2102,6 @@ export class AdminService {
         console.log(
           `➕ Creating ${updateData.new_variants.length} new variants`,
         );
-
         for (const variant of updateData.new_variants) {
           await tx.insert(productVariants).values({
             id: uuidv4(),
@@ -2105,7 +2120,6 @@ export class AdminService {
       // 6. Upload new images (inside transaction)
       if (newImages && newImages.length > 0) {
         console.log(`🖼️ Uploading ${newImages.length} new images`);
-
         for (let i = 0; i < newImages.length; i++) {
           const image = newImages[i];
           try {

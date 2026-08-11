@@ -1,10 +1,16 @@
+// lib/features/order/domain/usecases/create_order.dart
+import 'package:fpdart/fpdart.dart';
+import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
-import '../entities/order.dart' as domain;
 import '../repositories/order_repository.dart';
 
 class CreateOrder {
   final OrderRepository repository;
-  const CreateOrder(this.repository);
-  ResultFuture<domain.DomainOrder> call(Map<String, dynamic> orderData) =>
-      repository.createOrder(orderData);
+
+  CreateOrder(this.repository);
+
+  // ✅ Return Map instead of DomainOrder since backend now returns full response
+  ResultFuture<Map<String, dynamic>> call(Map<String, dynamic> orderData) {
+    return repository.createOrder(orderData);
+  }
 }

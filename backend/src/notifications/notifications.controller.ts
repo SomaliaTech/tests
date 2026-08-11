@@ -45,6 +45,12 @@ export class NotificationsController {
   // USER ENDPOINTS
   // ==========================================
 
+  @Post('broadcast')
+  @UseGuards(JwtAuthGuard) // Add your Admin/Permission guard here
+  @ApiOperation({ summary: 'Broadcast custom notification to all users' })
+  async broadcastToAll(@Body() body: any) {
+    return this.notificationsService.broadcastToAllUsers(body);
+  }
   @Get()
   @ApiOperation({
     summary: 'Get user notifications',

@@ -56,6 +56,12 @@ class SearchProductsEvent extends ProductEvent {
   List<Object?> get props => [query, minPrice, maxPrice, categoryId, sortBy];
 }
 
+class GetLatestProductsEvent extends ProductEvent {
+  final int? limit;
+  final bool forceRefresh;
+  const GetLatestProductsEvent({this.limit, this.forceRefresh = false});
+}
+
 // ✅ REMOVED abstract keyword
 // In ProductBloc, add a force refresh option
 class GetFeaturedProductsEvent extends ProductEvent {

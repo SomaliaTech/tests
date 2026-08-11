@@ -17,6 +17,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { FaqModule } from './faq/faq.module';
 import { PermissionGuard } from './auth/guards/permission.guard';
+import { PaymentModule } from './payment/payment.module';
+import { BannersModule } from './banners/banners.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { PermissionGuard } from './auth/guards/permission.guard';
     DashboardModule,
     NotificationsModule,
     FaqModule,
+    PaymentModule,
+    BannersModule,
   ],
   controllers: [AppController],
   providers: [

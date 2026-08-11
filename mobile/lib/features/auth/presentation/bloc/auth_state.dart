@@ -31,13 +31,17 @@ class Authenticated extends AuthState {
   List<Object?> get props => [user, token];
 }
 
+// In auth_state.dart - Add a timestamp to make each state unique
 class OtpVerified extends AuthState {
   final String token;
   final User user;
-  const OtpVerified(this.token, this.user);
+  final DateTime timestamp; // ✅ Add this to make each emit unique
+
+  OtpVerified(this.token, this.user)
+    : timestamp = DateTime.now(); // Auto-set timestamp
 
   @override
-  List<Object?> get props => [token, user];
+  List<Object?> get props => [token, user, timestamp]; // Include timestamp
 }
 
 class ProfileCompleted extends AuthState {
@@ -65,4 +69,14 @@ class AuthError extends AuthState {
 
   @override
   List<Object?> get props => [message];
+}
+
+// Add to auth_state.dart
+class GoogleSignInSuccess extends AuthState {
+  final String token;
+  final User user;
+  const GoogleSignInSuccess(this.token, this.user);
+
+  @override
+  List<Object?> get props => [token, user];
 }

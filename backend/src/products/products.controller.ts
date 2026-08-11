@@ -271,7 +271,31 @@ export class ProductsController {
   ) {
     return this.productsService.update(id, updateProductDto);
   }
-
+  // GET LATEST PRODUCTS - Public
+  @Get('latest')
+  @ApiOperation({
+    summary: 'Get latest products (Public)',
+    description: 'Returns a list of the newest products.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of latest products to return',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Latest products retrieved successfully',
+    type: [ProductResponseDto],
+  })
+  async getLatest(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
+  ): Promise<ProductResponseDto[]> {
+    const products = await this.productsService.getLatestProducts(
+      Math.min(limit, 50),
+    );
+    return this.transformProducts(products);
+  }
   // DELETE IMAGE - Requires PRODUCT_UPDATE permission
   @Delete(':id/images/:imageId')
   @UseGuards(JwtAuthGuard, PermissionGuard)

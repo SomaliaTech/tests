@@ -217,22 +217,26 @@ export class OrdersController {
   // 3. ORDER ENDPOINTS
   // ==========================================
 
+  // src/orders/orders.controller.ts
+  // ✅ REMOVE this endpoint:
+  // @Post(':id/payment')  ← DELETE THIS ENTIRE ENDPOINT
+
+  // ✅ KEEP only the combined create order endpoint:
   @Post()
   @ApiOperation({
-    summary: 'Create a new order',
-    description: "Creates a new order from the user's cart or specified items.",
+    summary: 'Create a new order with payment',
+    description: 'Creates a new order and processes payment in one step.',
   })
   @ApiBody({ type: CreateOrderDto })
-  @ApiResponse({ status: 201, description: 'Order created successfully' })
   @ApiResponse({
-    status: 400,
-    description: 'Invalid order data or insufficient stock',
+    status: 201,
+    description: 'Order created and payment processed',
   })
+  @ApiResponse({ status: 400, description: 'Invalid data or payment failed' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async createOrder(@Request() req, @Body() createOrderDto: CreateOrderDto) {
     return this.ordersService.createOrder(req.user.userId, createOrderDto);
   }
-
   @Get()
   @ApiOperation({
     summary: 'Get user orders',
@@ -263,25 +267,6 @@ export class OrdersController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
   ) {
     return this.ordersService.getOrders(req.user.userId, status, page, limit);
-  }
-  @Post(':id/payment')
-  @ApiOperation({
-    summary: 'Process payment',
-    description:
-      'Processes payment for an order using the specified payment method.',
-  })
-  @ApiParam({ name: 'id', description: 'Order UUID' })
-  @ApiBody({ type: ProcessPaymentDto })
-  @ApiResponse({ status: 200, description: 'Payment processed successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid payment data' })
-  @ApiResponse({ status: 404, description: 'Order not found' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async processPayment(
-    @Request() req,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() paymentData: ProcessPaymentDto,
-  ) {
-    return this.ordersService.processPayment(id, req.user.userId, paymentData);
   }
 
   // ==========================================

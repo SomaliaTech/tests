@@ -27,6 +27,7 @@ import { AddToCartDto } from '../products/dto/cart.dto';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notification.entity';
+import { WaafiPayService } from 'src/payment/waafipay.service';
 
 @Injectable()
 export class OrdersService {
@@ -38,6 +39,7 @@ export class OrdersService {
     private chatGateway: ChatGateway,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
+    private waafiPayService: WaafiPayService, // ✅ Add this
   ) {}
 
   // ==========================================
@@ -314,115 +316,158 @@ export class OrdersService {
   // FAST ORDER MANAGEMENT
   // ==========================================
 
+  // src/orders/orders.service.ts
+  // ✅ DELETE the old createOrder and processPayment methods
+  // ✅ KEEP only this combined version:
+
   async createOrder(userId: string, orderData: CreateOrderDto) {
     this.logger.log(`Creating order for user: ${userId}`);
 
-    const result = await this.drizzle.db.transaction(async (tx) => {
-      const [user] = await tx.select().from(users).where(eq(users.id, userId));
-      if (!user) throw new NotFoundException('User not found');
+    // Step 1: Calculate total first
+    let itemsTotal = 0;
+    const orderItemsData: any[] = [];
 
-      let itemsTotal = 0; // ✅ Track items total separately
-      const orderItemsData: any[] = [];
+    const [user] = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
 
-      for (const item of orderData.items) {
-        if (item.productVariantId) {
-          const [variant] = await tx
-            .select({
-              id: productVariants.id,
-              price: productVariants.price,
-              sku: productVariants.sku,
-              stock: productVariants.stock,
-              productId: productVariants.productId,
-              productName: products.name,
-              productStock: products.stock,
-              productPrice: products.price,
-              colorName: colors.name,
-              sizeName: sizes.name,
-            })
-            .from(productVariants)
-            .leftJoin(products, eq(products.id, productVariants.productId))
-            .leftJoin(colors, eq(colors.id, productVariants.colorId))
-            .leftJoin(sizes, eq(sizes.id, productVariants.sizeId))
-            .where(eq(productVariants.id, item.productVariantId))
-            .limit(1);
+    if (!user) throw new NotFoundException('User not found');
 
-          if (!variant) {
-            throw new BadRequestException(
-              `Product variant ${item.productVariantId} not found`,
-            );
-          }
+    for (const item of orderData.items) {
+      if (item.productVariantId) {
+        const [variant] = await this.drizzle.db
+          .select({
+            id: productVariants.id,
+            price: productVariants.price,
+            sku: productVariants.sku,
+            stock: productVariants.stock,
+            productId: productVariants.productId,
+            productName: products.name,
+            productStock: products.stock,
+            productPrice: products.price,
+            colorName: colors.name,
+            sizeName: sizes.name,
+          })
+          .from(productVariants)
+          .leftJoin(products, eq(products.id, productVariants.productId))
+          .leftJoin(colors, eq(colors.id, productVariants.colorId))
+          .leftJoin(sizes, eq(sizes.id, productVariants.sizeId))
+          .where(eq(productVariants.id, item.productVariantId))
+          .limit(1);
 
-          const availableStock =
-            variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
-          if (availableStock < item.quantity) {
-            throw new BadRequestException(
-              `Insufficient stock for ${variant.productName}`,
-            );
-          }
-
-          const unitPrice = variant.price
-            ? Number(variant.price)
-            : Number(variant.productPrice ?? 0);
-          itemsTotal += unitPrice * item.quantity; // ✅ Add to itemsTotal
-
-          orderItemsData.push({
-            id: uuidv4(),
-            orderId: '',
-            productId: variant.productId,
-            productVariantId: variant.id,
-            productName: variant.productName || 'Product',
-            variantSku: variant.sku,
-            colorName: variant.colorName,
-            sizeName: variant.sizeName,
-            quantity: item.quantity,
-            unitPrice: unitPrice.toString(),
-            totalPrice: (unitPrice * item.quantity).toString(),
-          });
-        } else {
-          const [product] = await tx
-            .select()
-            .from(products)
-            .where(eq(products.id, item.productId))
-            .limit(1);
-          if (!product)
-            throw new BadRequestException(
-              `Product ${item.productId} not found`,
-            );
-          if (product.stock < item.quantity) {
-            throw new BadRequestException(
-              `Insufficient stock for ${product.name}`,
-            );
-          }
-
-          const unitPrice = Number(product.price);
-          itemsTotal += unitPrice * item.quantity; // ✅ Add to itemsTotal
-
-          orderItemsData.push({
-            id: uuidv4(),
-            orderId: '',
-            productId: product.id,
-            productVariantId: null,
-            productName: product.name,
-            variantSku: product.sku,
-            colorName: null,
-            sizeName: null,
-            quantity: item.quantity,
-            unitPrice: unitPrice.toString(),
-            totalPrice: (unitPrice * item.quantity).toString(),
-          });
+        if (!variant) {
+          throw new BadRequestException(
+            `Product variant ${item.productVariantId} not found`,
+          );
         }
+
+        const availableStock =
+          variant.stock > 0 ? variant.stock : (variant.productStock ?? 0);
+        if (availableStock < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for ${variant.productName}`,
+          );
+        }
+
+        const unitPrice = variant.price
+          ? Number(variant.price)
+          : Number(variant.productPrice ?? 0);
+        itemsTotal += unitPrice * item.quantity;
+
+        orderItemsData.push({
+          id: uuidv4(),
+          productId: variant.productId,
+          productVariantId: variant.id,
+          productName: variant.productName || 'Product',
+          variantSku: variant.sku,
+          colorName: variant.colorName,
+          sizeName: variant.sizeName,
+          quantity: item.quantity,
+          unitPrice: unitPrice.toString(),
+          totalPrice: (unitPrice * item.quantity).toString(),
+        });
+      } else {
+        const [product] = await this.drizzle.db
+          .select()
+          .from(products)
+          .where(eq(products.id, item.productId))
+          .limit(1);
+
+        if (!product)
+          throw new BadRequestException(`Product ${item.productId} not found`);
+        if (product.stock < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for ${product.name}`,
+          );
+        }
+
+        const unitPrice = Number(product.price);
+        itemsTotal += unitPrice * item.quantity;
+
+        orderItemsData.push({
+          id: uuidv4(),
+          productId: product.id,
+          productVariantId: null,
+          productName: product.name,
+          variantSku: product.sku,
+          colorName: null,
+          sizeName: null,
+          quantity: item.quantity,
+          unitPrice: unitPrice.toString(),
+          totalPrice: (unitPrice * item.quantity).toString(),
+        });
+      }
+    }
+
+    const deliveryFee = orderData.deliveryFee ?? 0;
+    const finalTotalAmount = itemsTotal + deliveryFee;
+
+    this.logger.log(
+      `💰 Order total: Items=${itemsTotal}, Delivery=${deliveryFee}, Final=${finalTotalAmount}`,
+    );
+
+    // Step 2: Process payment BEFORE creating order
+    if (
+      orderData.paymentMethod &&
+      orderData.paymentMethod !== 'cash_on_delivery' &&
+      orderData.phoneNumber
+    ) {
+      this.logger.log(`🔄 Processing payment BEFORE creating order...`);
+
+      const paymentRefId =
+        this.waafiPayService.generateReferenceId('NEW-ORDER');
+
+      const paymentResult = await this.waafiPayService.initiatePayment({
+        amount: finalTotalAmount,
+        phoneNumber: orderData.phoneNumber,
+        orderId: 'PENDING',
+        description: `New order payment via ${orderData.paymentMethod}`,
+        referenceId: paymentRefId,
+      });
+
+      if (!paymentResult.success) {
+        this.logger.error(`❌ Payment failed: ${paymentResult.message}`);
+        throw new BadRequestException(
+          paymentResult.message || 'Payment failed. Please try again.',
+        );
       }
 
-      // ✅ Calculate final total including delivery fee
-      const deliveryFee = orderData.deliveryFee ?? 0;
-      const finalTotalAmount = itemsTotal + deliveryFee;
-
       this.logger.log(
-        `💰 Order total: Items=${itemsTotal}, Delivery=${deliveryFee}, Final=${finalTotalAmount}`,
+        `✅ Payment successful! Transaction: ${paymentResult.transactionId}`,
       );
+    }
 
+    // Step 3: Create order (payment already succeeded)
+    const result = await this.drizzle.db.transaction(async (tx) => {
       const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const shippingAddress = `${orderData.shippingAddress.fullAddress} (${orderData.shippingAddress.label}) - Phone: ${orderData.shippingAddress.phoneNumber}`;
+
+      const isPaid =
+        orderData.paymentMethod &&
+        orderData.paymentMethod !== 'cash_on_delivery';
+      const initialStatus = isPaid ? 'CONFIRMED' : 'PENDING';
+      const initialPaymentStatus = isPaid ? 'PAID' : 'PENDING';
 
       const [order] = await tx
         .insert(orders)
@@ -434,21 +479,19 @@ export class OrdersService {
           customerEmail: user.email || '',
           customerPhone: orderData.shippingAddress.phoneNumber,
           shippingAddress,
-          totalAmount: finalTotalAmount.toString(), // ✅ Use finalTotalAmount with delivery fee
-          status: 'PENDING',
+          totalAmount: finalTotalAmount.toString(),
+          status: initialStatus,
           paymentMethod: orderData.paymentMethod,
-          paymentStatus: 'PENDING',
+          paymentStatus: initialPaymentStatus,
           notes: orderData.notes,
         })
         .returning();
 
-      // Batch insert order items
       orderItemsData.forEach((item) => (item.orderId = order.id));
       if (orderItemsData.length > 0) {
         await tx.insert(orderItems).values(orderItemsData);
       }
 
-      // Deduct stock in parallel
       const stockUpdates = orderItemsData.map((item) => {
         if (item.productVariantId) {
           return tx
@@ -465,7 +508,6 @@ export class OrdersService {
       });
       await Promise.all(stockUpdates);
 
-      // Clear cart
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
 
       this._notifyAdminsNewOrder(tx, order, user.name || 'Customer').catch(
@@ -480,9 +522,9 @@ export class OrdersService {
       };
     });
 
-    const { order, user } = result;
+    const { order } = result;
 
-    // Fire-and-forget notifications
+    // Step 4: Send notifications
     this.chatGateway.server.to(`user:${userId}`).emit('new_notification', {
       id: uuidv4(),
       type: 'order',
@@ -493,7 +535,7 @@ export class OrdersService {
       orderId: order.id,
       orderNumber: order.orderNumber,
       totalAmount: order.totalAmount,
-      status: 'PENDING',
+      status: order.status,
       createdAt: new Date().toISOString(),
       isRead: false,
     });
@@ -509,66 +551,29 @@ export class OrdersService {
       })
       .catch(() => {});
 
+    if (order.paymentStatus === 'PAID') {
+      this.notificationsService
+        .create({
+          userId,
+          type: NotificationType.PAYMENT,
+          title: 'Payment Successful',
+          message: `Payment for order #${order.orderNumber} was received`,
+          actionText: 'View Order',
+          actionLink: `/orders/${order.id}`,
+        })
+        .catch(() => {});
+    }
+
     return {
       order: result.order,
       totalAmount: result.totalAmount,
       items: result.items,
+      message:
+        order.paymentStatus === 'PAID'
+          ? 'Order created and payment processed successfully'
+          : 'Order created successfully',
     };
   }
-
-  // ==========================================
-  // FAST PAYMENT PROCESSING
-  // ==========================================
-  async processPayment(
-    orderId: string,
-    userId: string,
-    paymentData: { paymentMethod: string; phoneNumber?: string },
-  ) {
-    this.logger.log(`Processing payment for order: ${orderId}`);
-
-    const [order] = await this.drizzle.db
-      .select()
-      .from(orders)
-      .where(and(eq(orders.id, orderId), eq(orders.userId, userId)));
-
-    if (!order) throw new NotFoundException('Order not found');
-    if (order.paymentStatus === 'PAID') {
-      throw new BadRequestException('Order is already paid');
-    }
-
-    const [updatedOrder] = await this.drizzle.db
-      .update(orders)
-      .set({
-        paymentStatus: 'PAID',
-        status: 'CONFIRMED',
-        updatedAt: new Date(),
-        paymentMethod: paymentData.paymentMethod,
-      })
-      .where(eq(orders.id, orderId))
-      .returning();
-
-    // ✅ Fire-and-forget notifications (don't block response)
-    this.notificationsService
-      .create({
-        userId,
-        type: NotificationType.PAYMENT,
-        title: 'Payment Successful',
-        message: `Payment for order #${order.orderNumber} was received`,
-        actionText: 'View Order',
-        actionLink: `/orders/${order.id}`,
-      })
-      .catch(() => {});
-
-    // ✅ Return immediately
-    return {
-      message: 'Payment processed successfully',
-      transactionId: `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      orderNumber: order.orderNumber,
-      order: updatedOrder,
-    };
-  }
-  // Replace these two methods in your existing OrdersService:
-
   async getOrders(
     userId: string,
     status?: string,
