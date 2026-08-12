@@ -138,6 +138,29 @@ export class ChatService {
     return user || null;
   }
 
+  // ==========================================
+  // GET CONVERSATION PARTNERS (For broadcasting deletions)
+  // ==========================================
+  async getConversationPartnerIds(userId: string): Promise<string[]> {
+    try {
+      const result = await this.drizzle.db.execute(sql`
+        SELECT
+          CASE
+            WHEN participant1 = ${userId} THEN participant2
+            ELSE participant1
+          END as "partnerId"
+        FROM conversations
+        WHERE participant1 = ${userId} OR participant2 = ${userId}
+      `);
+
+      const rows = (result.rows || []) as any[];
+      return rows.map((row) => row.partnerId).filter(Boolean);
+    } catch (error) {
+      this.logger.error(`Failed to get partner IDs for ${userId}: ${error}`);
+      return [];
+    }
+  }
+
   async getAvailableAdmins() {
     const cacheKey = 'admins:available';
 
@@ -202,6 +225,19 @@ export class ChatService {
       return cached;
     }
 
+    // ✅ CRITICAL FIX: Verify both users actually exist BEFORE trying to insert
+    const existingUsers = await this.drizzle.db
+      .select({ id: users.id })
+      .from(users)
+      .where(inArray(users.id, [p1, p2]));
+
+    if (existingUsers.length < 2) {
+      // This prevents the 500 Foreign Key crash and returns a clean 404
+      throw new NotFoundException(
+        'Cannot open conversation: One or both users have been deleted.',
+      );
+    }
+
     // Try to find existing conversation
     const [existing] = await this.drizzle.db
       .select()
@@ -230,7 +266,7 @@ export class ChatService {
       return conversationWithISO;
     }
 
-    // Create new conversation
+    // Create new conversation (safe to insert now)
     try {
       const [conversation] = await this.drizzle.db
         .insert(conversations)

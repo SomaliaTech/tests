@@ -78,3 +78,9 @@ class ClearSearchEvent extends ConversationsEvent {
 class ClearConversationsCacheEvent extends ConversationsEvent {
   const ClearConversationsCacheEvent();
 }
+
+// lib/features/chat/presentation/bloc/conversations_event.dart
+class ConversationsCacheUpdatedEvent extends ConversationsEvent {
+  final List<Conversation> conversations;
+  const ConversationsCacheUpdatedEvent(this.conversations);
+}

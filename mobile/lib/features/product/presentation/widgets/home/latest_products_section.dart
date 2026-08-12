@@ -16,7 +16,13 @@ class LatestProductsSection extends StatefulWidget {
   State<LatestProductsSection> createState() => _LatestProductsSectionState();
 }
 
-class _LatestProductsSectionState extends State<LatestProductsSection> {
+// ✅ ADDED: AutomaticKeepAliveClientMixin
+class _LatestProductsSectionState extends State<LatestProductsSection>
+    with AutomaticKeepAliveClientMixin {
+  // ✅ REQUIRED: Keep widget alive when scrolled off-screen
+  @override
+  bool get wantKeepAlive => true;
+
   bool _wasOffline = false;
   bool _hasLoadedOnce = false;
 
@@ -33,7 +39,7 @@ class _LatestProductsSectionState extends State<LatestProductsSection> {
 
     final bloc = context.read<ProductBloc>();
 
-    // ✅ FIX: If data is already loaded in BLoC, do NOT reload
+    // ✅ If data is already loaded in BLoC, do NOT reload
     if (bloc.state is LatestProductsLoaded) {
       _hasLoadedOnce = true;
       return;
@@ -45,6 +51,9 @@ class _LatestProductsSectionState extends State<LatestProductsSection> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ REQUIRED: Must call super.build when using AutomaticKeepAliveClientMixin
+    super.build(context);
+
     return Padding(
       padding: const EdgeInsets.all(10),
       child: Column(
@@ -54,7 +63,7 @@ class _LatestProductsSectionState extends State<LatestProductsSection> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text(
-                "Latest Arrivals", // ✅ Changed Title
+                "Latest Arrivals",
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -76,7 +85,6 @@ class _LatestProductsSectionState extends State<LatestProductsSection> {
               _wasOffline = !isOnline;
 
               return BlocBuilder<ProductBloc, ProductState>(
-                // ✅ Listen only to Latest Products states
                 buildWhen: (previous, current) =>
                     current is LatestProductsLoaded ||
                     current is LatestProductsLoading ||
@@ -91,7 +99,7 @@ class _LatestProductsSectionState extends State<LatestProductsSection> {
                       return const EmptyStateWidget(
                         title: 'No New Arrivals',
                         message: 'Check back later for the latest products!',
-                        icon: Icons.new_releases, // ✅ Changed Icon
+                        icon: Icons.new_releases,
                       );
                     }
                     return GridView.builder(

@@ -40,7 +40,8 @@ class ChatSocketService {
   final _roleChangeController =
       StreamController<Map<String, dynamic>>.broadcast();
   final _typingController = StreamController<Map<String, dynamic>>.broadcast();
-
+  final _userDeletedController =
+      StreamController<Map<String, dynamic>>.broadcast();
   // Getters
   Stream<ChatMessage> get onNewMessage => _newMessageController.stream;
   Stream<Map<String, dynamic>> get onStatusChange => _statusController.stream;
@@ -59,7 +60,8 @@ class ChatSocketService {
   Stream<Map<String, dynamic>> get onTyping => _typingController.stream;
   bool get isConnected => _isConnected;
   String? get userId => _userId;
-
+  Stream<Map<String, dynamic>> get onUserDeleted =>
+      _userDeletedController.stream;
   Future<void> connect() async {
     try {
       // Prevent multiple simultaneous connection attempts
@@ -237,6 +239,12 @@ class ChatSocketService {
       }
     });
 
+    _socket?.on('user_deleted', (data) {
+      _logger.i('🗑️ [WS] User deleted notification received: $data');
+      if (data is Map) {
+        _userDeletedController.add(Map<String, dynamic>.from(data));
+      }
+    });
     // New message from other users
     _socket?.on('new_message', (data) {
       _logger.i('📩 [WS] New message received');
@@ -393,6 +401,8 @@ class ChatSocketService {
       _socket?.off('message_read');
       _socket?.off('error');
       _socket?.off('new_notification');
+      _socket?.off('user_deleted');
+
       _socket?.off('new_order');
       _socket?.off('role_changed');
       _socket?.off('connect');
@@ -431,6 +441,7 @@ class ChatSocketService {
     _messageReadController.close();
     _newOrderController.close();
     _roleChangeController.close();
+    _userDeletedController.close();
     disconnect();
   }
 }

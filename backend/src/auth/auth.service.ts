@@ -350,7 +350,7 @@ export class AuthService {
     data: {
       name: string;
       marketId: string;
-      phoneNumber?: string; // ✅ Add phone number for Google users
+      phoneNumber?: string;
       profileImage?: string;
     },
   ) {
@@ -361,8 +361,6 @@ export class AuthService {
       throw new BadRequestException('Name and market are required');
     }
 
-    // ✅ For Google users, phone number is also required
-    // Check if user exists and has empty phone number (Google user)
     const [existingUser] = await this.drizzle.db
       .select()
       .from(users)
@@ -373,7 +371,6 @@ export class AuthService {
       existingUser &&
       (!existingUser.phoneNumber || existingUser.phoneNumber.trim() === '')
     ) {
-      // This is a Google user - phone number is required
       if (!data.phoneNumber || data.phoneNumber.trim() === '') {
         throw new BadRequestException(
           'Phone number is required for Google sign-in users',
@@ -402,9 +399,7 @@ export class AuthService {
       updatedAt: new Date(),
     };
 
-    // ✅ Save phone number if provided (for Google users)
     if (data.phoneNumber && data.phoneNumber.trim().length > 0) {
-      // Validate Somali phone number format
       const cleanedPhone = data.phoneNumber.trim();
       const validPrefixes = ['61', '68', '90', '63'];
       let isValid = false;
@@ -423,7 +418,6 @@ export class AuthService {
         throw new BadRequestException('Invalid Somali phone number format');
       }
 
-      // Format to +252 if needed
       let formattedPhone = cleanedPhone;
       if (!formattedPhone.startsWith('+252')) {
         if (formattedPhone.startsWith('0')) {
@@ -452,48 +446,79 @@ export class AuthService {
       }
     }
 
-    const [updatedUser] = await this.drizzle.db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, userId))
-      .returning();
+    // ✅ WRAP DATABASE UPDATE IN TRY-CATCH TO HANDLE DUPLICATE PHONE NUMBERS
+    try {
+      const [updatedUser] = await this.drizzle.db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
 
-    if (!updatedUser) {
-      throw new NotFoundException('User not found');
-    }
+      if (!updatedUser) {
+        throw new NotFoundException('User not found');
+      }
 
-    console.log('✅ Profile completed successfully');
-    console.log('📱 Final phone number:', updatedUser.phoneNumber);
+      console.log('✅ Profile completed successfully');
+      console.log('📱 Final phone number:', updatedUser.phoneNumber);
 
-    const token = this.jwtService.sign({
-      sub: updatedUser.id,
-      phoneNumber: updatedUser.phoneNumber,
-      isAdmin: updatedUser.isAdmin ?? false,
-      isSuperAdmin: updatedUser.isSuperAdmin ?? false,
-    });
-
-    await this.notificationsService.createSystemNotification(
-      userId,
-      'Profile Completed',
-      'Your profile has been successfully completed.',
-    );
-
-    return {
-      message: 'Profile completed successfully',
-      token,
-      user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
+      const token = this.jwtService.sign({
+        sub: updatedUser.id,
         phoneNumber: updatedUser.phoneNumber,
-        email: updatedUser.email,
-        profileImage: updatedUser.profileImage,
-        marketId: updatedUser.marketId,
-        isVerified: updatedUser.isVerified,
-        hasProfile: true,
         isAdmin: updatedUser.isAdmin ?? false,
         isSuperAdmin: updatedUser.isSuperAdmin ?? false,
-      },
-    };
+      });
+
+      await this.notificationsService.createSystemNotification(
+        userId,
+        'Profile Completed',
+        'Your profile has been successfully completed.',
+      );
+
+      return {
+        message: 'Profile completed successfully',
+        token,
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          phoneNumber: updatedUser.phoneNumber,
+          email: updatedUser.email,
+          profileImage: updatedUser.profileImage,
+          marketId: updatedUser.marketId,
+          isVerified: updatedUser.isVerified,
+          hasProfile: true,
+          isAdmin: updatedUser.isAdmin ?? false,
+          isSuperAdmin: updatedUser.isSuperAdmin ?? false,
+        },
+      };
+    } catch (error: any) {
+      // ✅ Catch Postgres Unique Constraint Violation (Error Code 23505)
+      if (
+        error.code === '23505' ||
+        error.cause?.code === '23505' ||
+        error.message?.includes('users_phone_number_unique')
+      ) {
+        console.warn(
+          `⚠️ Duplicate phone number attempt: ${updateData.phoneNumber}`,
+        );
+        throw new BadRequestException(
+          'This phone number is already registered to another account. Please use a different number.',
+        );
+      }
+
+      // Re-throw other NestJS exceptions (like NotFoundException)
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // Log unexpected errors for debugging
+      console.error('❌ Error completing profile:', error);
+      throw new BadRequestException(
+        'Failed to update profile due to a server error. Please try again.',
+      );
+    }
   }
 
   async getMe(userId: string) {

@@ -106,29 +106,55 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     String name,
     String marketId,
     String? profileImageUrl,
-    String? phoneNumber, // ✅ Add this parameter
+    String? phoneNumber,
   ) async {
     final Map<String, dynamic> body = {
       'name': name,
       'marketId': marketId,
       if (profileImageUrl != null) 'profileImage': profileImageUrl,
       if (phoneNumber != null && phoneNumber.isNotEmpty)
-        'phoneNumber': phoneNumber, // ✅ Send phone if provided
+        'phoneNumber': phoneNumber,
     };
 
-    final response = await client.post(
-      Uri.parse('${ApiConstants.baseUrl}/auth/complete-profile'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: json.encode(body),
-    );
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return json.decode(response.body);
-    } else {
-      final error = json.decode(response.body);
-      throw ServerException(error['message'] ?? 'Failed to complete profile');
+    try {
+      final response = await client.post(
+        Uri.parse('${ApiConstants.baseUrl}/auth/complete-profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        // ✅ SAFELY parse NestJS error responses
+        String errorMessage = 'Failed to complete profile';
+
+        try {
+          final errorBody = json.decode(response.body);
+
+          // NestJS BadRequestException returns: { "message": "..." }
+          if (errorBody['message'] is String) {
+            errorMessage = errorBody['message'];
+          }
+          // NestJS class-validator returns: { "message": ["...", "..."] }
+          else if (errorBody['message'] is List &&
+              errorBody['message'].isNotEmpty) {
+            errorMessage = errorBody['message'][0];
+          }
+        } catch (_) {
+          // If JSON parsing fails (e.g., raw HTML 500 page), keep default message
+        }
+
+        throw ServerException(errorMessage);
+      }
+    } on ServerException {
+      rethrow; // ✅ Pass the clean message up to the repository unchanged
+    } catch (e) {
+      // Only actual network/socket errors should be labeled as network errors
+      throw ServerException('Network error: $e');
     }
   }
 

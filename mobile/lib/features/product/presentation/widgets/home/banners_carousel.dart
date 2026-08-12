@@ -6,10 +6,8 @@ import 'package:mobile/features/product/domain/entities/banner.dart'
     as banner_entity;
 import 'package:mobile/features/product/presentation/blocs/banner/banner_bloc.dart';
 import 'package:mobile/features/product/presentation/blocs/banner/banner_state.dart';
-import 'package:mobile/features/product/presentation/screens/category_screen.dart';
 import 'package:mobile/features/product/presentation/screens/category_view.dart';
 import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
-import 'package:mobile/features/product/presentation/screens/product_detail_view.dart';
 import 'package:mobile/features/product/presentation/widgets/home/animated_carousel.dart';
 import 'package:mobile/features/product/presentation/widgets/home/discount_badge.dart';
 import 'package:mobile/features/product/presentation/widgets/home/flash_sale_badge.dart';

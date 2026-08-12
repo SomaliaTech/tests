@@ -1,4 +1,3 @@
-// lib/features/product/presentation/widgets/home/hot_deals_section.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
@@ -17,14 +16,19 @@ class HotDealsSection extends StatefulWidget {
   State<HotDealsSection> createState() => _HotDealsSectionState();
 }
 
-class _HotDealsSectionState extends State<HotDealsSection> {
+// ✅ ADDED: AutomaticKeepAliveClientMixin
+class _HotDealsSectionState extends State<HotDealsSection>
+    with AutomaticKeepAliveClientMixin {
+  // ✅ REQUIRED: Keep widget alive when scrolled off-screen
+  @override
+  bool get wantKeepAlive => true;
+
   bool _wasOffline = false;
   bool _hasLoadedOnce = false;
 
   @override
   void initState() {
     super.initState();
-    // Load featured products on first build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadProducts();
     });
@@ -35,7 +39,7 @@ class _HotDealsSectionState extends State<HotDealsSection> {
 
     final bloc = context.read<ProductBloc>();
 
-    // ✅ FIX: If data is already loaded in BLoC, do NOT reload
+    // ✅ If data is already loaded in BLoC, do NOT reload
     if (bloc.state is FeaturedProductsLoaded) {
       _hasLoadedOnce = true;
       return;
@@ -47,6 +51,9 @@ class _HotDealsSectionState extends State<HotDealsSection> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ REQUIRED: Must call super.build when using AutomaticKeepAliveClientMixin
+    super.build(context);
+
     return Padding(
       padding: const EdgeInsets.all(10),
       child: Column(
@@ -70,25 +77,26 @@ class _HotDealsSectionState extends State<HotDealsSection> {
             builder: (context, connectivity, _) {
               final isOnline = connectivity.status == ConnectionStatus.online;
 
-              // ✅ Auto-refresh when internet comes back - HERE
+              // Auto-refresh when internet comes back
               if (isOnline && _wasOffline && _hasLoadedOnce) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _loadProducts();
                 });
               }
               _wasOffline = !isOnline;
+
               return BlocBuilder<ProductBloc, ProductState>(
                 buildWhen: (previous, current) =>
                     current is FeaturedProductsLoaded ||
                     current is FeaturedProductsLoading ||
                     current is FeaturedProductsError,
                 builder: (context, state) {
-                  // ✅ Show loading skeleton
+                  // Show loading skeleton
                   if (state is FeaturedProductsLoading) {
                     return const ProductsGridSkeleton();
                   }
 
-                  // ✅ Show loaded products
+                  // Show loaded products
                   if (state is FeaturedProductsLoaded) {
                     if (state.products.isEmpty) {
                       return const EmptyStateWidget(
@@ -115,7 +123,7 @@ class _HotDealsSectionState extends State<HotDealsSection> {
                     );
                   }
 
-                  // ✅ Show error with retry
+                  // Show error with retry
                   if (state is FeaturedProductsError) {
                     final isOfflineError =
                         state.message.toLowerCase().contains('internet') ||

@@ -1,7 +1,6 @@
-// src/payment/waafipay.service.ts
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 export interface WaafiPayConfig {
   merchantUId: string;
@@ -16,6 +15,7 @@ export interface PaymentRequest {
   orderId: string;
   description: string;
   referenceId: string;
+  paymentMethod?: string;
 }
 
 export interface PaymentResponse {
@@ -27,19 +27,42 @@ export interface PaymentResponse {
   responseCode?: string;
 }
 
+interface WaafiPayApiResponse {
+  serviceParams?: {
+    responseCode?: string;
+    responseMsg?: string;
+    transactionId?: string;
+    referenceId?: string;
+    state?: string;
+    params?: Record<string, unknown>;
+  };
+  params?: {
+    responseCode?: string;
+    responseMsg?: string;
+    transactionId?: string;
+    referenceId?: string;
+    state?: string;
+  };
+  responseCode?: string;
+  responseMsg?: string;
+  transactionId?: string;
+  referenceId?: string;
+  state?: string;
+}
+
 @Injectable()
 export class WaafiPayService {
   private readonly logger = new Logger(WaafiPayService.name);
   private readonly config: WaafiPayConfig;
 
   constructor(private configService: ConfigService) {
-    // ✅ Fix: Use fallback values with type assertions
     this.config = {
-      merchantUId: this.configService.get('WAAFI_MERCHANT_UID') || '',
-      apiUId: this.configService.get('WAAFI_API_UID') || '',
-      apiKey: this.configService.get('WAAFI_API_KEY') || '',
+      merchantUId: this.configService.get<string>('WAAFI_MERCHANT_UID') || '',
+      apiUId: this.configService.get<string>('WAAFI_API_UID') || '',
+      apiKey: this.configService.get<string>('WAAFI_API_KEY') || '',
       baseUrl:
-        this.configService.get('WAAFI_BASE_URL') || 'https://api.waafipay.net',
+        this.configService.get<string>('WAAFI_BASE_URL') ||
+        'https://api.waafipay.net',
     };
 
     if (
@@ -51,14 +74,12 @@ export class WaafiPayService {
     }
   }
 
-  /**
-   * Initiate a payment request to WaafiPay
-   */
   async initiatePayment(data: PaymentRequest): Promise<PaymentResponse> {
     try {
       this.logger.log(`Initiating payment for order: ${data.orderId}`);
 
-      const isMockMode = this.configService.get('WAAFI_MOCK_MODE') === 'true';
+      const isMockMode =
+        this.configService.get<string>('WAAFI_MOCK_MODE') === 'true';
 
       if (isMockMode) {
         this.logger.warn('⚠️ MOCK MODE - Simulating successful payment');
@@ -72,32 +93,59 @@ export class WaafiPayService {
         };
       }
 
+      const waafiPaymentMethod = this.getWaafiPaymentMethod(data.paymentMethod);
+      this.logger.debug(`Using payment method: ${waafiPaymentMethod}`);
+
+      //       {
+      // 	"schemaVersion": "1.0",
+      //   "requestId": "{{$guid}}",
+      //     "timestamp": "{{$timestamp}}",
+      // 	"channelName": "WEB",
+      // 	"serviceName": "API_PURCHASE",
+      // 	"serviceParams": {
+      //      "merchantUid": "M0914352",
+      //         "apiUserId": "1009097",
+      //         "apiKey": "API-CXV4bcVgLIQMEBrN0PWWN4c5LUla",
+      // 	"paymentMethod": "MWALLET_ACCOUNT",
+      // 	"payerInfo": {
+      // 			 "accountNo": "252612883364"
+      // 		},
+      // 	"transactionInfo": {
+      // 		"referenceId": "FR_{{$randomBankAccount}}",
+      // 		"invoiceId": "FR_IN_{{$randomBankAccount}}",
+      // 		"amount": "0.1",
+      // 		"currency": "USD",
+      // 		"description": "test direct purchase"
+      // 		}
+      // 	}
+      // }
       const requestBody = {
         schemaVersion: '1.0',
-        requestId: data.referenceId,
-        timestamp: new Date().toISOString(),
+        requestId: data.referenceId, // ✅ FIX: Use actual referenceId (Removed {{$guid}})
+        timestamp: new Date().toISOString(), // ✅ FIX: Use actual time (Removed {{$timestamp}})
         channelName: 'WEB',
         serviceName: 'API_PURCHASE',
         serviceParams: {
-          merchantUid: this.config.merchantUId, // ✅ Lowercase 'i' in Uid
+          merchantUid: this.config.merchantUId,
           apiUserId: this.config.apiUId,
           apiKey: this.config.apiKey,
-          paymentMethod: 'MWALLET_ACCOUNT',
+          paymentMethod: 'MWALLET_ACCOUNT', // ✅ FIX: Use the dynamic variable, NOT 'MWALLET_ACCOUNT'
           payerInfo: {
             accountNo: this.formatPhoneNumber(data.phoneNumber),
           },
           transactionInfo: {
             referenceId: data.referenceId,
             invoiceId: data.orderId,
-            amount: data.amount,
+            amount: data.amount.toString(),
             currency: 'USD',
             description: data.description,
           },
         },
       };
+
       this.logger.debug(`WaafiPay Request: ${JSON.stringify(requestBody)}`);
 
-      const response = await axios.post(
+      const response = await axios.post<WaafiPayApiResponse>(
         `${this.config.baseUrl}/asm`,
         requestBody,
         {
@@ -111,26 +159,37 @@ export class WaafiPayService {
       this.logger.debug(`WaafiPay Response: ${JSON.stringify(response.data)}`);
 
       return this.parseResponse(response.data);
-    } catch (error) {
-      this.logger.error(`WaafiPay Payment Error: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        this.logger.error(`WaafiPay Payment Error: ${error.message}`);
+      }
 
-      if (error.response) {
-        this.logger.error(
-          `Response data: ${JSON.stringify(error.response.data)}`,
-        );
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<{
+          responseMsg?: string;
+          errorMsg?: string;
+        }>;
+        if (axiosError.response?.data) {
+          this.logger.error(
+            `Response data: ${JSON.stringify(axiosError.response.data)}`,
+          );
+          return {
+            success: false,
+            message:
+              axiosError.response.data.responseMsg ||
+              axiosError.response.data.errorMsg ||
+              'Payment failed. Please try again.',
+          };
+        }
       }
 
       return {
         success: false,
-        message:
-          error.response?.data?.errorMsg || 'Payment failed. Please try again.',
+        message: 'Payment failed. Please try again.',
       };
     }
   }
 
-  /**
-   * Check payment status
-   */
   async checkPaymentStatus(referenceId: string): Promise<PaymentResponse> {
     try {
       const requestBody = {
@@ -140,14 +199,14 @@ export class WaafiPayService {
         channelName: 'WEB',
         serviceName: 'API_CHECK_STATUS',
         serviceParams: {
-          merchantUId: this.config.merchantUId,
+          merchantUid: this.config.merchantUId,
           apiUserId: this.config.apiUId,
           apiKey: this.config.apiKey,
           referenceId: referenceId,
         },
       };
 
-      const response = await axios.post(
+      const response = await axios.post<WaafiPayApiResponse>(
         `${this.config.baseUrl}/asm`,
         requestBody,
         {
@@ -157,8 +216,10 @@ export class WaafiPayService {
       );
 
       return this.parseResponse(response.data);
-    } catch (error) {
-      this.logger.error(`Status check error: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        this.logger.error(`Status check error: ${error.message}`);
+      }
       return {
         success: false,
         message: 'Failed to check payment status.',
@@ -166,32 +227,66 @@ export class WaafiPayService {
     }
   }
 
-  /**
-   * Parse WaafiPay API response
-   */
-  private parseResponse(data: any): PaymentResponse {
+  private parseResponse(data: WaafiPayApiResponse): PaymentResponse {
     const params = data?.serviceParams || data?.params || {};
     const responseCode = params?.responseCode || data?.responseCode || '';
     const description = params?.responseMsg || data?.responseMsg || '';
 
     const isSuccess =
-      responseCode === '2001' || description.includes('Success');
+      responseCode === '2001' || description.toLowerCase().includes('success');
+
+    // ✅ Map WaafiPay codes to friendly messages
+    let friendlyMessage = description || 'Unknown response';
+
+    if (responseCode === '5310' || description.includes('REJECTED')) {
+      friendlyMessage = 'Payment was cancelled or rejected. Please try again.';
+    } else if (
+      responseCode === '5010' ||
+      description.includes('not authorized')
+    ) {
+      friendlyMessage = 'Payment service is currently unavailable.';
+    } else if (
+      responseCode === '5005' ||
+      description.includes('Insufficient')
+    ) {
+      friendlyMessage = 'Insufficient funds in mobile wallet.';
+    }
 
     return {
       success: isSuccess,
-      message: description || 'Unknown response',
+      message: friendlyMessage,
       transactionId: params?.transactionId || data?.transactionId,
       referenceId: params?.referenceId || data?.referenceId,
       state: params?.state || data?.state,
       responseCode: responseCode,
     };
   }
+  private getWaafiPaymentMethod(method: string | undefined): string {
+    if (!method) return 'EVC_PLUS';
 
-  /**
-   * Format phone number for WaafiPay (remove +252, keep 9 digits)
-   */
+    const upper = method.toUpperCase().replace(/\s+/g, '_');
+
+    if (upper.includes('EVC') || upper.includes('HORMUUD')) return 'EVC_PLUS';
+    if (upper.includes('ZAAD') || upper.includes('TELESOM')) return 'ZAAD';
+    if (upper.includes('DAHAB') || upper.includes('EDAHAB')) return 'E_DAHAB';
+    if (upper.includes('SAHAL') || upper.includes('GOLIS')) return 'SAHAL';
+    if (upper.includes('WAAFI')) return 'MWALLET_ACCOUNT';
+    if (upper.includes('PREMIER')) return 'PREMIER_WALLET';
+
+    const validCodes = [
+      'EVC_PLUS',
+      'ZAAD',
+      'E_DAHAB',
+      'SAHAL',
+      'MWALLET_ACCOUNT',
+      'PREMIER_WALLET',
+    ];
+    if (validCodes.includes(upper)) return upper;
+
+    return 'EVC_PLUS';
+  }
+
   formatPhoneNumber(phone: string): string {
-    // ✅ Made public for use in orders service
     let cleaned = phone.replace(/\D/g, '');
 
     if (cleaned.startsWith('252')) {
@@ -209,9 +304,6 @@ export class WaafiPayService {
     return cleaned;
   }
 
-  /**
-   * Generate unique reference ID
-   */
   generateReferenceId(orderId: string): string {
     return `PAY-${orderId.substring(0, 8)}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   }

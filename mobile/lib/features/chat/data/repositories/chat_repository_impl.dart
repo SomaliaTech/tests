@@ -1,4 +1,6 @@
 // lib/features/chat/data/repositories/chat_repository_impl.dart
+import 'dart:async';
+
 import 'package:fpdart/fpdart.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/error/failures.dart';
@@ -16,7 +18,12 @@ class ChatRepositoryImpl implements ChatRepository {
   final ChatRemoteDataSource remoteDataSource;
   final ChatLocalDataSource localDataSource;
   final StorageService storageService;
+  final StreamController<List<Conversation>> _conversationUpdateController =
+      StreamController<List<Conversation>>.broadcast();
 
+  @override
+  Stream<List<Conversation>> get conversationUpdates =>
+      _conversationUpdateController.stream;
   ChatRepositoryImpl({
     required this.remoteDataSource,
     required this.localDataSource,
@@ -26,17 +33,14 @@ class ChatRepositoryImpl implements ChatRepository {
   @override
   ResultFuture<List<Conversation>> getConversations() async {
     try {
-      // 🚀 Return cached data IMMEDIATELY
       final cachedConversations = await localDataSource
           .getCachedConversations();
 
       if (cachedConversations.isNotEmpty) {
-        // Schedule network fetch in background (fire and forget)
         _refreshConversationsInBackground();
         return Right(cachedConversations);
       }
 
-      // No cache - fetch from network
       try {
         final remoteConversations = await remoteDataSource.getConversations();
         await localDataSource.cacheConversations(remoteConversations);
@@ -60,8 +64,10 @@ class ChatRepositoryImpl implements ChatRepository {
         remoteConversations,
       );
       await localDataSource.cacheConversations(mergedConversations);
+
+      // ✅ ADD THIS: Notify listeners that cache was updated
+      _conversationUpdateController.add(mergedConversations);
     } catch (e) {
-      // Silently fail - we already showed cached data
       debugPrint('Background conversation refresh failed: $e');
     }
   }
@@ -308,17 +314,29 @@ class ChatRepositoryImpl implements ChatRepository {
   ) {
     final Map<String, Conversation> merged = {};
 
-    for (final conv in cached) {
-      merged[conv.partnerId] = conv;
-    }
-
+    // 1. Remote is the source of truth for WHICH conversations exist
     for (final conv in remote) {
       merged[conv.partnerId] = conv;
     }
 
+    // 2. Check cache for newer local updates (e.g. user just sent a message)
+    for (final conv in cached) {
+      final remoteConv = merged[conv.partnerId];
+
+      // ✅ CRITICAL FIX: If it's in cache but NOT in remote, the user was deleted.
+      // DO NOT add it to merged. This drops ghost users from the list automatically!
+      if (remoteConv == null) {
+        continue;
+      }
+
+      // If cache has a newer message than remote, use the cached version
+      if (conv.lastMessageTime.isAfter(remoteConv.lastMessageTime)) {
+        merged[conv.partnerId] = conv;
+      }
+    }
+
     final result = merged.values.toList();
     result.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
-
     return result;
   }
 
@@ -375,5 +393,9 @@ class ChatRepositoryImpl implements ChatRepository {
     // if (kDebugMode) {
     // }
     print(message);
+  }
+
+  void dispose() {
+    _conversationUpdateController.close();
   }
 }

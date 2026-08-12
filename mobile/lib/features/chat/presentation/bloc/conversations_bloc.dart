@@ -1,6 +1,7 @@
 // lib/features/chat/presentation/bloc/conversations_bloc.dart
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:mobile/features/chat/domain/repositories/chat_repository.dart';
 import '../../domain/entities/conversation.dart';
 import '../../data/models/conversation_model.dart';
 import '../../domain/usecases/get_conversations.dart';
@@ -15,7 +16,8 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
   final SearchConversations searchConversations;
   final ChatSocketService socketService;
   final ChatLocalDataSource localDataSource; // ✅ ADD THIS
-
+  final ChatRepository chatRepository; // ✅ ADD THIS
+  StreamSubscription? _userDeletedSub; // ✅ ADD THIS
   List<Conversation> get cachedConversations =>
       List.unmodifiable(_conversations);
 
@@ -27,12 +29,14 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
   StreamSubscription? _messageSentSub;
   StreamSubscription? _statusSub;
   StreamSubscription? _connectionSub;
+  StreamSubscription? _conversationUpdateSub; // ✅ ADD THIS
 
   ConversationsBloc({
     required this.getConversations,
     required this.searchConversations,
     required this.socketService,
     required this.localDataSource, // ✅ ADD THIS
+    required this.chatRepository,
   }) : super(ConversationsInitial()) {
     on<LoadConversationsEvent>(_onLoadConversations);
     on<NewMessageReceivedEvent>(_onNewMessage);
@@ -41,8 +45,19 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     on<SearchConversationsEvent>(_onSearch);
     on<ClearSearchEvent>(_onClearSearch);
     on<ClearConversationsCacheEvent>(_onClearCache);
+    on<ConversationsCacheUpdatedEvent>(_onCacheUpdated); // ✅ ADD THIS
 
     _setupSocketListeners();
+    _setupRepositoryListeners(); // ✅ ADD THIS
+  }
+  void _setupRepositoryListeners() {
+    _conversationUpdateSub = chatRepository.conversationUpdates.listen((
+      updatedConversations,
+    ) {
+      if (!isClosed) {
+        add(ConversationsCacheUpdatedEvent(updatedConversations));
+      }
+    });
   }
 
   void _setupSocketListeners() {
@@ -64,6 +79,12 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
       );
     });
 
+    _userDeletedSub = socketService.onUserDeleted.listen((data) {
+      if (!isClosed) {
+        // Force a full refresh from the server to drop the deleted user
+        add(LoadConversationsEvent());
+      }
+    });
     _messageSentSub = socketService.onMessageSent.listen((data) {
       if (isClosed) return;
       try {
@@ -96,6 +117,17 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
         add(UpdateUserStatusEvent(userId: userId, isOnline: isOnline));
       }
     });
+  }
+
+  Future<void> _onCacheUpdated(
+    ConversationsCacheUpdatedEvent event,
+    Emitter<ConversationsState> emit,
+  ) async {
+    _conversations = List.from(event.conversations);
+    _conversations.sort(
+      (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
+    );
+    emit(ConversationsLoaded(List.from(_conversations)));
   }
 
   // ==========================================
@@ -323,6 +355,9 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     _messageSentSub?.cancel();
     _statusSub?.cancel();
     _connectionSub?.cancel();
+    _conversationUpdateSub?.cancel(); // ✅ ADD THIS
+    _userDeletedSub?.cancel(); // ✅ ADD THIS
+
     return super.close();
   }
 }

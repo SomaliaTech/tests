@@ -465,8 +465,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                         // ✅ NEW: Sync Price Toggle
                                         const SizedBox(height: 16),
                                         _buildSwitchTile(
-                                          label:
-                                              'Apply base price to all variants',
+                                          label: 'Apply Single price to all',
                                           value: _syncPriceToVariants,
                                           onChanged: (value) => setState(
                                             () => _syncPriceToVariants = value,

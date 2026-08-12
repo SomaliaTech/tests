@@ -441,9 +441,10 @@ export class OrdersService {
       const paymentResult = await this.waafiPayService.initiatePayment({
         amount: finalTotalAmount,
         phoneNumber: orderData.phoneNumber,
-        orderId: 'PENDING',
+        orderId: `INV-${Date.now()}`, // ✅ CHANGED FROM 'PENDING' to a unique ID
         description: `New order payment via ${orderData.paymentMethod}`,
         referenceId: paymentRefId,
+        paymentMethod: orderData.paymentMethod,
       });
 
       if (!paymentResult.success) {

@@ -4,6 +4,7 @@ import '../../../../core/utils/typedefs.dart';
 import '../entities/chat_message.dart';
 import '../entities/conversation.dart';
 
+// lib/features/chat/domain/repositories/chat_repository.dart
 abstract class ChatRepository {
   ResultFuture<List<Conversation>> getConversations();
   ResultFuture<List<ChatMessage>> getChatHistory(String partnerId);
@@ -17,7 +18,9 @@ abstract class ChatRepository {
     String? mediaUrl,
   });
   ResultFuture<Map<String, dynamic>> getUnreadCount();
-
   ResultFuture<List<Conversation>> searchConversations(String query);
   ResultFuture<List<ChatUser>> getAdminUsersForChat();
+
+  // ✅ ADD THIS: Stream for real-time cache updates
+  Stream<List<Conversation>> get conversationUpdates;
 }

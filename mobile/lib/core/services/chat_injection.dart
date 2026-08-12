@@ -94,6 +94,7 @@ void registerChatDependencies() {
         searchConversations: sl<SearchConversations>(),
         socketService: sl<ChatSocketService>(),
         localDataSource: sl<ChatLocalDataSource>(), // ✅ ADD THIS
+        chatRepository: sl(),
       ),
     );
   }

@@ -131,6 +131,8 @@ export class ChatController {
     return this.chatService.getConversationMessages(conversationId, limit);
   }
 
+  // When a user is deleted, emit to all their conversation partners
+
   // ==========================================
   // USER SEARCH
   // ==========================================

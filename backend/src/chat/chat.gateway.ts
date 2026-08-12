@@ -215,6 +215,19 @@ export class ChatGateway
     this.logger.log(`🔌 Client disconnected: ${client.id}`);
   }
 
+  @SubscribeMessage('user_deleted')
+  async handleUserDeleted(@MessageBody() data: { userId: string }) {
+    const partnerIds = await this.chatService.getConversationPartnerIds(
+      data.userId,
+    );
+
+    partnerIds.forEach((partnerId) => {
+      this.server.to(`user:${partnerId}`).emit('user_deleted', {
+        deletedUserId: data.userId,
+      });
+    });
+  }
+
   // ==========================================
   // WEBSOCKET EVENT HANDLERS
   // ==========================================
@@ -481,15 +494,24 @@ export class ChatGateway
     client.emit('error', { message });
     setTimeout(() => client.disconnect(true), 100);
   }
-
   private startSocketTTL(userId: string, socketId: string): void {
     this.clearSocketTTL(socketId);
 
     const timeout = setTimeout(() => {
       this.logger.warn(`Socket TTL expired for ${socketId} (user: ${userId})`);
-      const client = this.server.sockets.sockets.get(socketId);
-      if (client) {
-        client.disconnect(true);
+
+      // ✅ SAFE SOCKET LOOKUP (Prevents the crash)
+      try {
+        const socketsMap =
+          this.server?.sockets?.sockets || this.server?.of('/')?.sockets;
+        const client = socketsMap?.get(socketId);
+        if (client) {
+          client.disconnect(true);
+        }
+      } catch (err: any) {
+        this.logger.debug(
+          `Could not disconnect expired socket: ${err?.message}`,
+        );
       }
     }, 60000); // 60 seconds TTL
 
