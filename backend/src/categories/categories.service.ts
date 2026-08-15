@@ -65,8 +65,8 @@ export class CategoriesService {
 
   async getCategoryTree() {
     const allCategories = await this.getAllCategories();
-    const categoryMap = new Map();
-    const roots: any[] = []; // ✅ FIX: Added explicit 'any[]' type here
+    const categoryMap = new Map<string, ReturnType<typeof this.getCategoryById> & { children: unknown[] }>();
+    const roots: Array<{ id: string; name: string; slug: string; description: string | null; iconId: string | null; parentId: string | null; isActive: boolean; createdAt: Date; updatedAt: Date; children: unknown[] }> = [];
 
     // First, create a map of all categories
     allCategories.forEach((category) => {
