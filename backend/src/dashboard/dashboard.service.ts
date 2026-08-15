@@ -116,7 +116,7 @@ export class DashboardService {
       .orderBy(sql`DATE(${users.createdAt})`);
 
     // Fill in missing dates
-    const chartData: any = [];
+    const chartData: Array<{ date: string; users: number }> = [];
     const currentDate = new Date(startDate);
 
     while (currentDate <= endDate) {
@@ -241,7 +241,7 @@ export class DashboardService {
       .orderBy(sql`DATE(${orders.createdAt})`);
 
     // Fill in missing dates
-    const chartData: any = [];
+    const chartData: Array<{ date: string; revenue: number; orders: number }> = [];
     const currentDate = new Date(startDate);
 
     while (currentDate <= endDate) {

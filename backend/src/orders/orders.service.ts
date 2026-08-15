@@ -19,7 +19,7 @@ import {
   sizes,
   cartItems,
 } from '../drizzle/schema';
-import { eq, and, or, like, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, or, like, sql, desc, inArray, SQL } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { AddressDto } from './dto/address.dto';
@@ -325,7 +325,18 @@ export class OrdersService {
 
     // Step 1: Calculate total first
     let itemsTotal = 0;
-    const orderItemsData: any[] = [];
+    const orderItemsData: Array<{
+      id: string;
+      productId: string;
+      productVariantId: string | null;
+      productName: string;
+      variantSku: string | null;
+      colorName: string | null;
+      sizeName: string | null;
+      quantity: number;
+      unitPrice: string;
+      totalPrice: string;
+    }> = [];
 
     const [user] = await this.drizzle.db
       .select()
@@ -600,7 +611,7 @@ export class OrdersService {
     );
 
     // ✅ Build conditions with proper typing
-    const conditions: any[] = []; // <-- FIX: Use any[] instead of never[]
+    const conditions: SQL[] = [];
 
     if (!isAdmin) {
       // Regular users only see their own orders

@@ -69,9 +69,10 @@ export class SupabaseService {
         secure_url: urlData.publicUrl, // ✅ Matches expected type
         public_id: data.path, // ✅ Matches expected type
       };
-    } catch (error: any) {
-      console.error('Supabase upload error:', error.message);
-      throw new Error(`Failed to upload base64 image: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Supabase upload error:', errorMessage);
+      throw new Error(`Failed to upload base64 image: ${errorMessage}`);
     }
   }
 
@@ -117,9 +118,10 @@ export class SupabaseService {
         secure_url: urlData.publicUrl,
         public_id: filePath,
       };
-    } catch (error: any) {
-      console.error('Supabase upload error:', error.message);
-      throw new Error(`Failed to upload image from URL: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Supabase upload error:', errorMessage);
+      throw new Error(`Failed to upload image from URL: ${errorMessage}`);
     }
   }
 
@@ -153,8 +155,9 @@ export class SupabaseService {
         secure_url: urlData.publicUrl,
         public_id: filePath,
       };
-    } catch (error: any) {
-      throw new Error(`Failed to upload file: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to upload file: ${errorMessage}`);
     }
   }
 
@@ -169,8 +172,9 @@ export class SupabaseService {
       }
 
       return { success: true };
-    } catch (error: any) {
-      throw new Error(`Failed to delete image: ${error.message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to delete image: ${errorMessage}`);
     }
   }
 
