@@ -56,18 +56,19 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const parsed = new URL(url);
-      
+
       if (!parsed.username) {
         throw new Error('DATABASE_URL missing username');
       }
-      
+
       if (!parsed.password) {
         throw new Error('DATABASE_URL missing password');
       }
 
-      this.logger.log(`📍 Database: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace('/', '')}`);
+      this.logger.log(
+        `📍 Database: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace('/', '')}`,
+      );
       this.logger.log(`👤 User: ${parsed.username}`);
-      
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Invalid DATABASE_URL: ${error.message}`);
@@ -104,7 +105,9 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       this.db = drizzle(this.pool, { schema });
       this.logger.log('✅ Neon PostgreSQL connected successfully');
     } catch (error) {
-      this.logger.error(`Failed to initialize pool: ${(error as Error).message}`);
+      this.logger.error(
+        `Failed to initialize pool: ${(error as Error).message}`,
+      );
       throw error;
     }
   }
@@ -119,11 +122,11 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       this.pool.on('connect', () => {
         this.logger.debug('New client connected to pool');
       });
-      
+
       this.pool.on('acquire', () => {
         this.logger.debug('Client acquired from pool');
       });
-      
+
       this.pool.on('remove', () => {
         this.logger.debug('Client removed from pool');
       });
@@ -134,7 +137,9 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     let client;
     try {
       client = await this.pool.connect();
-      const result = await client.query('SELECT version(), current_database(), current_user');
+      const result = await client.query(
+        'SELECT version(), current_database(), current_user',
+      );
       this.logger.log(`✅ Database connection test successful`);
       this.logger.log(`📊 PostgreSQL version: ${result.rows[0].version}`);
       this.logger.log(`📊 Database: ${result.rows[0].current_database}`);
@@ -142,16 +147,20 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const err = error as Error;
       this.logger.error(`❌ Failed to connect: ${err.message}`);
-      
+
       // Helpful hints for Neon
       if (err.message.includes('no pg_hba.conf entry')) {
-        this.logger.error('💡 Neon might have IP restrictions. Check your Neon dashboard for allowed IPs.');
+        this.logger.error(
+          '💡 Neon might have IP restrictions. Check your Neon dashboard for allowed IPs.',
+        );
       }
-      
+
       if (err.message.includes('password authentication failed')) {
-        this.logger.error('💡 Check your DATABASE_URL password. Make sure it\'s correct.');
+        this.logger.error(
+          "💡 Check your DATABASE_URL password. Make sure it's correct.",
+        );
       }
-      
+
       throw error;
     } finally {
       if (client) {

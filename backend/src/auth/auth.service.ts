@@ -15,7 +15,6 @@ import { SupabaseService } from 'src/supabase/supabase.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OAuth2Client } from 'google-auth-library';
 import { GoogleAuthDto } from './dto/google-auth.dto';
-import type { users as UsersType } from '../drizzle/schema';
 
 interface User {
   id: string;
@@ -183,7 +182,7 @@ export class AuthService {
         };
 
         await this.drizzle.db.insert(users).values(newUser);
-        user = [newUser as unknown as typeof user[0]]; // Type assertion to match User interface
+        user = [newUser]; // Type assertion to match User interface
       } else {
         // Update existing user
         await this.drizzle.db
@@ -494,9 +493,10 @@ export class AuthService {
       };
     } catch (error) {
       // ✅ Catch Postgres Unique Constraint Violation (Error Code 23505)
-      const errorCode = (error as any)?.code || (error as any)?.cause?.code;
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+      const errorCode = error?.code || error?.cause?.code;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+
       if (
         errorCode === '23505' ||
         errorMessage?.includes('users_phone_number_unique')

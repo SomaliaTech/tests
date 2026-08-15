@@ -252,10 +252,24 @@ export class CategoriesController {
   }
 
   // Helper method to attach iconUrl to categories
-  private async _formatCategoriesWithIcons(categoryList: Array<{ id: string; name: string; slug: string; description: string | null; iconId: string | null; parentId: string | null; isActive: boolean; createdAt: Date; updatedAt: Date }>) {
+  private async _formatCategoriesWithIcons(
+    categoryList: Array<{
+      id: string;
+      name: string;
+      slug: string;
+      description: string | null;
+      iconId: string | null;
+      parentId: string | null;
+      isActive: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }>,
+  ) {
     if (!categoryList || categoryList.length === 0) return categoryList;
 
-    const iconIds = categoryList.filter((c) => c.iconId).map((c) => c.iconId);
+    const iconIds = categoryList
+      .map((c) => c.iconId)
+      .filter((id): id is string => id !== null);
 
     let iconMap = new Map<string, string>();
 
