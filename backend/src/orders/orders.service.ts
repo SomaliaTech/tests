@@ -326,7 +326,6 @@ export class OrdersService {
     // Step 1: Calculate total first
     let itemsTotal = 0;
     const orderItemsData: Array<{
-      id: string;
       productId: string;
       productVariantId: string | null;
       productName: string;
@@ -336,6 +335,7 @@ export class OrdersService {
       quantity: number;
       unitPrice: string;
       totalPrice: string;
+      orderId: string;
     }> = [];
 
     const [user] = await this.drizzle.db
@@ -387,7 +387,6 @@ export class OrdersService {
         itemsTotal += unitPrice * item.quantity;
 
         orderItemsData.push({
-          id: uuidv4(),
           productId: variant.productId,
           productVariantId: variant.id,
           productName: variant.productName || 'Product',
@@ -397,6 +396,7 @@ export class OrdersService {
           quantity: item.quantity,
           unitPrice: unitPrice.toString(),
           totalPrice: (unitPrice * item.quantity).toString(),
+          orderId: '', // Will be set after order creation
         });
       } else {
         const [product] = await this.drizzle.db
@@ -417,7 +417,6 @@ export class OrdersService {
         itemsTotal += unitPrice * item.quantity;
 
         orderItemsData.push({
-          id: uuidv4(),
           productId: product.id,
           productVariantId: null,
           productName: product.name,
@@ -427,6 +426,7 @@ export class OrdersService {
           quantity: item.quantity,
           unitPrice: unitPrice.toString(),
           totalPrice: (unitPrice * item.quantity).toString(),
+          orderId: '', // Will be set after order creation
         });
       }
     }
@@ -499,7 +499,9 @@ export class OrdersService {
         })
         .returning();
 
-      orderItemsData.forEach((item) => (item.orderId = order.id));
+      orderItemsData.forEach((item) => {
+        item.orderId = order.id;
+      });
       if (orderItemsData.length > 0) {
         await tx.insert(orderItems).values(orderItemsData);
       }

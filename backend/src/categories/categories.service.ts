@@ -65,23 +65,29 @@ export class CategoriesService {
 
   async getCategoryTree() {
     const allCategories = await this.getAllCategories();
-    const categoryMap = new Map<string, ReturnType<typeof this.getCategoryById> & { children: unknown[] }>();
-    const roots: Array<{ id: string; name: string; slug: string; description: string | null; iconId: string | null; parentId: string | null; isActive: boolean; createdAt: Date; updatedAt: Date; children: unknown[] }> = [];
+    type CategoryWithChildren = (typeof allCategories)[0] & {
+      children: (typeof allCategories)[0][];
+    };
+    const categoryMap = new Map<string, CategoryWithChildren>();
+    const roots: CategoryWithChildren[] = [];
 
     // First, create a map of all categories
     allCategories.forEach((category) => {
-      categoryMap.set(category.id, { ...category, children: [] });
+      categoryMap.set(category.id, {
+        ...category,
+        children: [],
+      });
     });
 
     // Then, build the tree
     allCategories.forEach((category) => {
       const node = categoryMap.get(category.id);
-      if (category.parentId && categoryMap.has(category.parentId)) {
+      if (node && category.parentId) {
         const parent = categoryMap.get(category.parentId);
         if (parent) {
           parent.children.push(node);
         }
-      } else {
+      } else if (node) {
         roots.push(node);
       }
     });

@@ -563,7 +563,7 @@ export class ProductsService {
       }
     } else {
       const product = await this.drizzle.db.query.products.findFirst({
-        where: eq(products.id, existingItem.productId as string),
+        where: eq(products.id, existingItem.productId),
       });
       if (product && product.stock < quantity) {
         throw new BadRequestException('Insufficient stock');
@@ -581,7 +581,7 @@ export class ProductsService {
     }
 
     const product = await this.drizzle.db.query.products.findFirst({
-      where: eq(products.id, existingItem.productId as string),
+      where: eq(products.id, existingItem.productId),
       with: { images: true },
     });
 
@@ -603,7 +603,7 @@ export class ProductsService {
     return {
       id: updated.id,
       productVariantId: updated.productVariantId,
-      productId: existingItem.productId as string,
+      productId: existingItem.productId,
       name: product?.name || 'Unknown Product',
       price: unitPrice,
       quantity: updated.quantity,

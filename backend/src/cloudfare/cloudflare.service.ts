@@ -53,7 +53,8 @@ export class CloudflareService {
         public_id: key,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to upload image: ${errorMessage}`);
     }
   }
@@ -93,7 +94,8 @@ export class CloudflareService {
         public_id: key,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to upload image from URL: ${errorMessage}`);
     }
   }
@@ -123,7 +125,8 @@ export class CloudflareService {
         public_id: key,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to upload file: ${errorMessage}`);
     }
   }
@@ -138,7 +141,8 @@ export class CloudflareService {
       );
       return { success: true };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new Error(`Failed to delete image: ${errorMessage}`);
     }
   }
