@@ -25,6 +25,7 @@ async function bootstrap() {
       },
     }),
   );
+
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',')

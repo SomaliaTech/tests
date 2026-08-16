@@ -1,23 +1,22 @@
+import { IsString, Matches, Length } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, Length } from 'class-validator';
 
 export class VerifyOtpDto {
   @ApiProperty({
-    description: 'Phone number in international format',
+    description: 'Somali phone number (supports multiple formats)',
     example: '+252612345678',
   })
   @IsString()
-  @IsNotEmpty()
+  @Matches(/^(\+?252|0)?(61|63|68|90)\d{7}$/, {
+    message: 'Phone number must be a valid Somali number',
+  })
   phoneNumber: string;
 
   @ApiProperty({
-    description: 'OTP code received via SMS',
+    description: '6-digit OTP code',
     example: '123456',
-    minLength: 6,
-    maxLength: 6,
   })
   @IsString()
-  @IsNotEmpty()
-  @Length(6, 6)
+  @Length(6, 6, { message: 'OTP code must be exactly 6 digits' })
   otpCode: string;
 }

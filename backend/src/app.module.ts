@@ -1,6 +1,7 @@
-// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -25,6 +26,12 @@ import { BannersModule } from './banners/banners.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute in milliseconds
+        limit: 10, // 10 requests per minute
+      },
+    ]),
     DrizzleModule,
     SupabaseModule,
     CategoriesModule,
@@ -44,6 +51,10 @@ import { BannersModule } from './banners/banners.module';
   providers: [
     AppService,
     PermissionGuard, // ✅ Guard registered as a provider
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard, // ✅ Global rate limiting
+    },
   ],
 })
 export class AppModule {}
