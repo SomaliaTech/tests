@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   UnauthorizedException,
   NotFoundException,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Redis } from '@upstash/redis';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from 'src/cloudfare/cloudflare.service';
 import { markets, users } from '../drizzle/schema';
@@ -14,9 +16,9 @@ import { eq } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { OAuth2Client } from 'google-auth-library';
-import { GoogleAuthDto } from './dto/google-auth.dto';
+import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { HormuudService } from '../hormuud/hormuud.service';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 
 interface User {
   id: string;
@@ -32,12 +34,38 @@ interface User {
   otpExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  isActive: boolean;
+  isOnline: boolean;
+  lastSeen: Date | null;
+}
+
+interface UpdateUserData {
+  name?: string;
+  marketId?: string;
+  phoneNumber?: string;
+  profileImage?: string;
+  isVerified?: boolean;
+  isActive?: boolean;
+  updatedAt: Date;
+}
+
+interface OtpCacheData {
+  otpCode: string;
+  phoneNumber: string;
+  attempts: number;
 }
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private googleClient: OAuth2Client;
+  private readonly isProduction: boolean;
+  private readonly GOOGLE_ISSUERS = [
+    'https://accounts.google.com',
+    'accounts.google.com',
+  ];
+  private readonly MAX_OTP_ATTEMPTS = 5;
+  private readonly OTP_TTL_SECONDS = 600; // 10 minutes
 
   constructor(
     private jwtService: JwtService,
@@ -47,31 +75,32 @@ export class AuthService {
     private notificationsService: NotificationsService,
     private configService: ConfigService,
     private hormuudService: HormuudService,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {
-    this.googleClient = new OAuth2Client(configService.get('GOOGLE_CLIENT_ID'));
+    const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    this.googleClient = new OAuth2Client(googleClientId);
+    this.isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
   }
 
-  async sendOtp(phoneNumber: string) {
-    let cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
+  // ==========================================
+  // PHONE NUMBER VALIDATION
+  // ==========================================
 
-    this.logger.log(`📱 Input phone number: ${phoneNumber}`);
-
-    // Remove any non-digit characters for analysis
+  private normalizePhoneNumber(phoneNumber: string): string {
+    const cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
     let digitsOnly = cleanedPhone.replace(/\D/g, '');
 
-    // If starts with 252, remove it temporarily for validation
     if (digitsOnly.startsWith('252')) {
       digitsOnly = digitsOnly.substring(3);
     }
 
-    // Validate that we have exactly 9 digits after country code
     if (digitsOnly.length !== 9) {
       throw new BadRequestException(
         `Phone number must be exactly 9 digits. Got ${digitsOnly.length} digits.`,
       );
     }
 
-    // Check valid prefixes
     const validPrefixes = ['61', '63', '68', '90'];
     const hasValidPrefix = validPrefixes.some((prefix) =>
       digitsOnly.startsWith(prefix),
@@ -79,124 +108,183 @@ export class AuthService {
 
     if (!hasValidPrefix) {
       throw new BadRequestException(
-        `Phone number must start with 61, 63, 68, or 90. Got: ${digitsOnly.substring(0, 2)}`,
+        'Phone number must start with 61, 63, 68, or 90.',
       );
     }
 
-    // Normalize to +252 format
-    cleanedPhone = '+252' + digitsOnly;
-    this.logger.log(`✅ Normalized phone number: ${cleanedPhone}`);
+    return '+252' + digitsOnly;
+  }
 
-    // Generate OTP
+  // ==========================================
+  // OTP SEND
+  // ==========================================
+
+  async sendOtp(phoneNumber: string) {
+    const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    const redisKey = `otp:${normalizedPhone}`;
+    const otpData: OtpCacheData = {
+      otpCode,
+      phoneNumber: normalizedPhone,
+      attempts: 0,
+    };
 
-    // Save OTP to database
-    const existingUser = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.phoneNumber, cleanedPhone))
-      .limit(1);
-
-    if (existingUser.length > 0) {
-      await this.drizzle.db
-        .update(users)
-        .set({
-          otpCode,
-          otpExpiresAt,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.phoneNumber, cleanedPhone));
-    } else {
-      await this.drizzle.db.insert(users).values({
-        id: uuidv4(),
-        phoneNumber: cleanedPhone,
-        otpCode,
-        otpExpiresAt,
-        isVerified: false,
-      });
-    }
-
-    // ALWAYS send real SMS (production mode)
     try {
-      await this.hormuudService.sendOtpSms(cleanedPhone, otpCode);
-      this.logger.log(`✅ OTP sent via SMS to ${cleanedPhone}`);
+      await this.redis.set(redisKey, JSON.stringify(otpData), {
+        ex: this.OTP_TTL_SECONDS,
+      });
+      this.logger.log(`OTP stored in Redis`);
 
-      return {
-        message: 'OTP sent successfully',
-        // No debugOtp in production!
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to send SMS to ${cleanedPhone}: ${error.message}`,
-      );
+      if (this.isProduction) {
+        await this.hormuudService.sendOtpSms(normalizedPhone, otpCode);
+        this.logger.log('OTP sent via SMS');
 
-      // Clean up OTP from database since SMS failed
-      await this.drizzle.db
-        .update(users)
-        .set({
-          otpCode: null,
-          otpExpiresAt: null,
-        })
-        .where(eq(users.phoneNumber, cleanedPhone));
+        return {
+          message: 'OTP sent successfully',
+        };
+      } else {
+        this.logger.log(`[DEV] OTP for ${normalizedPhone}: ${otpCode}`);
+
+        return {
+          message: 'OTP sent successfully (Development Mode)',
+          debugOtp: otpCode,
+        };
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send OTP: ${errorMessage}`);
+
+      await this.redis.del(redisKey);
+
+      if (!this.isProduction) {
+        return {
+          message: 'OTP generated (SMS failed in dev mode)',
+          debugOtp: otpCode,
+        };
+      }
 
       throw new BadRequestException(
-        `Failed to send verification code: ${error.message}`,
+        `Failed to send verification code: ${errorMessage}`,
       );
     }
   }
 
+  // ==========================================
+  // OTP VERIFY
+  // ==========================================
+
   async verifyOtp(phoneNumber: string, otpCode: string) {
-    this.logger.log(`Verifying OTP for ${phoneNumber}`);
+    const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
+    const redisKey = `otp:${normalizedPhone}`;
 
-    let cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
-    let digitsOnly = cleanedPhone.replace(/\D/g, '');
+    let otpData: OtpCacheData | null = null;
 
-    if (digitsOnly.startsWith('252')) {
-      digitsOnly = digitsOnly.substring(3);
+    try {
+      const cachedData = await this.redis.get(redisKey);
+      if (cachedData) {
+        otpData =
+          typeof cachedData === 'string'
+            ? JSON.parse(cachedData)
+            : (cachedData as OtpCacheData);
+      }
+    } catch (error: unknown) {
+      this.logger.error('Failed to get OTP from Redis');
     }
 
-    cleanedPhone = '+252' + digitsOnly;
-
-    const user = await this.drizzle.db
-      .select()
-      .from(users)
-      .where(eq(users.phoneNumber, cleanedPhone))
-      .limit(1);
-
-    if (!user.length) {
-      throw new UnauthorizedException('User not found');
+    if (!this.isProduction && !otpData) {
+      this.logger.warn('[DEV] OTP not found, allowing verification');
+      otpData = {
+        otpCode: otpCode,
+        phoneNumber: normalizedPhone,
+        attempts: 0,
+      };
     }
 
-    const currentUser = user[0];
+    if (!otpData) {
+      throw new UnauthorizedException(
+        'OTP has expired. Please request a new one.',
+      );
+    }
 
-    if (currentUser.otpCode !== otpCode) {
+    if (otpData.attempts >= this.MAX_OTP_ATTEMPTS) {
+      await this.redis.del(redisKey);
+      throw new UnauthorizedException(
+        'Too many attempts. Please request a new OTP.',
+      );
+    }
+
+    if (this.isProduction && otpData.otpCode !== otpCode) {
+      otpData.attempts += 1;
+      await this.redis.set(redisKey, JSON.stringify(otpData), {
+        ex: this.OTP_TTL_SECONDS,
+      });
       throw new UnauthorizedException('Invalid OTP code');
     }
 
-    if (currentUser.otpExpiresAt && new Date() > currentUser.otpExpiresAt) {
-      throw new UnauthorizedException('OTP has expired');
-    }
+    await this.redis.del(redisKey);
 
-    await this.drizzle.db
-      .update(users)
-      .set({
+    const userResult = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.phoneNumber, normalizedPhone))
+      .limit(1);
+
+    let currentUser: typeof users.$inferSelect;
+
+    if (userResult.length > 0) {
+      const updatedResult = await this.drizzle.db
+        .update(users)
+        .set({
+          isVerified: true,
+          otpCode: null,
+          otpExpiresAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.phoneNumber, normalizedPhone))
+        .returning();
+
+      currentUser = updatedResult[0];
+    } else {
+      const newUser = {
+        id: uuidv4(),
+        phoneNumber: normalizedPhone,
+        email: null,
+        name: null,
+        profileImage: null,
+        marketId: null,
         isVerified: true,
+        isAdmin: false,
+        isSuperAdmin: false,
+        isActive: true,
+        isOnline: false,
         otpCode: null,
         otpExpiresAt: null,
+        lastSeen: null,
+        createdAt: new Date(),
         updatedAt: new Date(),
-      })
-      .where(eq(users.phoneNumber, cleanedPhone));
+      };
+
+      const insertResult = await this.drizzle.db
+        .insert(users)
+        .values(newUser)
+        .returning();
+
+      currentUser = insertResult[0];
+    }
 
     const token = this.generateToken(
       currentUser.id,
-      cleanedPhone,
+      currentUser.phoneNumber as string,
       currentUser.isAdmin ?? false,
       currentUser.isSuperAdmin ?? false,
     );
 
     const hasProfile = !!(
-      currentUser.name && currentUser.name.trim().length > 0
+      currentUser.name &&
+      currentUser.name.trim().length > 0 &&
+      currentUser.marketId &&
+      currentUser.marketId.trim().length > 0
     );
 
     return {
@@ -206,7 +294,7 @@ export class AuthService {
         id: currentUser.id,
         phoneNumber: currentUser.phoneNumber,
         isVerified: true,
-        hasProfile: hasProfile,
+        hasProfile: hasProfile, // ✅ Correctly checks marketId too
         name: currentUser.name,
         profileImage: currentUser.profileImage,
         isAdmin: currentUser.isAdmin ?? false,
@@ -215,37 +303,38 @@ export class AuthService {
     };
   }
 
+  // ==========================================
+  // GOOGLE SIGN-IN WITH FULL TOKEN VERIFICATION
+  // ==========================================
+
   async googleSignIn(dto: GoogleAuthDto) {
     try {
-      const ticket = await this.googleClient.verifyIdToken({
-        idToken: dto.idToken,
-        audience: this.configService.get('GOOGLE_CLIENT_ID'),
-      });
+      const payload = await this.verifyGoogleToken(dto.idToken);
 
-      const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
-        throw new UnauthorizedException('Invalid Google token');
-      }
+      const verifiedEmail = payload.email!;
+      const verifiedName = payload.name || '';
+      const verifiedPicture = payload.picture || null;
 
-      let user = await this.drizzle.db
+      let userResult = await this.drizzle.db
         .select()
         .from(users)
-        .where(eq(users.email, dto.email))
+        .where(eq(users.email, verifiedEmail))
         .limit(1);
 
-      if (user.length === 0) {
+      if (userResult.length === 0) {
+        // New Google user
         const newUser = {
           id: uuidv4(),
-          phoneNumber: '',
-          email: dto.email,
-          name: dto.name,
-          profileImage: dto.photoUrl || null,
+          phoneNumber: '', // Empty for Google users
+          email: verifiedEmail,
+          name: verifiedName,
+          profileImage: verifiedPicture,
           isVerified: true,
           isAdmin: false,
           isSuperAdmin: false,
           isActive: true,
           isOnline: false,
-          marketId: null,
+          marketId: null, // No market yet
           otpCode: null,
           otpExpiresAt: null,
           lastSeen: null,
@@ -254,29 +343,17 @@ export class AuthService {
         };
 
         await this.drizzle.db.insert(users).values(newUser);
-        user = [newUser as any];
-      } else {
-        await this.drizzle.db
-          .update(users)
-          .set({
-            name: dto.name,
-            profileImage: dto.photoUrl || user[0].profileImage,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.email, dto.email));
-
-        user = await this.drizzle.db
-          .select()
-          .from(users)
-          .where(eq(users.email, dto.email))
-          .limit(1);
+        userResult = [newUser as typeof users.$inferSelect];
       }
 
-      const currentUser = user[0];
+      const currentUser = userResult[0];
+
+      // ✅ FIX: hasProfile should be false if phoneNumber is empty OR marketId is null
       const hasProfile = !!(
-        currentUser.name &&
-        currentUser.name.trim().length > 0 &&
-        currentUser.marketId
+        currentUser.phoneNumber &&
+        currentUser.phoneNumber.trim().length > 0 &&
+        currentUser.marketId &&
+        currentUser.marketId.trim().length > 0
       );
 
       const token = this.generateToken(
@@ -296,7 +373,7 @@ export class AuthService {
           profileImage: currentUser.profileImage,
           marketId: currentUser.marketId,
           isVerified: currentUser.isVerified,
-          hasProfile: hasProfile,
+          hasProfile: hasProfile, // ✅ Now correctly false for new Google users
           isAdmin: currentUser.isAdmin ?? false,
           isSuperAdmin: currentUser.isSuperAdmin ?? false,
         },
@@ -305,11 +382,71 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      this.logger.error('Google sign in error:', error);
+      this.logger.error('Google sign in failed:', error);
       throw new UnauthorizedException('Google authentication failed');
     }
   }
 
+  /**
+   * ✅ Verify Google ID Token and return TokenPayload
+   */
+  private async verifyGoogleToken(idToken: string): Promise<TokenPayload> {
+    try {
+      if (!idToken || idToken.length < 20) {
+        throw new UnauthorizedException('Invalid Google ID token format');
+      }
+
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      });
+
+      const payload = ticket.getPayload();
+
+      if (!payload) {
+        throw new UnauthorizedException('Invalid Google token payload');
+      }
+
+      // ✅ TokenPayload has: iss, aud, email, email_verified, name, picture, exp, iat, sub
+
+      if (!this.GOOGLE_ISSUERS.includes(payload.iss)) {
+        this.logger.warn(`Invalid Google issuer: ${payload.iss}`);
+        throw new UnauthorizedException('Invalid Google token issuer');
+      }
+
+      const expectedAudience =
+        this.configService.get<string>('GOOGLE_CLIENT_ID');
+      if (payload.aud !== expectedAudience) {
+        this.logger.warn(`Invalid Google audience: ${payload.aud}`);
+        throw new UnauthorizedException('Invalid Google token audience');
+      }
+
+      if (!payload.email || payload.email_verified !== true) {
+        this.logger.warn('Google email not verified');
+        throw new UnauthorizedException('Google email is not verified');
+      }
+
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        throw new UnauthorizedException('Google token has expired');
+      }
+
+      if (payload.iat && payload.iat * 1000 > Date.now() + 300000) {
+        throw new UnauthorizedException('Google token issued in the future');
+      }
+
+      return payload; // ✅ Return TokenPayload type
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error('Google token verification failed:', error);
+      throw new UnauthorizedException('Failed to verify Google token');
+    }
+  }
+
+  // ==========================================
+  // COMPLETE PROFILE
+  // ==========================================
   async completeProfile(
     userId: string,
     data: {
@@ -323,11 +460,13 @@ export class AuthService {
       throw new BadRequestException('Name and market are required');
     }
 
-    const [existingUser] = await this.drizzle.db
+    const existingUserResult = await this.drizzle.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
+
+    const existingUser = existingUserResult[0];
 
     if (
       existingUser &&
@@ -350,7 +489,7 @@ export class AuthService {
       throw new BadRequestException('Invalid market selected');
     }
 
-    const updateData: any = {
+    const updateData: UpdateUserData = {
       name: data.name,
       marketId: data.marketId,
       isVerified: true,
@@ -358,14 +497,31 @@ export class AuthService {
     };
 
     if (data.phoneNumber && data.phoneNumber.trim().length > 0) {
-      let cleanedPhone = data.phoneNumber.trim();
-      let digitsOnly = cleanedPhone.replace(/\D/g, '');
+      const cleanedPhone = data.phoneNumber.trim();
 
-      if (digitsOnly.startsWith('252')) {
-        digitsOnly = digitsOnly.substring(3);
+      // ✅ Check if this is a Google user (existing user has empty phone)
+      const isGoogleUser =
+        existingUser &&
+        (!existingUser.phoneNumber || existingUser.phoneNumber.trim() === '');
+
+      if (isGoogleUser) {
+        // ✅ Google users: Accept international numbers (6-15 digits with country code)
+        const internationalPhone = cleanedPhone.replace(/\D/g, '');
+
+        if (internationalPhone.length < 6 || internationalPhone.length > 15) {
+          throw new BadRequestException(
+            'Phone number must be between 6 and 15 digits',
+          );
+        }
+
+        // Preserve the + sign and country code
+        updateData.phoneNumber = cleanedPhone.startsWith('+')
+          ? cleanedPhone
+          : `+${internationalPhone}`;
+      } else {
+        // ✅ OTP users: Somali numbers only (9 digits)
+        updateData.phoneNumber = this.normalizePhoneNumber(cleanedPhone);
       }
-
-      updateData.phoneNumber = '+252' + digitsOnly;
     }
 
     if (data.profileImage) {
@@ -375,18 +531,20 @@ export class AuthService {
           'profiles',
         );
         updateData.profileImage = uploadResult.secure_url;
-      } catch (error) {
+      } catch (error: unknown) {
         this.logger.error('Image upload failed:', error);
         throw new BadRequestException('Failed to upload profile image');
       }
     }
 
     try {
-      const [updatedUser] = await this.drizzle.db
+      const updatedUserResult = await this.drizzle.db
         .update(users)
         .set(updateData)
         .where(eq(users.id, userId))
         .returning();
+
+      const updatedUser = updatedUserResult[0];
 
       if (!updatedUser) {
         throw new NotFoundException('User not found');
@@ -394,7 +552,7 @@ export class AuthService {
 
       const token = this.generateToken(
         updatedUser.id,
-        updatedUser.phoneNumber as string,
+        updatedUser.phoneNumber || '',
         updatedUser.isAdmin ?? false,
         updatedUser.isSuperAdmin ?? false,
       );
@@ -421,11 +579,17 @@ export class AuthService {
           isSuperAdmin: updatedUser.isSuperAdmin ?? false,
         },
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as {
+        code?: string;
+        cause?: { code?: string };
+        message?: string;
+      };
+
       if (
-        error.code === '23505' ||
-        error.cause?.code === '23505' ||
-        error.message?.includes('users_phone_number_unique')
+        err.code === '23505' ||
+        err.cause?.code === '23505' ||
+        err.message?.includes('users_phone_number_unique')
       ) {
         throw new BadRequestException(
           'This phone number is already registered to another account.',
@@ -444,6 +608,10 @@ export class AuthService {
     }
   }
 
+  // ==========================================
+  // GET CURRENT USER
+  // ==========================================
+
   async getMe(userId: string) {
     const result = await this.drizzle.db
       .select()
@@ -457,29 +625,41 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const hasProfile = !!(user.name && user.name.trim().length > 0);
+    // ✅ FIX: hasProfile should check BOTH phone and marketId
+    const hasProfile = !!(
+      user.phoneNumber &&
+      user.phoneNumber.trim().length > 0 &&
+      user.marketId &&
+      user.marketId.trim().length > 0
+    );
 
     return {
       id: user.id,
       phoneNumber: user.phoneNumber,
+      email: user.email,
       name: user.name,
       profileImage: user.profileImage,
       marketId: user.marketId,
       isVerified: user.isVerified,
-      hasProfile: hasProfile,
+      hasProfile: hasProfile, // ✅ Now correctly false if no phone/market
       isAdmin: user.isAdmin ?? false,
       isSuperAdmin: user.isSuperAdmin ?? false,
     };
   }
+  // ==========================================
+  // UPDATE PROFILE
+  // ==========================================
 
   async updateProfile(userId: string, name?: string, marketId?: string) {
-    const [oldUser] = await this.drizzle.db
+    const oldUserResult = await this.drizzle.db
       .select()
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
-    const updateData: Partial<User> = { updatedAt: new Date() };
+    const oldUser = oldUserResult[0];
+
+    const updateData: UpdateUserData = { updatedAt: new Date() };
     const changes: string[] = [];
 
     if (name && name !== oldUser.name) {
@@ -498,6 +678,7 @@ export class AuthService {
           id: oldUser.id,
           name: oldUser.name,
           phoneNumber: oldUser.phoneNumber,
+          email: oldUser.email,
           profileImage: oldUser.profileImage,
           marketId: oldUser.marketId,
           isAdmin: oldUser.isAdmin ?? false,
@@ -528,6 +709,7 @@ export class AuthService {
         id: updatedUser.id,
         name: updatedUser.name,
         phoneNumber: updatedUser.phoneNumber,
+        email: updatedUser.email,
         profileImage: updatedUser.profileImage,
         marketId: updatedUser.marketId,
         isAdmin: updatedUser.isAdmin ?? false,
@@ -536,6 +718,10 @@ export class AuthService {
     };
   }
 
+  // ==========================================
+  // UPLOAD PROFILE IMAGE
+  // ==========================================
+
   async uploadProfileImage(userId: string, base64Image: string) {
     try {
       const result = await this.supabaseService.uploadBase64(
@@ -543,7 +729,7 @@ export class AuthService {
         'users/profiles',
       );
 
-      const [updatedUser] = await this.drizzle.db
+      const updatedUserResult = await this.drizzle.db
         .update(users)
         .set({
           profileImage: result.secure_url,
@@ -551,6 +737,8 @@ export class AuthService {
         })
         .where(eq(users.id, userId))
         .returning();
+
+      const updatedUser = updatedUserResult[0];
 
       await this.notificationsService.createSystemNotification(
         userId,
@@ -566,6 +754,7 @@ export class AuthService {
           id: updatedUser.id,
           name: updatedUser.name,
           phoneNumber: updatedUser.phoneNumber,
+          email: updatedUser.email,
           profileImage: updatedUser.profileImage,
           isAdmin: updatedUser.isAdmin ?? false,
           isSuperAdmin: updatedUser.isSuperAdmin ?? false,
@@ -578,13 +767,17 @@ export class AuthService {
     }
   }
 
+  // ==========================================
+  // TOKEN GENERATION
+  // ==========================================
+
   private generateToken(
     userId: string,
     phoneNumber: string,
     isAdmin?: boolean,
     isSuperAdmin?: boolean,
   ): string {
-    const expiresIn = 364 * 24 * 60 * 60; // 1 year
+    const expiresIn = 90 * 24 * 60 * 60; // 6 month
     return this.jwtService.sign(
       {
         sub: userId,

@@ -29,7 +29,7 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',')
-      : '*',
+      : null,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
@@ -39,4 +39,4 @@ async function bootstrap() {
 
   console.log(`🚀 Production core system operating smoothly on port: ${port}`);
 }
-bootstrap();
+void bootstrap();

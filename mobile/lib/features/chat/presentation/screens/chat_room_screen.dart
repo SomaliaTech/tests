@@ -88,7 +88,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
     await _chatRoomBloc.getCurrentUserId();
     if (!mounted) return;
 
-    // 🚀 LOAD CACHED HISTORY IMMEDIATELY - Don't wait for socket!
+    // Load chat history
     _chatRoomBloc.add(
       LoadChatHistoryEvent(
         partnerId: widget.partnerId,
@@ -96,18 +96,21 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
       ),
     );
 
-    // 🔄 Load partner info and connect socket in parallel AFTER emitting cache
-    if (widget.partnerName.isEmpty) {
-      _chatRoomBloc.add(LoadPartnerInfoEvent(widget.partnerId));
-    }
-
-    // Connect socket asynchronously without blocking UI
+    // Connect socket
     if (!_socketService.isConnected) {
       unawaited(_socketService.connect());
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
+    // ✅ CHECK PARTNER STATUS - This will emit partner_status event
     _socketService.checkPartnerStatus(widget.partnerId);
+
+    // ✅ Mark messages as read AFTER history is loaded
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        _chatRoomBloc.add(const MarkMessagesAsReadEvent());
+      }
+    });
   }
 
   void _onTextChanged() {
@@ -173,10 +176,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
+    // Use addPostFrameCallback to ensure the layout is complete before scrolling
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients && mounted) {
         _scrollController.animateTo(
-          0,
+          0, // 0 is the bottom because reverse: true
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -403,7 +407,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
   // ==========================================
   // MESSAGE LIST - NO LOADING IF CACHED DATA
   // ==========================================
-
   Widget _buildMessageList() {
     return BlocConsumer<ChatRoomBloc, ChatRoomState>(
       buildWhen: (previous, current) =>
@@ -422,11 +425,24 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
               ListView.builder(
                 controller: _scrollController,
                 reverse: true,
-                padding: const EdgeInsets.all(16),
+                physics: const AlwaysScrollableScrollPhysics(), // ✅ ADD THIS
+                padding: const EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  bottom:
+                      8, // Slightly less bottom padding to avoid overlap with input
+                ),
                 itemCount: state.messages.length,
                 itemBuilder: (context, index) {
                   final msg = state.messages[index];
-                  final isMe = msg.senderId == _chatRoomBloc.currentUserId;
+                  // Ensure we have a valid currentUserId before determining isMe
+                  final currentId = _chatRoomBloc.currentUserId;
+                  final isMe =
+                      currentId != null &&
+                      currentId != 'me' &&
+                      msg.senderId == currentId;
+
                   return MessageBubble(
                     key: ValueKey(msg.id),
                     message: msg,
@@ -494,7 +510,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
         }
 
         // ⚠️ ONLY show skeleton on FIRST LOAD (no cache at all)
-        // ChatRoomLoading is explicitly for when no cache exists
         if (state is ChatRoomLoading) {
           return const MessagesSkeletonList(count: 8);
         }
@@ -509,12 +524,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
           return _buildErrorState(state.message);
         }
 
-        // Fallback - should rarely reach here
+        // Fallback
         return const SizedBox.shrink();
       },
     );
   }
   // ==========================================
+
   // EMPTY STATE
   // ==========================================
 

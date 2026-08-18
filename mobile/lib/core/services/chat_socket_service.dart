@@ -12,12 +12,12 @@ import 'package:flutter/foundation.dart';
 class ChatSocketService {
   io.Socket? _socket;
   bool _isConnected = false;
-  String? _currentToken;
+  bool _isConnecting = false; // ✅ ADD THIS
   Timer? _reconnectTimer;
-  Timer? _heartbeatTimer; // ✅ Added for heartbeat mechanism
+  Timer? _heartbeatTimer;
   int _reconnectAttempts = 0;
   static const int _maxReconnectAttempts = 5;
-  String? _userId; // Stores the user ID from the socket
+  String? _userId;
 
   final StorageService _storageService = GetIt.instance<StorageService>();
   final Logger _logger = Logger();
@@ -42,6 +42,7 @@ class ChatSocketService {
   final _typingController = StreamController<Map<String, dynamic>>.broadcast();
   final _userDeletedController =
       StreamController<Map<String, dynamic>>.broadcast();
+
   // Getters
   Stream<ChatMessage> get onNewMessage => _newMessageController.stream;
   Stream<Map<String, dynamic>> get onStatusChange => _statusController.stream;
@@ -62,35 +63,36 @@ class ChatSocketService {
   String? get userId => _userId;
   Stream<Map<String, dynamic>> get onUserDeleted =>
       _userDeletedController.stream;
+
   Future<void> connect() async {
     try {
-      // Prevent multiple simultaneous connection attempts
-      if (_reconnectTimer?.isActive ?? false) {
-        _logger.i('⏳ [WS] Connection already in progress');
+      // Block if already connected
+      if (_socket?.connected == true) {
+        _logger.i('✅ [WS] Already connected');
         return;
       }
+
+      // Block if connection in progress
+      if (_isConnecting) {
+        _logger.i('⏳ [WS] Connection in progress');
+        return;
+      }
+
+      _isConnecting = true;
 
       final token = await _storageService.getAuthToken();
       if (token == null) {
         _logger.w('❌ [WS] No token found');
+        _isConnecting = false;
         _errorController.add('Authentication token not found');
         return;
       }
 
-      // Don't reconnect if already connected with same token
-      if (_isConnected &&
-          _currentToken == token &&
-          _socket?.connected == true) {
-        _logger.i('✅ [WS] Already connected with valid token');
-        return;
-      }
-
-      // Clean up existing connection
-      if (_socket != null) {
+      // Clean up only if socket exists but is NOT connected
+      if (_socket != null && !_socket!.connected) {
         await _cleanupSocket();
       }
 
-      _currentToken = token;
       _reconnectAttempts = 0;
 
       final wsUrl = ApiConstants.wsUrl;
@@ -110,22 +112,39 @@ class ChatSocketService {
             .build(),
       );
 
-      // Setup connection handlers
-      _socket!.onConnect(_onConnect);
-      _socket!.onConnectError(_onConnectError);
-      _socket!.onDisconnect(_onDisconnect);
-      _socket!.onReconnect(_onReconnect);
-      _socket!.onReconnectFailed(_onReconnectFailed);
-      _socket!.onReconnectError(_onReconnectError);
+      // ✅ FIXED: Use proper parameter names instead of _
+      _socket!.onConnect((dynamic data) {
+        _isConnecting = false;
+        _onConnect(data);
+      });
+
+      _socket!.onConnectError((dynamic error) {
+        _isConnecting = false;
+        _onConnectError(error);
+      });
+
+      _socket!.onDisconnect((dynamic reason) {
+        _onDisconnect(reason);
+      });
+
+      _socket!.onReconnect((dynamic attempt) {
+        _isConnecting = false;
+        _onReconnect(attempt);
+      });
+
+      _socket!.onReconnectFailed((dynamic data) {
+        _isConnecting = false;
+        _onReconnectFailed(data);
+      });
+
+      _socket!.onReconnectError((dynamic error) {
+        _isConnecting = false;
+        _onReconnectError(error);
+      });
 
       _socket!.connect();
-
-      _socket?.on('heartbeat', (data) {
-        // Heartbeat response - just log it, no need to parse as List
-        _logger.d('💓 [WS] Heartbeat acknowledged');
-        // Note: Don't try to iterate this as a List
-      });
     } catch (e) {
+      _isConnecting = false;
       _logger.e('❌ [WS] Connection setup failed: $e');
       _errorController.add('Connection setup failed: $e');
       _scheduleReconnect();
@@ -138,13 +157,14 @@ class ChatSocketService {
     }
   }
 
-  void _onConnect(dynamic _) {
+  // ✅ FIXED: Use proper parameter names
+  void _onConnect(dynamic data) {
     _isConnected = true;
     _reconnectAttempts = 0;
     _logger.i('🟢 [WS] Connected - Socket ID: ${_socket!.id}');
     _connectionController.add(true);
     _setupListeners();
-    _startHeartbeat(); // ✅ Start heartbeat on connect
+    _startHeartbeat();
   }
 
   void _onConnectError(dynamic error) {
@@ -159,7 +179,7 @@ class ChatSocketService {
     _isConnected = false;
     _logger.w('🔴 [WS] Disconnected: $reason');
     _connectionController.add(false);
-    _stopHeartbeat(); // ✅ Stop heartbeat on disconnect
+    _stopHeartbeat();
     _scheduleReconnect();
   }
 
@@ -169,10 +189,11 @@ class ChatSocketService {
     _logger.i('🔄 [WS] Reconnected after $attempt attempts');
     _connectionController.add(true);
     _setupListeners();
-    _startHeartbeat(); // ✅ Start heartbeat on reconnect
+    _startHeartbeat();
   }
 
-  void _onReconnectFailed(dynamic _) {
+  // ✅ FIXED: Proper parameter name
+  void _onReconnectFailed(dynamic data) {
     _isConnected = false;
     _logger.e(
       '❌ [WS] Failed to reconnect after $_maxReconnectAttempts attempts',
@@ -208,15 +229,11 @@ class ChatSocketService {
 
   int min(int a, int b) => a < b ? a : b;
 
-  // ✅ Heartbeat methods to keep the connection alive and prevent ghost users
-  // In ChatSocketService._startHeartbeat, change log level
   void _startHeartbeat() {
     _stopHeartbeat();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (_isConnected && _socket != null) {
         _socket!.emit('heartbeat', {});
-        // Remove or comment out this log to reduce spam:
-        // _logger.d('💓 [WS] Heartbeat sent');
       }
     });
   }
@@ -229,11 +246,10 @@ class ChatSocketService {
   void _setupListeners() {
     _logger.i('🔧 [WS] Setting up event listeners...');
 
-    // Connection confirmation
     _socket?.on('connected', (data) {
       _logger.i('✅ [WS] Server confirmed connection: $data');
       if (data is Map) {
-        _userId = data['userId']?.toString(); // Store the user ID here
+        _userId = data['userId']?.toString();
         final isAdmin = data['isAdmin'];
         _logger.i('👤 [WS] User: $_userId, Admin: $isAdmin');
       }
@@ -245,7 +261,7 @@ class ChatSocketService {
         _userDeletedController.add(Map<String, dynamic>.from(data));
       }
     });
-    // New message from other users
+
     _socket?.on('new_message', (data) {
       _logger.i('📩 [WS] New message received');
       if (data is Map) {
@@ -258,7 +274,6 @@ class ChatSocketService {
       }
     });
 
-    // Confirmation of sent message
     _socket?.on('message_sent', (data) {
       _logger.i('✅ [WS] Message sent confirmation');
       if (data is Map) {
@@ -266,7 +281,6 @@ class ChatSocketService {
       }
     });
 
-    // Partner online/offline status
     _socket?.on('partner_status', (data) {
       _logger.i('👥 [WS] Partner status update: $data');
       if (data is Map) {
@@ -276,7 +290,6 @@ class ChatSocketService {
       }
     });
 
-    // Messages read confirmation
     _socket?.on('message_read', (data) {
       _logger.i('✅ [WS] Messages marked as read');
       if (data is Map) {
@@ -284,7 +297,6 @@ class ChatSocketService {
       }
     });
 
-    // Error events
     _socket?.on('error', (data) {
       _logger.e('❌ [WS] Server error: $data');
       String errorMessage = 'Unknown error';
@@ -303,7 +315,6 @@ class ChatSocketService {
       }
     });
 
-    // Notifications
     _socket?.on('new_notification', (data) {
       _logger.i('🔔 [WS] New notification');
       if (data is Map) {
@@ -311,7 +322,6 @@ class ChatSocketService {
       }
     });
 
-    // New orders (for admin)
     _socket?.on('new_order', (data) {
       _logger.i('📦 [WS] New order notification');
       if (data is Map) {
@@ -319,7 +329,6 @@ class ChatSocketService {
       }
     });
 
-    // Role changes
     _socket?.on('role_changed', (data) {
       debugPrint('🔔 [WS] Role changed: $data');
       _logger.i('🔔 [WS] Role change received: $data');
@@ -328,7 +337,6 @@ class ChatSocketService {
         final isAdmin = data['isAdmin'] as bool? ?? false;
         final isSuperAdmin = data['isSuperAdmin'] as bool? ?? false;
 
-        // Update storage
         try {
           _storageService.saveIsAdmin(isAdmin);
           _storageService.saveIsSuperAdmin(isSuperAdmin);
@@ -337,13 +345,11 @@ class ChatSocketService {
           _logger.e('❌ [WS] Failed to save admin status: $e');
         }
 
-        // Emit role change event
         _roleChangeController.add({
           'isAdmin': isAdmin,
           'isSuperAdmin': isSuperAdmin,
         });
 
-        // Refresh user data
         try {
           final authBloc = GetIt.instance<AuthBloc>();
           authBloc.add(const CheckAuthStatusEvent());
@@ -392,7 +398,7 @@ class ChatSocketService {
 
   Future<void> _cleanupSocket() async {
     _logger.i('🧹 [WS] Cleaning up socket...');
-    _stopHeartbeat(); // ✅ Stop heartbeat during cleanup
+    _stopHeartbeat();
     try {
       _socket?.off('connected');
       _socket?.off('new_message');
@@ -402,7 +408,6 @@ class ChatSocketService {
       _socket?.off('error');
       _socket?.off('new_notification');
       _socket?.off('user_deleted');
-
       _socket?.off('new_order');
       _socket?.off('role_changed');
       _socket?.off('connect');

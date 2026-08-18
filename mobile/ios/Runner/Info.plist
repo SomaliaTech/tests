@@ -53,7 +53,6 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	
-	<!-- ✅ Push Notifications (ONLY ONCE) -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
@@ -63,49 +62,38 @@
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
 	
-	<!-- Camera & Photo Permissions -->
 	<key>NSCameraUsageDescription</key>
 	<string>Allow access to camera to take profile picture</string>
 	
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to change profile picture</string>
 
+<!-- ✅ GOOGLE SIGN-IN: Use REVERSED_CLIENT_ID -->
 <key>CFBundleURLTypes</key>
 <array>
-  <dict>
-    <key>CFBundleTypeRole</key>
-    <string>Editor</string>
-    <key>CFBundleURLSchemes</key>
-    <array>
-      <string>com.googleusercontent.apps.YOUR-CLIENT-ID</string>
-    </array>
-  </dict>
+    <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <!-- ✅ iOS Reversed Client ID -->
+            <string>com.googleusercontent.apps.159665748516-q57ehiuvg427bluh15gdj701disc746r</string>
+        </array>
+    </dict>
 </array>
-	
-	<!-- Network Security -->
+	<!-- ✅ HTTPS ONLY -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
+		<false/>
 		<key>NSAllowsArbitraryLoadsForMedia</key>
-		<true/>
+		<false/>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<false/>
+		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>haldor-git-master-somaliatechs-projects.vercel.app</key>
-			<dict>
-				<key>NSIncludesSubdomains</key>
-				<true/>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-			</dict>
-		</dict>
 	</dict>
 	
-	<!-- Supported Orientations -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

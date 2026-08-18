@@ -8,6 +8,7 @@ import 'package:mobile/core/common/widgets/splash_screen.dart';
 import 'package:mobile/core/network/internet_banner.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/banner/admin_banner_bloc.dart';
+import 'package:mobile/features/auth/presentation/screens/complete_profile_screen.dart';
 import 'package:mobile/features/product/presentation/blocs/banner/banner_bloc.dart';
 import 'package:mobile/features/product/presentation/screens/category_view.dart';
 import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
@@ -75,9 +76,7 @@ void main() async {
 
   // ✅ Open ALL Hive boxes FIRST with correct types
   await Future.wait([
-    Hive.openBox<String>(
-      'conversations_cache',
-    ), // ✅ FIXED typo (was 'con6versations_cache')
+    Hive.openBox<String>('conversations_cache'),
     Hive.openBox<String>('messages_cache'),
     Hive.openBox<String>('sync_timestamps'),
     Hive.openBox<String>('product_cache'),
@@ -168,6 +167,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  bool _socketConnected = false;
+
   @override
   void initState() {
     super.initState();
@@ -188,7 +189,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           authState is OtpVerified ||
           authState is ProfileCompleted) {
         if (widget.connectivityService.status != ConnectionStatus.offline) {
-          sl<ChatSocketService>().connect();
+          // ✅ Only connect if not already connected
+          final socketService = sl<ChatSocketService>();
+          if (!socketService.isConnected && !_socketConnected) {
+            _socketConnected = true;
+            socketService.connect().then((_) {
+              _socketConnected = false;
+            });
+          }
         }
       }
     }
@@ -254,40 +262,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ],
             );
           },
-          home: Consumer<ConnectivityService>(
-            builder: (context, connectivity, _) {
-              if (connectivity.isInitialCheck &&
-                  !widget.isInitiallyAuthenticated) {
-                return SplashScreen(); // ✅ Removed 'const'
-              }
-
-              if (widget.isInitiallyAuthenticated) {
-                return const MainNavigationScreen();
-              }
-
-              return BlocBuilder<AuthBloc, AuthState>(
-                buildWhen: (previous, current) =>
-                    current is AuthChecking ||
-                    current is Authenticated ||
-                    current is Unauthenticated,
-                builder: (context, state) {
-                  if (state is AuthChecking) {
-                    if (widget.isInitiallyAuthenticated) {
-                      return const MainNavigationScreen();
-                    }
-                    return SplashScreen(); // ✅ Removed 'const'
-                  } else if (state is Authenticated) {
-                    return const MainNavigationScreen();
-                  } else if (state is Unauthenticated) {
-                    return const PhoneInputScreen();
-                  } else {
-                    return SplashScreen(); // ✅ Removed 'const'
-                  }
-                },
-              );
-            },
-          ),
-
+          // ✅ Use a separate method for home to avoid rebuilds
+          home: _buildHome(),
           onGenerateRoute: (settings) {
             if (settings.name == '/product-details') {
               final args = settings.arguments as Map<String, dynamic>?;
@@ -318,6 +294,79 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           routes: {'/home': (context) => const MainNavigationScreen()},
         ),
       ),
+    );
+  }
+
+  // ✅ Separate method to build the home widget
+  Widget _buildHome() {
+    return Consumer<ConnectivityService>(
+      builder: (context, connectivity, _) {
+        // ✅ Show splash screen while connectivity is being checked
+        if (connectivity.isInitialCheck && !widget.isInitiallyAuthenticated) {
+          return const SplashScreen();
+        }
+
+        // ✅ If already authenticated, go directly to home
+        if (widget.isInitiallyAuthenticated) {
+          return const MainNavigationScreen();
+        }
+
+        // ✅ Use BlocBuilder with buildWhen to prevent unnecessary rebuilds
+        return BlocBuilder<AuthBloc, AuthState>(
+          buildWhen: (previous, current) {
+            // ✅ Only rebuild for meaningful state changes, not loading
+            if (current is AuthLoading) return false;
+            if (previous is AuthLoading && current is! AuthLoading) return true;
+            return true;
+          },
+          builder: (context, state) {
+            // ✅ Don't rebuild on AuthLoading to prevent flicker
+            if (state is AuthLoading) {
+              // Return the current widget without rebuilding
+              return const SizedBox.shrink();
+            }
+
+            if (state is AuthChecking) {
+              return const SplashScreen();
+            } else if (state is Authenticated) {
+              return const MainNavigationScreen();
+            } else if (state is Unauthenticated) {
+              return const PhoneInputScreen();
+            } else if (state is OtpVerified) {
+              // ✅ Handle OtpVerified state here too
+              if (state.isGoogleSignIn) {
+                return CompleteProfileScreen(
+                  token: state.token,
+                  user: state.user,
+                  isGoogleSignIn: true,
+                );
+              } else {
+                if (state.user.hasProfile) {
+                  return const MainNavigationScreen();
+                } else {
+                  return CompleteProfileScreen(
+                    token: state.token,
+                    user: state.user,
+                    isGoogleSignIn: false,
+                  );
+                }
+              }
+            } else if (state is ProfileCompleted) {
+              return const MainNavigationScreen();
+            } else if (state is AuthError) {
+              // Show error and go back to login
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  // Error is already shown in the screen
+                }
+              });
+              return const PhoneInputScreen();
+            } else {
+              return const SplashScreen();
+            }
+          },
+        );
+      },
     );
   }
 }

@@ -55,10 +55,9 @@ class AuthRepositoryImpl implements AuthRepository {
       final result = await remoteDataSource.sendOtp(phoneNumber);
       developer.log('✅ OTP Response: $result');
 
-      final debugOtp = result['debugOtp'] ?? result['otp'] ?? '123456';
-      developer.log(' Debug OTP: $debugOtp');
-
-      return Right(debugOtp);
+      // In production, backend returns: {"message": "OTP sent successfully"}
+      final message = result['message'] as String? ?? 'OTP sent successfully';
+      return Right(message);
     } on ServerException catch (e) {
       developer.log('❌ OTP Error: $e');
       return Left(ServerFailure(e.message));
@@ -106,19 +105,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  ResultFuture<({String token, User user})> googleSignIn(
-    String idToken,
-    String email,
-    String name,
-    String? photoUrl,
-  ) async {
+  ResultFuture<({String token, User user})> googleSignIn(String idToken) async {
     try {
-      final data = await remoteDataSource.googleSignIn(
-        idToken,
-        email,
-        name,
-        photoUrl,
-      );
+      // ✅ Send ONLY ID token to backend
+      final data = await remoteDataSource.googleSignIn(idToken);
 
       final user = User(
         id: data['user']['id'],
@@ -130,9 +120,10 @@ class AuthRepositoryImpl implements AuthRepository {
         isAdmin: data['user']['isAdmin'] ?? false,
         isSuperAdmin: data['user']['isSuperAdmin'] ?? false,
         marketId: data['user']['marketId'],
-        email: data['user']['email'],
+        email: data['user']['email'], // From VERIFIED token
       );
 
+      // Save to storage
       await storageService.saveAuthToken(data['token']);
       await storageService.saveUserId(user.id);
       await storageService.saveLoginStatus(true);
@@ -142,6 +133,9 @@ class AuthRepositoryImpl implements AuthRepository {
       }
       if (user.profileImage != null) {
         await storageService.saveUserProfileImage(user.profileImage!);
+      }
+      if (user.email != null) {
+        await storageService.saveUserEmail(user.email!);
       }
       await storageService.saveIsAdmin(user.isAdmin ?? false);
       await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);

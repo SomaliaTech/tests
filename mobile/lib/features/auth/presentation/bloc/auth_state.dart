@@ -14,12 +14,14 @@ class AuthLoading extends AuthState {}
 
 class AuthChecking extends AuthState {}
 
+// Change OtpSent to not include debugOtp
 class OtpSent extends AuthState {
-  final String debugOtp;
-  const OtpSent(this.debugOtp);
+  final String message;
+
+  const OtpSent(this.message);
 
   @override
-  List<Object?> get props => [debugOtp];
+  List<Object?> get props => [message];
 }
 
 class Authenticated extends AuthState {
@@ -32,16 +34,21 @@ class Authenticated extends AuthState {
 }
 
 // In auth_state.dart - Add a timestamp to make each state unique
+// auth_state.dart
 class OtpVerified extends AuthState {
   final String token;
   final User user;
-  final DateTime timestamp; // ✅ Add this to make each emit unique
+  final bool isGoogleSignIn; // ✅ Add this
+  final DateTime timestamp;
 
-  OtpVerified(this.token, this.user)
-    : timestamp = DateTime.now(); // Auto-set timestamp
+  OtpVerified(
+    this.token,
+    this.user, {
+    this.isGoogleSignIn = false, // ✅ Default to false for OTP users
+  }) : timestamp = DateTime.now();
 
   @override
-  List<Object?> get props => [token, user, timestamp]; // Include timestamp
+  List<Object?> get props => [token, user, isGoogleSignIn, timestamp];
 }
 
 class ProfileCompleted extends AuthState {

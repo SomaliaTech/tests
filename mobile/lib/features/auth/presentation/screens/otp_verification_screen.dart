@@ -223,9 +223,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
             toastification.show(
               context: context,
               title: const Text('✅ OTP Resent'),
-              description: Text('New code: ${state.debugOtp}'),
+              description: const Text(
+                'A new verification code has been sent to your phone',
+              ),
               type: ToastificationType.success,
-              autoCloseDuration: const Duration(seconds: 8),
+              autoCloseDuration: const Duration(seconds: 3),
               style: ToastificationStyle.fillColored,
             );
           } else if (state is AuthError) {

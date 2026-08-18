@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -26,12 +26,32 @@ import { BannersModule } from './banners/banners.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: 60000, // 1 minute in milliseconds
-        limit: 10, // 10 requests per minute
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: 'default',
+          ttl: config.get('RATE_LIMIT_TTL', 60000),
+          limit: config.get('RATE_LIMIT_MAX', 100),
+        },
+        {
+          name: 'auth',
+          ttl: config.get('AUTH_RATE_TTL', 60000),
+          limit: config.get('AUTH_RATE_LIMIT', 10),
+        },
+        {
+          name: 'otp',
+          ttl: config.get('OTP_RATE_TTL', 60000),
+          limit: config.get('OTP_RATE_LIMIT', 3),
+        },
+        {
+          name: 'payment',
+          ttl: config.get('PAYMENT_RATE_TTL', 60000),
+          limit: config.get('PAYMENT_RATE_LIMIT', 5),
+        },
+      ],
+    }),
     DrizzleModule,
     SupabaseModule,
     CategoriesModule,
@@ -50,10 +70,10 @@ import { BannersModule } from './banners/banners.module';
   controllers: [AppController],
   providers: [
     AppService,
-    PermissionGuard, // ✅ Guard registered as a provider
+    PermissionGuard,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard, // ✅ Global rate limiting
+      useClass: ThrottlerGuard, // ✅ Global rate limiting applied
     },
   ],
 })

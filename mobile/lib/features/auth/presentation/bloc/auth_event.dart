@@ -58,6 +58,7 @@ class LogoutEvent extends AuthEvent {
 }
 
 // Add to auth_event.dart
+// auth_event.dart
 class GoogleSignInEvent extends AuthEvent {
   const GoogleSignInEvent();
 }

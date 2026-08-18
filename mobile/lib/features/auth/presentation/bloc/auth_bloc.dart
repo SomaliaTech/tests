@@ -21,6 +21,7 @@ import '../../domain/usecases/verify_otp.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
 import '../../domain/entities/user.dart';
+import 'dart:io' show Platform;
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SendOtp sendOtp;
@@ -33,6 +34,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final StorageService storageService;
   final ChatSocketService chatSocketService;
   final google_use_case.GoogleSignIn googleSignInUseCase;
+
+  // ✅ Add a flag to prevent duplicate Google sign-in attempts
+  bool _isGoogleSignInProgress = false;
 
   AuthBloc({
     required this.sendOtp,
@@ -54,179 +58,120 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutEvent>(_onLogout);
     on<GoogleSignInEvent>(_onGoogleSignIn);
   }
-  // In auth_bloc.dart - Complete fixed _onGoogleSignIn method
+
   Future<void> _onGoogleSignIn(
     GoogleSignInEvent event,
     Emitter<AuthState> emit,
   ) async {
-    developer.log('🟡 GOOGLE SIGN IN STARTED', name: 'AuthBloc');
-
-    if (!emit.isDone) emit(AuthLoading());
-
-    try {
+    // ✅ Prevent duplicate sign-in attempts
+    if (_isGoogleSignInProgress) {
       developer.log(
-        '🔵 Initializing GoogleSignIn with serverClientId...',
+        '⏳ Google sign-in already in progress, skipping...',
         name: 'AuthBloc',
       );
+      return;
+    }
+
+    developer.log('🟡 GOOGLE SIGN IN STARTED', name: 'AuthBloc');
+
+    // ✅ Don't emit AuthLoading() if already in a loading state
+    if (!emit.isDone && state is! AuthLoading) {
+      emit(AuthLoading());
+    }
+
+    _isGoogleSignInProgress = true;
+
+    try {
+      final String clientId = Platform.isIOS
+          ? "159665748516-q57ehiuvg427bluh15gdj701disc746r.apps.googleusercontent.com"
+          : "159665748516-9kan2pvb50ap4uvdc3djkpr9g73p0nt5.apps.googleusercontent.com";
 
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
+        clientId: clientId,
         serverClientId:
-            '159665748516-bffn5l47e89cmjs2bl1nsif7q2k79u3v.apps.googleusercontent.com',
+            "159665748516-bffn5l47e89cmjs2bl1nsif7q2k79u3v.apps.googleusercontent.com",
       );
 
       try {
         await googleSignIn.signOut();
-        developer.log('🔵 Signed out from previous session', name: 'AuthBloc');
       } catch (e) {
-        developer.log(
-          '⚠️ Sign out failed (might not be signed in): $e',
-          name: 'AuthBloc',
-        );
+        developer.log('⚠️ Sign out failed: $e', name: 'AuthBloc');
       }
 
-      developer.log('🔵 Calling signIn()...', name: 'AuthBloc');
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
-      developer.log(
-        '🔵 Google sign in result: ${googleUser != null ? "SUCCESS" : "CANCELLED"}',
-        name: 'AuthBloc',
-      );
-
       if (googleUser == null) {
-        developer.log('❌ User cancelled Google sign in', name: 'AuthBloc');
-        if (!emit.isDone) emit(AuthError('Google sign in cancelled'));
-        return;
-      }
-
-      developer.log('🔵 Getting authentication tokens...', name: 'AuthBloc');
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      final String? idToken = googleAuth.idToken;
-      final String? accessToken = googleAuth.accessToken;
-
-      developer.log(
-        '🔵 Access Token: ${accessToken != null ? "RECEIVED ✓" : "NULL ✗"}',
-        name: 'AuthBloc',
-      );
-      developer.log(
-        '🔵 ID Token: ${idToken != null ? "RECEIVED ✓ (${idToken.substring(0, 20)}...)" : "NULL ✗"}',
-        name: 'AuthBloc',
-      );
-
-      if (idToken == null || idToken.isEmpty) {
-        developer.log('❌ No ID token received from Google', name: 'AuthBloc');
+        _isGoogleSignInProgress = false;
         if (!emit.isDone) {
-          emit(
-            AuthError(
-              'Failed to get ID token. Please ensure Google Cloud Console is properly configured.',
-            ),
-          );
+          emit(AuthError('Google sign in cancelled'));
         }
         return;
       }
 
-      final String email = googleUser.email;
-      final String displayName = googleUser.displayName ?? '';
-      final String? photoUrl = googleUser.photoUrl;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
-      developer.log(
-        '🔵 User info - Email: $email, Name: $displayName',
-        name: 'AuthBloc',
-      );
-      developer.log('🔵 Calling backend with ID token...', name: 'AuthBloc');
+      final String? idToken = googleAuth.idToken;
 
-      final result = await googleSignInUseCase(
-        idToken,
-        email,
-        displayName,
-        photoUrl,
-      );
-
-      developer.log('🔵 Backend response received', name: 'AuthBloc');
-
-      if (isClosed || emit.isDone) {
-        developer.log(
-          '⚠️ Stream closed or emit.isDone before fold',
-          name: 'AuthBloc',
-        );
-        developer.log(
-          '⚠️ isClosed: $isClosed, emit.isDone: $emit.isDone',
-          name: 'AuthBloc',
-        );
+      if (idToken == null || idToken.isEmpty) {
+        _isGoogleSignInProgress = false;
+        if (!emit.isDone) {
+          emit(AuthError('Failed to get Google ID token'));
+        }
         return;
       }
 
-      // ✅ FIX: Handle fold SYNCHRONOUSLY for emit, then do async work separately
+      final result = await googleSignInUseCase(idToken);
+
+      if (isClosed || emit.isDone) {
+        _isGoogleSignInProgress = false;
+        return;
+      }
+
       result.fold(
         (failure) {
-          developer.log(
-            '❌ Backend failure: ${failure.message}',
-            name: 'AuthBloc',
-          );
-          if (!emit.isDone) emit(AuthError(failure.message));
+          _isGoogleSignInProgress = false;
+          if (!emit.isDone) {
+            emit(AuthError(failure.message));
+          }
         },
         (data) {
-          // ✅ CRITICAL FIX: Emit state SYNCHRONOUSLY first
-          // DO NOT make this callback async!
-          developer.log('✅ Google sign in SUCCESS', name: 'AuthBloc');
-          developer.log(
-            '🔵 User hasProfile: ${data.user.hasProfile}',
-            name: 'AuthBloc',
-          );
-          developer.log(
-            '🔵 User marketId: ${data.user.marketId}',
-            name: 'AuthBloc',
-          );
+          _saveGoogleUserData(data);
 
-          developer.log(
-            '🔵🔵🔵 ABOUT TO EMIT - isDone: ${emit.isDone}, isClosed: $isClosed 🔵🔵🔵',
-            name: 'AuthBloc',
-          );
-          developer.log(
-            '🔵🔵🔵 hasProfile: ${data.user.hasProfile}, marketId: ${data.user.marketId} 🔵🔵🔵',
-            name: 'AuthBloc',
-          );
+          // ✅ STRICT CHECK: Require marketId to be present
+          final bool needsProfile =
+              data.user.marketId == null ||
+              data.user.marketId!.isEmpty ||
+              !data.user.hasProfile;
 
-          if (!emit.isDone) {
-            if (!data.user.hasProfile || data.user.marketId == null) {
+          _isGoogleSignInProgress = false;
+
+          if (needsProfile) {
+            if (!emit.isDone) {
               developer.log(
-                '🔵🔵🔵 EMITTING OtpVerified 🔵🔵🔵',
+                '🔵 User needs to complete profile',
                 name: 'AuthBloc',
               );
-              emit(OtpVerified(data.token, data.user));
+              // ✅ Use a non-loading state
+              emit(OtpVerified(data.token, data.user, isGoogleSignIn: true));
+            }
+          } else {
+            if (!emit.isDone) {
               developer.log(
-                '🔵🔵🔵 OtpVerified EMITTED SUCCESSFULLY 🔵🔵🔵',
-                name: 'AuthBloc',
-              );
-            } else {
-              developer.log(
-                '🔵🔵🔵 EMITTING Authenticated 🔵🔵🔵',
+                '🔵 User already has complete profile',
                 name: 'AuthBloc',
               );
               emit(Authenticated(data.user, data.token));
-              developer.log(
-                '🔵🔵🔵 Authenticated EMITTED SUCCESSFULLY 🔵🔵🔵',
-                name: 'AuthBloc',
-              );
             }
-          } else {
-            developer.log(
-              '❌❌❌ CANNOT EMIT - emit.isDone is TRUE ❌❌❌',
-              name: 'AuthBloc',
-            );
           }
-
-          // ✅ Fire and forget async operations AFTER emit
-          // These run asynchronously but don't block the emit
-          _saveGoogleUserData(data);
         },
       );
     } catch (e) {
-      developer.log('❌ EXCEPTION in Google sign in: $e', name: 'AuthBloc');
+      _isGoogleSignInProgress = false;
+      developer.log('❌ Google sign in error: $e', name: 'AuthBloc');
       if (!emit.isDone) {
-        emit(AuthError('Google sign in failed: $e'));
+        emit(AuthError('Google sign in failed. Please try again.'));
       }
     }
   }
@@ -271,6 +216,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       }
     });
   }
+
+  // ... rest of your existing code remains the same ...
 
   // ✅ Clear ALL Hive caches on logout
   Future<void> _clearAllCaches() async {
@@ -328,8 +275,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         (failure) {
           if (!emit.isDone) emit(AuthError(failure.message));
         },
-        (debugOtp) {
-          if (!emit.isDone) emit(OtpSent(debugOtp));
+        (message) {
+          if (!emit.isDone) emit(OtpSent(message));
         },
       );
     } catch (e) {
@@ -369,7 +316,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         }
 
         chatSocketService.connect();
-        if (!emit.isDone) emit(OtpVerified(data.token, data.user));
+        if (!emit.isDone) {
+          // ✅ PASS isGoogleSignIn: false
+          emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
+        }
       },
     );
   }

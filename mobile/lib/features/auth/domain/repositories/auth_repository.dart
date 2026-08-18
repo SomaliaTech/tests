@@ -22,10 +22,5 @@ abstract class AuthRepository {
   ResultFuture<bool> checkAuthStatus();
   ResultFuture<void> logout();
   Future<bool> isAuthenticated();
-  ResultFuture<({String token, User user})> googleSignIn(
-    String idToken,
-    String email,
-    String name,
-    String? photoUrl,
-  );
+  ResultFuture<({String token, User user})> googleSignIn(String idToken);
 }

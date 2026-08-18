@@ -1,4 +1,3 @@
-// src/chat/chat.controller.ts
 import {
   Controller,
   Get,
@@ -18,6 +17,7 @@ import {
   UploadedFile,
   BadRequestException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -31,6 +31,7 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { Redis } from '@upstash/redis';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
@@ -41,6 +42,7 @@ interface RequestUser {
   sub?: string;
   id?: string;
 }
+
 interface AuthenticatedRequest {
   user: RequestUser;
 }
@@ -54,10 +56,24 @@ export class ChatController {
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
     private readonly supabaseService: SupabaseService,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {}
 
   private getUserId(req: AuthenticatedRequest): string {
     return String(req.user.userId || req.user.sub || req.user.id);
+  }
+
+  private async getUserOrThrow(userId: string) {
+    const user = await this.chatService.getUserById(userId);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+    return user;
+  }
+
+  private async isSuperAdmin(userId: string): Promise<boolean> {
+    const user = await this.getUserOrThrow(userId);
+    return Boolean(user.isSuperAdmin);
   }
 
   // ==========================================
@@ -71,13 +87,13 @@ export class ChatController {
   @ApiQuery({ name: 'search', required: false })
   async getAllConversations(
     @Request() req: AuthenticatedRequest,
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
     @Query('search') search?: string,
   ) {
     const userId = this.getUserId(req);
-    const user = await this.chatService.getUserById(userId);
-    if (!user?.isSuperAdmin) {
+    const isSuperAdmin = await this.isSuperAdmin(userId);
+    if (!isSuperAdmin) {
       throw new ForbiddenException(
         'Only super admins can access this endpoint',
       );
@@ -89,6 +105,7 @@ export class ChatController {
       search,
     );
   }
+
   @Get('admin/:adminId/users')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({
@@ -102,14 +119,15 @@ export class ChatController {
     @Query('search') search?: string,
   ) {
     const userId = this.getUserId(req);
-    const user = await this.chatService.getUserById(userId);
-    if (!user?.isSuperAdmin) {
+    const isSuperAdmin = await this.isSuperAdmin(userId);
+    if (!isSuperAdmin) {
       throw new ForbiddenException(
         'Only super admins can access this endpoint',
       );
     }
     return this.chatService.getUsersForAdmin(adminId, search);
   }
+
   @Get('admin/conversation/:conversationId/messages')
   @ApiOperation({
     summary: 'Get messages from any conversation (Super Admin only)',
@@ -119,19 +137,17 @@ export class ChatController {
   async getConversationMessages(
     @Request() req: AuthenticatedRequest,
     @Param('conversationId') conversationId: string,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number = 50,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
     const userId = this.getUserId(req);
-    const user = await this.chatService.getUserById(userId);
-    if (!user?.isSuperAdmin) {
+    const isSuperAdmin = await this.isSuperAdmin(userId);
+    if (!isSuperAdmin) {
       throw new ForbiddenException(
         'Only super admins can access this endpoint',
       );
     }
     return this.chatService.getConversationMessages(conversationId, limit);
   }
-
-  // When a user is deleted, emit to all their conversation partners
 
   // ==========================================
   // USER SEARCH
@@ -146,8 +162,8 @@ export class ChatController {
   @ApiQuery({ name: 'isOnline', required: false, type: Boolean })
   async searchUsers(
     @Query('q') query: string,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
-    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number = 0,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
     @Query('role') role?: 'user' | 'admin',
     @Query('isOnline') isOnline?: string,
   ) {
@@ -167,7 +183,7 @@ export class ChatController {
   async searchChatUsers(
     @Request() req: AuthenticatedRequest,
     @Query('q') query: string,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
     return this.chatService.searchChatUsers(
       this.getUserId(req),
@@ -238,7 +254,7 @@ export class ChatController {
   async getMessages(
     @Request() req: AuthenticatedRequest,
     @Param('partnerId') partnerId: string,
-    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number = 50,
+    @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('before') before?: string,
   ) {
     return this.chatService.getMessages(
@@ -307,6 +323,7 @@ export class ChatController {
       this.chatGateway.isUserOnline(userId),
       this.chatService.getUserById(userId),
     ]);
+
     return {
       userId,
       isOnline,
@@ -328,7 +345,7 @@ export class ChatController {
   async searchConversations(
     @Request() req: AuthenticatedRequest,
     @Query('q') query: string,
-    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
     if (!query || query.trim().length < 2) return [];
     return this.chatService.searchConversations(

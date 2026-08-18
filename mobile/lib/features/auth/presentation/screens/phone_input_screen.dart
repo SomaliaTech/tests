@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:mobile/features/auth/presentation/screens/complete_profile_screen.dart';
 import 'package:toastification/toastification.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 import 'otp_verification_screen.dart';
-import 'complete_profile_screen.dart';
 
 class PhoneInputScreen extends StatefulWidget {
   const PhoneInputScreen({super.key});
@@ -89,36 +89,27 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   }
 
   @override
+  // In phone_input_screen.dart - update the BlocListener
+  @override
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        // ✅ Log EVERY state change
-        debugPrint('🔔🔔🔔 LISTENER TRIGGERED: ${state.runtimeType} 🔔🔔🔔');
-
+        // ✅ Handle AuthLoading properly without double navigation
         if (state is AuthLoading) {
-          debugPrint('⏳ AuthLoading - no navigation');
-          return;
-        }
-
-        if (state is AuthInitial) {
-          debugPrint('🔹 AuthInitial - no navigation');
-          return;
-        }
-
-        if (state is AuthChecking) {
-          debugPrint('🔹 AuthChecking - no navigation');
+          // Just show loading indicator, don't navigate anywhere
           return;
         }
 
         if (state is OtpSent) {
-          debugPrint('✅ OtpSent - navigating to OTP screen');
           HapticFeedback.mediumImpact();
           toastification.show(
             context: context,
             title: const Text('✅ OTP Sent'),
-            description: Text('Verification code: ${state.debugOtp}'),
+            description: const Text(
+              'Check your phone for the verification code',
+            ),
             type: ToastificationType.success,
-            autoCloseDuration: const Duration(seconds: 8),
+            autoCloseDuration: const Duration(seconds: 3),
             style: ToastificationStyle.fillColored,
             alignment: Alignment.topCenter,
           );
@@ -141,7 +132,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             }
           });
         } else if (state is Authenticated) {
-          debugPrint('✅ Authenticated - navigating to HOME');
           HapticFeedback.mediumImpact();
           toastification.show(
             context: context,
@@ -155,50 +145,84 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
 
           Future.microtask(() {
             if (mounted) {
+              // ✅ Use pushReplacementNamed to avoid stacking
               Navigator.pushReplacementNamed(context, '/home');
             }
           });
         } else if (state is OtpVerified) {
-          debugPrint('✅✅✅ OtpVerified - NAVIGATING TO COMPLETE PROFILE ✅✅✅');
-          debugPrint('  Token: ${state.token}');
-          debugPrint('  User name: ${state.user.name}');
-          debugPrint('  User email: ${state.user.email}');
-          debugPrint('  User phone: ${state.user.phoneNumber}');
-          debugPrint('  Has profile: ${state.user.hasProfile}');
-          debugPrint('  Market ID: ${state.user.marketId}');
-
           HapticFeedback.mediumImpact();
 
-          final isGoogleUser =
-              state.user.email != null && state.user.email!.isNotEmpty;
-          debugPrint('  Is Google user: $isGoogleUser');
+          // ✅ Check if this is a Google Sign-In user
+          if (state.isGoogleSignIn) {
+            // Google user needs to complete profile (add phone number)
+            toastification.show(
+              context: context,
+              title: const Text('✅ Google Signed In'),
+              description: const Text('Please complete your profile'),
+              type: ToastificationType.success,
+              autoCloseDuration: const Duration(seconds: 2),
+              style: ToastificationStyle.fillColored,
+              alignment: Alignment.topCenter,
+            );
+
+            Future.microtask(() {
+              if (mounted) {
+                // ✅ Use pushReplacement to avoid stacking
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CompleteProfileScreen(
+                      token: state.token,
+                      user: state.user,
+                      isGoogleSignIn: true,
+                    ),
+                  ),
+                );
+              }
+            });
+          } else {
+            // OTP user
+            Future.microtask(() {
+              if (mounted) {
+                if (state.user.hasProfile) {
+                  // User already has complete profile
+                  // ✅ Use pushReplacementNamed
+                  Navigator.pushReplacementNamed(context, '/home');
+                } else {
+                  // User needs to complete profile
+                  // ✅ Use pushReplacement
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CompleteProfileScreen(
+                        token: state.token,
+                        user: state.user,
+                        isGoogleSignIn: false,
+                      ),
+                    ),
+                  );
+                }
+              }
+            });
+          }
+        } else if (state is ProfileCompleted) {
+          toastification.show(
+            context: context,
+            title: const Text('✅ Success'),
+            description: const Text('Profile completed successfully!'),
+            type: ToastificationType.success,
+            autoCloseDuration: const Duration(seconds: 3),
+            style: ToastificationStyle.fillColored,
+            alignment: Alignment.topCenter,
+          );
 
           Future.microtask(() {
             if (mounted) {
-              debugPrint(
-                '🚀🚀🚀 EXECUTING NAVIGATION TO CompleteProfileScreen 🚀🚀🚀',
-              );
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CompleteProfileScreen(
-                    token: state.token,
-                    user: state.user,
-                    isGoogleSignIn: isGoogleUser,
-                  ),
-                ),
-              );
-            }
-          });
-        } else if (state is ProfileCompleted) {
-          debugPrint('✅ ProfileCompleted - navigating to HOME');
-          Future.microtask(() {
-            if (mounted) {
+              // ✅ Use pushReplacementNamed to avoid stacking
               Navigator.pushReplacementNamed(context, '/home');
             }
           });
         } else if (state is AuthError) {
-          debugPrint('❌ Auth Error: ${state.message}');
           HapticFeedback.heavyImpact();
           toastification.show(
             context: context,
@@ -206,37 +230,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             description: Text(state.message),
             type: ToastificationType.error,
             autoCloseDuration: const Duration(seconds: 3),
+            alignment: Alignment.topCenter,
           );
-        } else if (state is GoogleSignInSuccess) {
-          debugPrint('✅ GoogleSignInSuccess - checking profile...');
-          if (!state.user.hasProfile || state.user.marketId == null) {
-            debugPrint('  -> Needs profile completion');
-            final isGoogleUser =
-                state.user.email != null && state.user.email!.isNotEmpty;
-            Future.microtask(() {
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CompleteProfileScreen(
-                      token: state.token,
-                      user: state.user,
-                      isGoogleSignIn: isGoogleUser,
-                    ),
-                  ),
-                );
-              }
-            });
-          } else {
-            debugPrint('  -> Profile complete, going home');
-            Future.microtask(() {
-              if (mounted) {
-                Navigator.pushReplacementNamed(context, '/home');
-              }
-            });
-          }
-        } else {
-          debugPrint('⚠️ UNHANDLED STATE: ${state.runtimeType}');
         }
       },
 
@@ -267,7 +262,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        'Enter your phone number to get\nstarted with your account',
+                        'Geli lambarkaaga taleefanka\nsi aan kuu aqoonsano',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 14,
@@ -289,7 +284,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       _buildInfoCard(),
                       const SizedBox(height: 24),
                       Text(
-                        'By continuing, you agree to our Terms of Service and Privacy Policy',
+                        'Sii wadistaada waxaad ogolaatay Shuruudaha Addeegyadeena iyo Xeerka Qarsoodiga',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 12,
@@ -330,7 +325,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 Icon(Iconsax.mobile, color: Colors.white, size: 14),
                 SizedBox(width: 4),
                 Text(
-                  'Step 1 of 2',
+                  'Step 1 ee 2',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -358,7 +353,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2ED573).withOpacity(0.3),
+            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -384,8 +379,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         boxShadow: [
           BoxShadow(
             color:
-                providerColor?.withOpacity(0.2) ??
-                Colors.black.withOpacity(0.04),
+                providerColor?.withValues(alpha: 0.2) ??
+                Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -480,7 +475,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Enter a phone number to detect your provider',
+                'Geli lambarka taleefanka si loo ogaado shirkaddaada',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
             ),
@@ -497,7 +492,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: providerColor?.withOpacity(0.15),
+                color: providerColor?.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
@@ -535,7 +530,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'Please enter a valid Somali phone number',
+              'Fadlan geli lambar taleefan oo Somali ah oo sax ah',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.orange.shade600,
@@ -567,9 +562,9 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       HapticFeedback.heavyImpact();
                       toastification.show(
                         context: context,
-                        title: const Text('Invalid Number'),
+                        title: const Text('Lambar aan sax ahayn'),
                         description: const Text(
-                          'Please enter a valid 9-digit Somali phone number.\nSupported: 61 (EVC), 63 (Telisom), 68 (Somnet), 90 (Golis)',
+                          'Fadlan geli lambar taleefan oo Somali ah oo 9 xaraf ah.\nLa taageeray: 61 (Hormuud), 63 (Telisom), 68 (Somnet), 90 (Golis)',
                         ),
                         type: ToastificationType.warning,
                         autoCloseDuration: const Duration(seconds: 4),
@@ -587,7 +582,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               elevation: isValid ? 8 : 0,
-              shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+              shadowColor: const Color(0xFF2ED573).withValues(alpha: 0.4),
             ),
             child: Ink(
               decoration: BoxDecoration(
@@ -644,7 +639,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'OR',
+              'AMA',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -669,7 +664,6 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             onPressed: isLoading
                 ? null
                 : () {
-                    debugPrint('🔵 Google Sign-In button pressed');
                     HapticFeedback.lightImpact();
                     context.read<AuthBloc>().add(const GoogleSignInEvent());
                   },
@@ -688,7 +682,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                     width: 24,
                   ),
             label: Text(
-              isLoading ? 'Signing in...' : 'Continue with Google',
+              isLoading ? 'La galaya...' : 'Continue With Google',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             style: OutlinedButton.styleFrom(
@@ -714,12 +708,14 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF2ED573).withOpacity(0.08),
-            const Color(0xFF1ABC9C).withOpacity(0.05),
+            const Color(0xFF2ED573).withValues(alpha: 0.08),
+            const Color(0xFF1ABC9C).withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.2)),
+        border: Border.all(
+          color: const Color(0xFF2ED573).withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         children: [
@@ -730,7 +726,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2ED573).withOpacity(0.2),
+                  color: const Color(0xFF2ED573).withValues(alpha: 0.2),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -748,7 +744,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Secure Sign In',
+                  'Secure Sing In',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -757,7 +753,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Use your phone number or Google account',
+                  'Isticmaal lambarkaaga taleefanka ama Google account',
                   style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                 ),
               ],

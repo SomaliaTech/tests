@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/chat/domain/repositories/chat_repository.dart';
+import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import '../../domain/entities/conversation.dart';
 import '../../data/models/conversation_model.dart';
 import '../../domain/usecases/get_conversations.dart';
@@ -67,8 +68,28 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
       }
     });
 
-    _messageSub = socketService.onNewMessage.listen((message) {
+    _messageSub = socketService.onNewMessage.listen((message) async {
       if (isClosed) return;
+
+      // ✅ CRITICAL FIX: Save the new message to local cache immediately.
+      // Because ChatRoomBloc is only created when the chat screen opens,
+      // it misses messages that arrive while the user is on the Conversations screen.
+      // We save it here so it's already in Hive when the user clicks the chat.
+      final currentUserId = socketService.userId ?? '';
+      final partnerId = message.senderId == currentUserId
+          ? message.receiverId
+          : message.senderId;
+
+      if (partnerId != null && partnerId.isNotEmpty) {
+        try {
+          await localDataSource.addMessage(partnerId, message);
+        } catch (e) {
+          debugPrint(
+            '⚠️ [ConversationsBloc] Error saving received message: $e',
+          );
+        }
+      }
+
       add(
         NewMessageReceivedEvent(
           senderId: message.senderId,
@@ -85,6 +106,7 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
         add(LoadConversationsEvent());
       }
     });
+
     _messageSentSub = socketService.onMessageSent.listen((data) {
       if (isClosed) return;
       try {
@@ -142,6 +164,7 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
     _isInitialLoad = true;
     emit(ConversationsInitial());
   }
+  // In ConversationsBloc - Update _onLoadConversations
 
   Future<void> _onLoadConversations(
     LoadConversationsEvent event,
@@ -169,15 +192,24 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
         _isInitialLoad = false;
       },
       (conversations) {
-        _conversations = List.from(conversations);
+        // ✅ DEDUPLICATE conversations by partnerId
+        final seenIds = <String>{};
+        final uniqueConversations = <Conversation>[];
+
+        for (final conv in conversations) {
+          if (!seenIds.contains(conv.partnerId)) {
+            seenIds.add(conv.partnerId);
+            uniqueConversations.add(conv);
+          }
+        }
+
+        _conversations = List.from(uniqueConversations);
         _conversations.sort(
           (a, b) => b.lastMessageTime.compareTo(a.lastMessageTime),
         );
         _isInitialLoad = false;
 
-        // ✅ Save to cache for next time
         _saveConversationsToCache();
-
         emit(ConversationsLoaded(List.from(_conversations)));
       },
     );

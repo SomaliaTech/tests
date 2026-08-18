@@ -18,11 +18,10 @@ import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiBody,
   ApiConsumes,
 } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard, SkipThrottle } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -38,11 +37,8 @@ export class AuthController {
 
   @Post('send-otp')
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100 requests per minute for dev
-  @ApiOperation({
-    summary: 'Send OTP to phone number',
-    description: 'Sends OTP. In development, returns debugOtp.',
-  })
+  @Throttle({ otp: { limit: 3, ttl: 60000 } }) // 3 requests per minute
+  @ApiOperation({ summary: 'Send OTP to phone number' })
   @ApiBody({ type: SendOtpDto })
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOtp(sendOtpDto.phoneNumber);
@@ -50,7 +46,7 @@ export class AuthController {
 
   @Post('verify-otp')
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @Throttle({ otp: { limit: 5, ttl: 60000 } }) // 5 requests per minute
   @ApiOperation({ summary: 'Verify OTP code' })
   @ApiBody({ type: VerifyOtpDto })
   async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
@@ -62,7 +58,7 @@ export class AuthController {
 
   @Post('complete-profile')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('profileImage'))
   @ApiBearerAuth('JWT-auth')
   async completeProfile(
@@ -77,14 +73,16 @@ export class AuthController {
 
   @Post('google')
   @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Google Sign-In' })
+  @ApiBody({ type: GoogleAuthDto })
   async googleSignIn(@Body() dto: GoogleAuthDto) {
     return this.authService.googleSignIn(dto);
   }
 
   @Post('upload-profile-image')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('image'))
   @ApiBearerAuth('JWT-auth')
   @ApiConsumes('multipart/form-data')
@@ -116,7 +114,7 @@ export class AuthController {
 
   @Post('upload-profile-image-url')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
   @ApiBearerAuth('JWT-auth')
   @ApiBody({ type: UploadProfileImageDto })
   async uploadProfileImageFromUrl(
@@ -127,7 +125,8 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiBearerAuth('JWT-auth')
   async getMe(@Request() req) {
     return this.authService.getMe(req.user.userId);
@@ -135,7 +134,7 @@ export class AuthController {
 
   @Patch('profile')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Throttle({ auth: { limit: 10, ttl: 60000 } })
   @ApiBearerAuth('JWT-auth')
   @ApiBody({ type: UpdateProfileDto })
   async updateProfile(

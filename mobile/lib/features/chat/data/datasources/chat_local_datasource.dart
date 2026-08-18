@@ -38,12 +38,25 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       final jsonString = _conversationsBox.get('conversations_list');
       if (jsonString != null) {
         final List<dynamic> jsonList = json.decode(jsonString);
-        return jsonList
+        final conversations = jsonList
             .map(
               (json) =>
                   ConversationModel.fromJson(json as Map<String, dynamic>),
             )
             .toList();
+
+        // ✅ DEDUPLICATE
+        final seenIds = <String>{};
+        final uniqueConversations = <Conversation>[];
+
+        for (final conv in conversations) {
+          if (!seenIds.contains(conv.partnerId)) {
+            seenIds.add(conv.partnerId);
+            uniqueConversations.add(conv);
+          }
+        }
+
+        return uniqueConversations;
       }
     } catch (e) {
       debugPrint('❌ Error reading cached conversations: $e');
@@ -54,7 +67,18 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
   @override
   Future<void> cacheConversations(List<Conversation> conversations) async {
     try {
-      final jsonList = conversations
+      // ✅ DEDUPLICATE before caching
+      final seenIds = <String>{};
+      final uniqueConversations = <Conversation>[];
+
+      for (final conv in conversations) {
+        if (!seenIds.contains(conv.partnerId)) {
+          seenIds.add(conv.partnerId);
+          uniqueConversations.add(conv);
+        }
+      }
+
+      final jsonList = uniqueConversations
           .map(
             (c) => {
               'userId': c.partnerId,

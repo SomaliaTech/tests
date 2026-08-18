@@ -14,8 +14,9 @@ import {
   OnGatewayDisconnect,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { Redis } from '@upstash/redis';
 import { ChatService } from './chat.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notification.entity';
@@ -65,22 +66,24 @@ export class ChatGateway
     OnGatewayDisconnect,
     OnApplicationBootstrap
 {
+  /**
+   * Because we are using namespace: '/chat',
+   * Nest usually injects a Socket.IO Namespace, not the root Server.
+   */
   @WebSocketServer()
-  server!: Server;
+  server!: Namespace;
 
   private readonly logger = new Logger(ChatGateway.name);
 
-  // In-memory storage to replace Redis
-  private readonly socketMeta = new Map<string, SocketMeta>();
-  private readonly onlineUsers = new Set<string>();
-  private readonly userSockets = new Map<string, Set<string>>();
-  private readonly socketTTLs = new Map<string, NodeJS.Timeout>();
+  private readonly PRESENCE_TTL = 120;
+  private readonly SOCKET_TTL = 3600;
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {}
 
   // ==========================================
@@ -88,24 +91,37 @@ export class ChatGateway
   // ==========================================
 
   afterInit(): void {
-    this.logger.log('🚀 Chat Gateway WebSocket initialized (In-Memory Mode)');
+    this.logger.log('🚀 Chat Gateway WebSocket initialized (Redis Mode)');
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.logger.log('🚀 Application bootstrap - all modules ready');
+    this.logger.log('🚀 Application bootstrap - resetting presence state');
 
     try {
-      // Reset all online statuses in the database
+      await this.redis.del('online_users');
+
+      const socketKeys = await this.redis.keys('socket:*');
+      if (socketKeys.length > 0) {
+        await this.redis.del(...socketKeys);
+      }
+
+      const userSocketKeys = await this.redis.keys('user_sockets:*');
+      if (userSocketKeys.length > 0) {
+        await this.redis.del(...userSocketKeys);
+      }
+
+      const userOnlineKeys = await this.redis.keys('user_online:*');
+      if (userOnlineKeys.length > 0) {
+        await this.redis.del(...userOnlineKeys);
+      }
+
       await this.chatService.resetAllOnlineStatuses();
       this.logger.log('✅ Reset all online statuses successfully');
-    } catch (error: unknown) {
+    } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`❌ Failed to reset online statuses: ${errorMessage}`);
     }
-
-    // Cleanup stale connections periodically
-    setInterval(() => this.cleanupStaleConnections(), 60000);
   }
 
   // ==========================================
@@ -129,38 +145,27 @@ export class ChatGateway
         return;
       }
 
-      // Store socket metadata locally
-      this.socketMeta.set(client.id, { userId, isAdmin });
+      // Store socket metadata
+      await this.redis.hset(`socket:${client.id}`, {
+        userId,
+        isAdmin: String(isAdmin),
+      });
+      await this.redis.expire(`socket:${client.id}`, this.SOCKET_TTL);
 
-      // Track socket in memory
-      if (!this.userSockets.has(userId)) {
-        this.userSockets.set(userId, new Set());
-      }
-      this.userSockets.get(userId)!.add(client.id);
-
-      // Track online user
-      const wasOffline = !this.onlineUsers.has(userId);
-      if (wasOffline) {
-        this.onlineUsers.add(userId);
-      }
-
-      // Start TTL timer for this user
-      this.startSocketTTL(userId, client.id);
+      // Refresh presence
+      await this.refreshPresence(userId, client.id);
 
       // Join rooms
       await client.join(`user:${userId}`);
+
       if (isAdmin) {
         await client.join('admins');
       }
 
-      // Update online status if first connection
-      if (wasOffline) {
-        await this.chatService.updateUserStatus(userId, true);
-        await this.broadcastStatusToConversations(userId, true);
-        this.logger.log(`🟢 User ${userId} online`);
-      }
+      // Update DB + broadcast online
+      await this.chatService.updateUserStatus(userId, true);
+      await this.broadcastStatusToConversations(userId, true);
 
-      // Confirm connection
       client.emit('connected', {
         userId,
         isAdmin,
@@ -170,7 +175,7 @@ export class ChatGateway
       this.logger.log(
         `🔗 Client connected: ${client.id} (User: ${userId}, Admin: ${isAdmin})`,
       );
-    } catch (error: unknown) {
+    } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Auth failed for ${client.id}: ${errorMessage}`);
@@ -179,27 +184,29 @@ export class ChatGateway
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
-    const meta = this.socketMeta.get(client.id);
-    if (!meta) return;
+    try {
+      const meta = await this.redis.hgetall(`socket:${client.id}`);
+      if (!meta || !meta.userId) return;
 
-    const { userId } = meta;
+      const userId = String(meta.userId);
 
-    // Clean up socket metadata
-    this.socketMeta.delete(client.id);
+      // Clean up this specific socket
+      await this.redis.del(`socket:${client.id}`);
+      await this.redis.srem(`user_sockets:${userId}`, client.id);
 
-    // Remove socket from memory
-    const sockets = this.userSockets.get(userId);
-    if (sockets) {
-      sockets.delete(client.id);
+      // Check remaining sockets for this user
+      const remainingSockets = await this.redis.smembers(
+        `user_sockets:${userId}`,
+      );
 
-      // Clear TTL for this socket
-      this.clearSocketTTL(client.id);
+      const isStillOnline = this.hasActiveSockets(remainingSockets);
 
-      // Check if user has any remaining sockets
-      if (sockets.size === 0) {
-        // User is fully offline
-        this.userSockets.delete(userId);
-        this.onlineUsers.delete(userId);
+      if (!isStillOnline) {
+        await Promise.all([
+          this.redis.srem('online_users', userId),
+          this.redis.del(`user_sockets:${userId}`),
+          this.redis.del(`user_online:${userId}`),
+        ]);
 
         await this.chatService.updateUserStatus(userId, false);
         await this.broadcastStatusToConversations(
@@ -209,49 +216,80 @@ export class ChatGateway
         );
 
         this.logger.log(`🔴 User ${userId} offline`);
+      } else {
+        // User still has another active socket/device/tab
+        await Promise.all([
+          this.redis.expire(`user_sockets:${userId}`, this.SOCKET_TTL),
+          this.redis.set(`user_online:${userId}`, '1', {
+            ex: this.PRESENCE_TTL,
+          }),
+          this.redis.sadd('online_users', userId),
+        ]);
+
+        this.logger.log(
+          `🟢 User ${userId} still online with ${remainingSockets.length} socket(s)`,
+        );
       }
+
+      this.logger.log(`🔌 Client disconnected: ${client.id}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Disconnect error: ${errorMessage}`);
     }
-
-    this.logger.log(`🔌 Client disconnected: ${client.id}`);
-  }
-
-  @SubscribeMessage('user_deleted')
-  async handleUserDeleted(@MessageBody() data: { userId: string }) {
-    const partnerIds = await this.chatService.getConversationPartnerIds(
-      data.userId,
-    );
-
-    partnerIds.forEach((partnerId) => {
-      this.server.to(`user:${partnerId}`).emit('user_deleted', {
-        deletedUserId: data.userId,
-      });
-    });
   }
 
   // ==========================================
   // WEBSOCKET EVENT HANDLERS
   // ==========================================
 
+  @SubscribeMessage('user_deleted')
+  async handleUserDeleted(
+    @MessageBody() data: { userId: string },
+  ): Promise<void> {
+    try {
+      const partnerIds = await this.chatService.getConversationPartnerIds(
+        data.userId,
+      );
+
+      partnerIds.forEach((partnerId) => {
+        this.server.to(`user:${partnerId}`).emit('user_deleted', {
+          deletedUserId: data.userId,
+        });
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`User deleted event error: ${errorMessage}`);
+    }
+  }
+
   @SubscribeMessage('heartbeat')
-  handleHeartbeat(@ConnectedSocket() client: Socket): void {
-    const meta = this.socketMeta.get(client.id);
-    if (meta) {
-      this.refreshSocketTTL(meta.userId, client.id);
+  async handleHeartbeat(@ConnectedSocket() client: Socket): Promise<void> {
+    try {
+      const meta = await this.redis.hgetall(`socket:${client.id}`);
+      if (!meta?.userId) return;
+
+      const userId = String(meta.userId);
+
+      await this.redis.expire(`socket:${client.id}`, this.SOCKET_TTL);
+      await this.refreshPresence(userId, client.id);
+    } catch (error) {
+      this.logger.debug(`Heartbeat error: ${error}`);
     }
   }
 
   @SubscribeMessage('typing')
-  handleTyping(
+  async handleTyping(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { receiverId: string; isTyping: boolean },
-  ): void {
-    const sender = this.socketMeta.get(client.id);
-    if (!sender) return;
-
+  ): Promise<void> {
     try {
-      // Broadcast typing status to the receiver
+      const meta = await this.redis.hgetall(`socket:${client.id}`);
+      if (!meta?.userId) return;
+
       this.server.to(`user:${data.receiverId}`).emit('typing', {
-        senderId: sender.userId,
+        senderId: String(meta.userId),
         isTyping: data.isTyping,
       });
     } catch (error) {
@@ -264,16 +302,18 @@ export class ChatGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: SendMessageData,
   ): Promise<void> {
-    const sender = this.socketMeta.get(client.id);
-    if (!sender) {
-      client.emit('error', {
-        code: 'AUTH_REQUIRED',
-        message: 'Not authenticated',
-      });
-      return;
-    }
-
     try {
+      const meta = await this.redis.hgetall(`socket:${client.id}`);
+      if (!meta?.userId) {
+        client.emit('error', {
+          code: 'AUTH_REQUIRED',
+          message: 'Not authenticated',
+        });
+        return;
+      }
+
+      const senderId = String(meta.userId);
+
       if (!data.receiverId) {
         throw new Error('Receiver ID is required');
       }
@@ -282,58 +322,35 @@ export class ChatGateway
         throw new Error('Message content is required');
       }
 
-      this.refreshSocketTTL(sender.userId, client.id);
-
-      // Send message via service
+      // Save to database
       const message = await this.chatService.sendMessage(
-        sender.userId,
+        senderId,
         data.receiverId,
         data.content || '',
         data.type || 'text',
         data.mediaUrl,
       );
 
-      // Confirm to sender
+      // Confirm to sender immediately
       client.emit('message_sent', message);
 
-      // Check if receiver is online using in-memory storage
-      const isReceiverOnline = this.isUserOnline(data.receiverId);
+      // Emit to receiver's room
+      const receiverRoom = `user:${data.receiverId}`;
+      this.server.to(receiverRoom).emit('new_message', message);
+      this.logger.log(`📨 Emitted new_message to ${receiverRoom}`);
 
-      if (isReceiverOnline) {
-        // User is online - send via WebSocket only
-        this.server.to(`user:${data.receiverId}`).emit('new_message', message);
-        this.logger.debug(
-          `📨 Message sent via WebSocket to online user: ${data.receiverId}`,
+      // Emit to sender's room for multi-device sync
+      const senderRoom = `user:${senderId}`;
+      this.server.to(senderRoom).emit('new_message', message);
+
+      // Push notification if receiver offline
+      const isReceiverOnline = await this.isUserOnline(data.receiverId);
+      if (!isReceiverOnline) {
+        this.sendPushNotification(senderId, data).catch((err) =>
+          this.logger.error(`Push notification failed: ${err.message}`),
         );
-      } else {
-        // User is offline - send push notification
-        const senderUser = await this.chatService.getUserById(sender.userId);
-        const senderName = senderUser?.name || 'Someone';
-
-        const notificationBody = this.getNotificationBody(data);
-
-        try {
-          await this.notificationsService.create({
-            userId: data.receiverId,
-            type: NotificationType.MESSAGE,
-            title: `New message from ${senderName}`,
-            message: notificationBody,
-            actionText: 'Reply',
-            actionLink: `/chat/${sender.userId}`,
-          });
-          this.logger.log(
-            `📨 Push notification sent to offline user: ${data.receiverId}`,
-          );
-        } catch (error) {
-          this.logger.error(
-            `Push notification failed for ${data.receiverId}: ${error}`,
-          );
-        }
-
-        // Still emit WebSocket event for multi-device scenarios
-        this.server.to(`user:${data.receiverId}`).emit('new_message', message);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Message send failed: ${errorMessage}`);
@@ -346,35 +363,36 @@ export class ChatGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: MarkReadData,
   ): Promise<void> {
-    const user = this.socketMeta.get(client.id);
-    if (!user) return;
-
     try {
+      const meta = await this.redis.hgetall(`socket:${client.id}`);
+      if (!meta?.userId) return;
+
+      const userId = String(meta.userId);
+
       const result = await this.chatService.markAsRead(
-        user.userId,
+        userId,
         data.chatPartnerId,
       );
 
       this.logger.log(
-        `✅ Marked ${result.count} messages as read: ${user.userId} → ${data.chatPartnerId}`,
+        `✅ Marked ${result.count} messages as read: ${userId} → ${data.chatPartnerId}`,
       );
 
-      // Emit to partner for read receipts
-      this.server.to(`user:${data.chatPartnerId}`).emit('message_read', {
-        readerId: user.userId,
+      const readReceipt = {
+        readerId: userId,
         conversationId: result.conversationId,
         count: result.count,
         timestamp: new Date().toISOString(),
-      });
+      };
 
-      // Confirm to the reader
-      client.emit('message_read', {
-        readerId: user.userId,
-        conversationId: result.conversationId,
-        count: result.count,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: unknown) {
+      // Notify partner
+      this.server
+        .to(`user:${data.chatPartnerId}`)
+        .emit('message_read', readReceipt);
+
+      // Notify current user's other devices too
+      client.emit('message_read', readReceipt);
+    } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Mark read failed: ${errorMessage}`);
@@ -386,30 +404,121 @@ export class ChatGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: StatusCheckData,
   ): Promise<void> {
-    const isOnline = this.isUserOnline(data.partnerId);
+    try {
+      const isOnline = await this.isUserOnline(data.partnerId);
 
-    client.emit('partner_status', {
-      userId: data.partnerId,
-      isOnline,
-    });
+      client.emit('partner_status', {
+        userId: data.partnerId,
+        isOnline,
+      });
+
+      this.logger.log(
+        `Status check for ${data.partnerId}: ${isOnline ? 'online' : 'offline'}`,
+      );
+    } catch (error) {
+      this.logger.error(`Status check error: ${error}`);
+    }
   }
 
   // ==========================================
   // PUBLIC HELPERS
   // ==========================================
 
-  isUserOnline(userId: string): boolean {
-    const sockets = this.userSockets.get(userId);
-    return sockets ? sockets.size > 0 : false;
+  async isUserOnline(userId: string): Promise<boolean> {
+    try {
+      const onlineTtl = await this.redis.exists(`user_online:${userId}`);
+      if (!onlineTtl) return false;
+
+      const userSockets = await this.redis.smembers(`user_sockets:${userId}`);
+      if (!userSockets.length) return false;
+
+      return this.hasActiveSockets(userSockets);
+    } catch (error) {
+      this.logger.error(`Redis isUserOnline error: ${error}`);
+      return false;
+    }
   }
 
-  getOnlineUsers(): string[] {
-    return Array.from(this.onlineUsers);
+  async getOnlineUsers(): Promise<string[]> {
+    try {
+      return await this.redis.smembers('online_users');
+    } catch (error) {
+      this.logger.error(`Redis getOnlineUsers error: ${error}`);
+      return [];
+    }
   }
 
   // ==========================================
   // PRIVATE HELPERS
   // ==========================================
+
+  /**
+   * Safe helper to get the actual Socket.IO sockets map.
+   *
+   * Works for:
+   * - Namespace: namespace.sockets = Map<string, Socket>
+   * - Server: server.sockets.sockets = Map<string, Socket>
+   */
+  private get socketsMap(): Map<string, Socket> | undefined {
+    const serverAny = this.server as any;
+    if (!serverAny) return undefined;
+
+    if (serverAny.sockets instanceof Map) {
+      return serverAny.sockets;
+    }
+
+    return serverAny.sockets?.sockets;
+  }
+
+  /**
+   * Checks whether the given socket IDs are still active.
+   *
+   * - If a socket exists in this process and is connected => active.
+   * - If a socket is NOT in this process, we assume it may belong to another
+   *   server instance and trust Redis TTL/heartbeat.
+   * - If all sockets are known locally and none are connected => inactive.
+   */
+  private hasActiveSockets(socketIds: string[]): boolean {
+    if (!socketIds.length) return false;
+
+    const socketsMap = this.socketsMap;
+
+    // If we cannot access local socket map, trust Redis.
+    if (!socketsMap) {
+      return socketIds.length > 0;
+    }
+
+    const hasLocalConnected = socketIds.some((socketId) => {
+      const socket = socketsMap.get(socketId);
+      return socket?.connected === true;
+    });
+
+    if (hasLocalConnected) return true;
+
+    const hasUnknownSocket = socketIds.some(
+      (socketId) => !socketsMap.has(socketId),
+    );
+
+    // If any socket is not known to this process, it may be connected
+    // on another instance. Do not mark offline immediately.
+    if (hasUnknownSocket) return true;
+
+    return false;
+  }
+
+  private async refreshPresence(
+    userId: string,
+    socketId: string,
+  ): Promise<void> {
+    await Promise.all([
+      this.redis.sadd(`user_sockets:${userId}`, socketId),
+      this.redis.expire(`user_sockets:${userId}`, this.SOCKET_TTL),
+      this.redis.set(`user_online:${userId}`, '1', {
+        ex: this.PRESENCE_TTL,
+      }),
+      this.redis.sadd('online_users', userId),
+    ]);
+  }
 
   private getNotificationBody(data: SendMessageData): string {
     switch (data.type) {
@@ -422,56 +531,58 @@ export class ChatGateway
     }
   }
 
+  private async sendPushNotification(
+    senderId: string,
+    data: SendMessageData,
+  ): Promise<void> {
+    try {
+      const senderUser = await this.chatService.getUserById(senderId);
+      const senderName = senderUser?.name || 'Someone';
+      const notificationBody = this.getNotificationBody(data);
+
+      await this.notificationsService.create({
+        userId: data.receiverId,
+        type: NotificationType.MESSAGE,
+        title: `New message from ${senderName}`,
+        message: notificationBody,
+        actionText: 'Reply',
+        actionLink: `/chat/${senderId}`,
+      });
+    } catch (error) {
+      this.logger.error(`Push notification error: ${error}`);
+    }
+  }
+
   private async broadcastStatusToConversations(
     userId: string,
     isOnline: boolean,
     lastSeen?: string,
   ): Promise<void> {
     try {
-      const partnerIds = new Set<string>();
+      const partnerIds =
+        await this.chatService.getConversationPartnerIds(userId);
 
-      // Get all conversation partners
-      const [userConversations, user] = await Promise.all([
-        this.chatService.getUserConversations(userId).catch(() => []),
-        this.chatService.getUserById(userId),
-      ]);
+      if (!partnerIds.length) return;
 
-      userConversations.forEach((c: any) => {
-        if (c.userId) partnerIds.add(c.userId);
-      });
+      const payload = {
+        userId,
+        isOnline,
+        lastSeen: lastSeen ?? null,
+      };
 
-      // If admin, also get admin conversations
-      if (user?.isAdmin) {
-        const adminConversations = await this.chatService
-          .getAdminConversations(userId)
-          .catch(() => []);
-        adminConversations.forEach((c: any) => {
-          if (c.userId) partnerIds.add(c.userId);
-        });
+      for (const partnerId of partnerIds) {
+        this.server.to(`user:${partnerId}`).emit('partner_status', payload);
       }
 
-      // Filter out self
-      partnerIds.delete(userId);
+      // Optional: also notify the user's own other devices
+      this.server.to(`user:${userId}`).emit('partner_status', payload);
 
-      if (partnerIds.size > 0) {
-        const statusUpdate = {
-          userId,
-          isOnline,
-          lastSeen: lastSeen || null,
-        };
-
-        // Emit to all partners efficiently
-        partnerIds.forEach((partnerId) => {
-          this.server
-            .to(`user:${partnerId}`)
-            .emit('partner_status', statusUpdate);
-        });
-
-        this.logger.debug(
-          `📡 Broadcasted status to ${partnerIds.size} partners`,
-        );
-      }
-    } catch (error: unknown) {
+      this.logger.log(
+        `📡 Broadcast status for ${userId} (${
+          isOnline ? 'online' : 'offline'
+        }) to ${partnerIds.length} partners`,
+      );
+    } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to broadcast status: ${errorMessage}`);
@@ -481,7 +592,9 @@ export class ChatGateway
   private extractToken(client: Socket): string | null {
     const authToken = client.handshake.auth?.token as string | undefined;
     const queryToken = client.handshake.query?.token as string | undefined;
-    const authHeader = client.handshake.headers?.authorization;
+    const authHeader = client.handshake.headers?.authorization as
+      | string
+      | undefined;
 
     if (authToken) return authToken;
     if (queryToken) return queryToken;
@@ -493,64 +606,5 @@ export class ChatGateway
   private disconnectWithError(client: Socket, message: string): void {
     client.emit('error', { message });
     setTimeout(() => client.disconnect(true), 100);
-  }
-  private startSocketTTL(userId: string, socketId: string): void {
-    this.clearSocketTTL(socketId);
-
-    const timeout = setTimeout(() => {
-      this.logger.warn(`Socket TTL expired for ${socketId} (user: ${userId})`);
-
-      // ✅ SAFE SOCKET LOOKUP (Prevents the crash)
-      try {
-        const socketsMap =
-          this.server?.sockets?.sockets || this.server?.of('/')?.sockets;
-        const client = socketsMap?.get(socketId);
-        if (client) {
-          client.disconnect(true);
-        }
-      } catch (err: any) {
-        this.logger.debug(
-          `Could not disconnect expired socket: ${err?.message}`,
-        );
-      }
-    }, 60000); // 60 seconds TTL
-
-    this.socketTTLs.set(socketId, timeout);
-  }
-
-  private refreshSocketTTL(userId: string, socketId: string): void {
-    this.startSocketTTL(userId, socketId);
-  }
-
-  private clearSocketTTL(socketId: string): void {
-    const timeout = this.socketTTLs.get(socketId);
-    if (timeout) {
-      clearTimeout(timeout);
-      this.socketTTLs.delete(socketId);
-    }
-  }
-
-  private cleanupStaleConnections(): void {
-    try {
-      const sockets = this.server?.sockets?.sockets;
-      if (!sockets) return;
-
-      let cleanedCount = 0;
-      sockets.forEach((socket: Socket, socketId: string) => {
-        if (!this.socketMeta.has(socketId)) {
-          this.logger.warn(`Cleaning up stale socket: ${socketId}`);
-          socket.disconnect(true);
-          cleanedCount++;
-        }
-      });
-
-      if (cleanedCount > 0) {
-        this.logger.log(`Cleaned up ${cleanedCount} stale connections`);
-      }
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.debug(`Cleanup routine: ${errorMessage}`);
-    }
   }
 }

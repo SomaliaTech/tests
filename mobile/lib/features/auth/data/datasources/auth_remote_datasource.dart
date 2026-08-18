@@ -22,12 +22,7 @@ abstract class AuthRemoteDataSource {
     String token,
     String base64Image,
   );
-  Future<Map<String, dynamic>> googleSignIn(
-    String idToken,
-    String email,
-    String name,
-    String? photoUrl,
-  );
+  Future<Map<String, dynamic>> googleSignIn(String idToken);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -36,21 +31,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   AuthRemoteDataSourceImpl({required this.client});
 
   @override
-  Future<Map<String, dynamic>> googleSignIn(
-    String idToken,
-    String email,
-    String name,
-    String? photoUrl,
-  ) async {
+  Future<Map<String, dynamic>> googleSignIn(String idToken) async {
     try {
       final response = await client.post(
         Uri.parse('${ApiConstants.baseUrl}/auth/google'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'idToken': idToken,
-          'email': email,
-          'name': name,
-          'photoUrl': photoUrl,
+          'idToken': idToken, // ✅ ONLY ID token
+          // ❌ Don't send email, name, photoUrl - they'll be extracted from token
         }),
       );
 
@@ -73,12 +61,28 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'phoneNumber': phoneNumber}),
       );
+
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return json.decode(response.body);
+        final data = json.decode(response.body);
+        print('✅ Send OTP Success: $data');
+        return data;
       } else {
-        throw ServerException('Failed to send OTP: ${response.statusCode}');
+        // Parse error message from backend
+        String errorMessage = 'Failed to send OTP';
+        try {
+          final errorBody = json.decode(response.body);
+          if (errorBody['message'] is String) {
+            errorMessage = errorBody['message'];
+          } else if (errorBody['message'] is List &&
+              errorBody['message'].isNotEmpty) {
+            errorMessage = errorBody['message'][0];
+          }
+        } catch (_) {}
+
+        throw ServerException(errorMessage);
       }
     } catch (e) {
+      if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }
   }

@@ -1,3 +1,4 @@
+// lib/features/auth/presentation/screens/complete_profile_screen.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -45,6 +46,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController nameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
+  final TextEditingController countryCodeController = TextEditingController(
+    text: '+252',
+  );
   final FocusNode phoneFocusNode = FocusNode();
 
   String? _profileImageUrl;
@@ -54,8 +58,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   String? _selectedMarketId;
   bool _loadingMarkets = false;
 
-  // ✅ Provider detection (same as phone_input_screen)
-  static const List<ProviderInfo> _providers = [
+  // ✅ Somali providers (only for OTP users)
+  static const List<ProviderInfo> _somaliProviders = [
     ProviderInfo(
       prefix: '61',
       name: 'Hormuud',
@@ -82,6 +86,68 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     ),
   ];
 
+  // ✅ Common country codes (for Google users)
+  static const List<String> _countryCodes = [
+    '+252', // Somalia
+    '+1', // USA/Canada
+    '+44', // UK
+    '+254', // Kenya
+    '+256', // Uganda
+    '+255', // Tanzania
+    '+971', // UAE
+    '+966', // Saudi Arabia
+    '+20', // Egypt
+    '+234', // Nigeria
+    '+27', // South Africa
+    '+49', // Germany
+    '+33', // France
+    '+61', // Australia
+    '+46', // Sweden
+    '+47', // Norway
+    '+45', // Denmark
+    '+31', // Netherlands
+    '+32', // Belgium
+    '+41', // Switzerland
+    '+43', // Austria
+    '+39', // Italy
+    '+34', // Spain
+    '+351', // Portugal
+    '+353', // Ireland
+    '+358', // Finland
+    '+48', // Poland
+    '+90', // Turkey
+    '+91', // India
+    '+92', // Pakistan
+    '+880', // Bangladesh
+    '+62', // Indonesia
+    '+60', // Malaysia
+    '+65', // Singapore
+    '+66', // Thailand
+    '+84', // Vietnam
+    '+81', // Japan
+    '+82', // South Korea
+    '+86', // China
+    '+7', // Russia
+    '+55', // Brazil
+    '+52', // Mexico
+    '+54', // Argentina
+    '+56', // Chile
+    '+57', // Colombia
+    '+51', // Peru
+    '+58', // Venezuela
+    '+972', // Israel
+    '+964', // Iraq
+    '+963', // Syria
+    '+962', // Jordan
+    '+961', // Lebanon
+    '+965', // Kuwait
+    '+973', // Bahrain
+    '+974', // Qatar
+    '+968', // Oman
+    '+967', // Yemen
+    '+971', // UAE
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -97,7 +163,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
     // Pre-fill phone for OTP users
     if (!widget.isGoogleSignIn && widget.user.phoneNumber.isNotEmpty) {
-      phoneController.text = widget.user.phoneNumber.replaceAll('+252', '');
+      String phone = widget.user.phoneNumber;
+      if (phone.startsWith('+252')) {
+        phone = phone.substring(4);
+      }
+      phoneController.text = phone;
     }
 
     _fetchMarkets();
@@ -107,22 +177,23 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   void dispose() {
     nameController.dispose();
     phoneController.dispose();
+    countryCodeController.dispose();
     phoneFocusNode.dispose();
     super.dispose();
   }
 
-  // ✅ Provider detection helpers
-  String? _detectProvider(String phone) {
+  // ✅ Somali provider detection (only for OTP users)
+  String? _detectSomaliProvider(String phone) {
     if (phone.length < 2) return null;
-    for (final provider in _providers) {
+    for (final provider in _somaliProviders) {
       if (phone.startsWith(provider.prefix)) return provider.name;
     }
     return null;
   }
 
-  Color? _getProviderColor(String phone) {
+  Color? _getSomaliProviderColor(String phone) {
     if (phone.length < 2) return null;
-    for (final provider in _providers) {
+    for (final provider in _somaliProviders) {
       if (phone.startsWith(provider.prefix)) return provider.color;
     }
     return null;
@@ -204,25 +275,60 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     }
   }
 
+  // ✅ Phone validation based on user type
   String? _validatePhone(String? value) {
-    if (!widget.isGoogleSignIn) return null;
-    if (value == null || value.isEmpty) return 'Phone number is required';
+    if (value == null || value.isEmpty) {
+      return widget.isGoogleSignIn
+          ? 'Phone number is required'
+          : null; // Phone not required for OTP users (they already have it)
+    }
 
     String cleaned = value.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleaned.length != 9) return 'Phone number must be 9 digits';
 
-    bool isValidPrefix = _providers.any((p) => cleaned.startsWith(p.prefix));
-    if (!isValidPrefix) return 'Must start with 61, 63, 68, or 90';
-
-    return null;
+    if (widget.isGoogleSignIn) {
+      // ✅ Google users: ANY country, 6-15 digits
+      if (cleaned.length < 6 || cleaned.length > 15) {
+        return 'Phone number must be between 6 and 15 digits';
+      }
+      return null;
+    } else {
+      // ✅ OTP users: Somali only, 9 digits
+      if (cleaned.startsWith('+252')) {
+        cleaned = cleaned.substring(4);
+      }
+      if (cleaned.startsWith('252')) {
+        cleaned = cleaned.substring(3);
+      }
+      if (cleaned.length != 9) {
+        return 'Phone number must be 9 digits';
+      }
+      bool isValidPrefix = _somaliProviders.any(
+        (p) => cleaned.startsWith(p.prefix),
+      );
+      if (!isValidPrefix) {
+        return 'Must start with 61, 63, 68, or 90';
+      }
+      return null;
+    }
   }
 
   String _formatPhoneForApi(String phone) {
     String cleaned = phone.trim().replaceAll(RegExp(r'\s+'), '');
-    if (cleaned.startsWith('+252')) return cleaned;
-    if (cleaned.startsWith('252')) return '+$cleaned';
-    if (cleaned.startsWith('0')) return '+252${cleaned.substring(1)}';
-    return '+252$cleaned';
+
+    if (widget.isGoogleSignIn) {
+      // ✅ Google users: Use country code + phone
+      final countryCode = countryCodeController.text.trim();
+      return '$countryCode$cleaned';
+    } else {
+      // ✅ OTP users: Somali format
+      if (cleaned.startsWith('+252')) {
+        cleaned = cleaned.substring(4);
+      }
+      if (cleaned.startsWith('252')) {
+        cleaned = cleaned.substring(3);
+      }
+      return '+252$cleaned';
+    }
   }
 
   void _submitProfile() {
@@ -275,6 +381,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
@@ -335,19 +445,25 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Name is required';
-                    if (v.trim().length < 2)
+                    if (v.trim().length < 2) {
                       return 'Name must be at least 2 characters';
+                    }
                     return null;
                   },
                   textCapitalization: TextCapitalization.words,
                 ),
 
-                // ✅ Smart Phone Input - ONLY for Google users
+                // ✅ Phone Input - DIFFERENT for Google vs OTP users
                 if (widget.isGoogleSignIn) ...[
                   const SizedBox(height: 20),
-                  _buildSmartPhoneInput(),
+                  _buildInternationalPhoneInput(), // ✅ Google: any country
                   const SizedBox(height: 8),
-                  _buildProviderDetection(),
+                  _buildPhoneHelper(),
+                ] else ...[
+                  const SizedBox(height: 20),
+                  _buildSomaliPhoneInput(), // ✅ OTP: Somali only
+                  const SizedBox(height: 8),
+                  _buildSomaliProviderDetection(),
                 ],
 
                 const SizedBox(height: 20),
@@ -402,10 +518,102 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  // ✅ Smart phone input matching phone_input_screen style
-  Widget _buildSmartPhoneInput() {
+  // ✅ INTERNATIONAL PHONE INPUT (for Google users)
+  Widget _buildInternationalPhoneInput() {
+    return Container(
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Country code dropdown
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: countryCodeController.text,
+                items: _countryCodes.map((code) {
+                  return DropdownMenuItem<String>(
+                    value: code,
+                    child: Text(
+                      code,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    countryCodeController.text = value ?? '+252';
+                  });
+                },
+                icon: const Icon(
+                  Iconsax.arrow_down_1,
+                  size: 14,
+                  color: Color(0xFF9CA3AF),
+                ),
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(width: 1, height: 30, color: const Color(0xFFE5E7EB)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextFormField(
+              controller: phoneController,
+              focusNode: phoneFocusNode,
+              keyboardType: TextInputType.phone,
+              maxLength: 15,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              validator: _validatePhone,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1F2937),
+                letterSpacing: 1.2,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Phone number',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF9CA3AF),
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 1.2,
+                ),
+                counterText: '',
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onChanged: (value) => setState(() {}),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ SOMALI PHONE INPUT (for OTP users)
+  Widget _buildSomaliPhoneInput() {
     final phone = phoneController.text;
-    final providerColor = _getProviderColor(phone);
+    final providerColor = _getSomaliProviderColor(phone);
 
     return Container(
       padding: const EdgeInsets.all(1),
@@ -419,8 +627,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         boxShadow: [
           BoxShadow(
             color:
-                providerColor?.withOpacity(0.2) ??
-                Colors.black.withOpacity(0.04),
+                providerColor?.withValues(alpha: 0.2) ??
+                Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -437,7 +645,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(width: 8),
                 const Text(
                   '+252',
                   style: TextStyle(
@@ -491,11 +698,30 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  // ✅ Live provider detection indicator
-  Widget _buildProviderDetection() {
+  // ✅ Phone helper text (for Google users)
+  Widget _buildPhoneHelper() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Icon(Iconsax.global, size: 14, color: Colors.blue.shade400),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Enter your phone number with country code',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ Somali provider detection (for OTP users)
+  Widget _buildSomaliProviderDetection() {
     final phone = phoneController.text;
-    final detectedProvider = _detectProvider(phone);
-    final providerColor = _getProviderColor(phone);
+    final detectedProvider = _detectSomaliProvider(phone);
+    final providerColor = _getSomaliProviderColor(phone);
 
     if (phone.isEmpty) {
       return Padding(
@@ -523,11 +749,13 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: providerColor?.withOpacity(0.15),
+                color: providerColor?.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
-                _providers.firstWhere((p) => p.name == detectedProvider).icon,
+                _somaliProviders
+                    .firstWhere((p) => p.name == detectedProvider)
+                    .icon,
                 size: 14,
                 color: providerColor,
               ),
@@ -599,7 +827,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                     child: const Center(
@@ -712,12 +940,12 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
           )
         else
           DropdownButtonFormField<String>(
-            value: _selectedMarketId,
             decoration: _inputDecoration(
               'Market *',
               Icons.location_city,
               'Select your market',
             ),
+            value: _selectedMarketId,
             items: _markets.map<DropdownMenuItem<String>>((market) {
               return DropdownMenuItem<String>(
                 value: market['id'] as String,
@@ -738,35 +966,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
             isExpanded: true,
             style: const TextStyle(color: Colors.black87, fontSize: 15),
           ),
-        if (_selectedMarketId != null) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF2ED573).withOpacity(0.3),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline,
-                  color: Color(0xFF2ED573),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Market wuxuu noqon doonaa goobta laguugu keeni doono alaabtaada.',
-                    style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }

@@ -32,6 +32,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
 
   late final ConversationsBloc _bloc;
   late final ChatSocketService _socketService;
+  DateTime? _lastConversationLoad;
 
   @override
   void initState() {
@@ -52,6 +53,19 @@ class _ConversationsScreenState extends State<ConversationsScreen>
   }
 
   void _loadConversations() {
+    final now = DateTime.now();
+
+    if (_lastConversationLoad != null) {
+      final diff = now.difference(_lastConversationLoad!);
+
+      if (diff.inSeconds < 5) {
+        debugPrint('⏳ Skipping conversation reload, too soon');
+        return;
+      }
+    }
+
+    _lastConversationLoad = now;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _bloc.add(LoadConversationsEvent());

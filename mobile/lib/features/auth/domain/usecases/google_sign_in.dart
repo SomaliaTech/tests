@@ -1,19 +1,17 @@
-// lib/features/auth/domain/usecases/google_sign_in.dart
+// google_sign_in.dart
+import 'package:fpdart/fpdart.dart';
+import 'package:mobile/core/error/failures.dart';
 import 'package:mobile/core/utils/typedefs.dart';
-import '../entities/user.dart';
-import '../repositories/auth_repository.dart';
+import 'package:mobile/features/auth/domain/entities/user.dart';
+import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
 
 class GoogleSignIn {
   final AuthRepository repository;
 
   GoogleSignIn(this.repository);
 
-  ResultFuture<({String token, User user})> call(
-    String idToken,
-    String email,
-    String name,
-    String? photoUrl,
-  ) {
-    return repository.googleSignIn(idToken, email, name, photoUrl);
+  // ✅ Only pass ID token
+  ResultFuture<({String token, User user})> call(String idToken) {
+    return repository.googleSignIn(idToken);
   }
 }
