@@ -1,7 +1,10 @@
+// lib/features/notifications/notification_injection.dart
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/services/storage/storage_service.dart';
-import 'package:mobile/features/notifications/data/datasources/notifications_local_datasource.dart';
+import 'package:mobile/features/notifications/data/datasources/local/notifications_local_datasource.dart';
+import 'package:mobile/features/notifications/data/datasources/notifications_datasource.dart';
+
 import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import 'package:mobile/features/notifications/domain/repositories/notifications_repository.dart';
 import 'package:mobile/features/notifications/domain/usecases/clear_all_notifications.dart';
@@ -11,24 +14,30 @@ import 'package:mobile/features/notifications/domain/usecases/mark_all_as_read.d
 import 'package:mobile/features/notifications/domain/usecases/mark_as_read.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 
-final GetIt sl = GetIt.instance;
-
-void registerNotificationDependencies() {
+void registerNotificationDependencies(GetIt sl) {
   print('📦 Registering Notification Dependencies...');
 
-  // Data Sources
+  // Local Data Source
+  if (!sl.isRegistered<NotificationsLocalDataSource>()) {
+    sl.registerLazySingleton<NotificationsLocalDataSource>(
+      () => NotificationsLocalDataSourceImpl(),
+    );
+  }
+
+  // Remote Data Source
   if (!sl.isRegistered<NotificationsRemoteDataSource>()) {
     sl.registerLazySingleton<NotificationsRemoteDataSource>(
       () => NotificationsRemoteDataSource(client: sl<http.Client>()),
     );
   }
 
-  // Repositories
+  // Repository
   if (!sl.isRegistered<NotificationsRepository>()) {
     sl.registerLazySingleton<NotificationsRepository>(
       () => NotificationsRepositoryImpl(
         remoteDataSource: sl<NotificationsRemoteDataSource>(),
-        storageService: sl<StorageService>(), // ✅ FIXED: Use StorageService
+        localDataSource: sl<NotificationsLocalDataSource>(),
+        storageService: sl<StorageService>(),
       ),
     );
   }
@@ -72,8 +81,4 @@ void registerNotificationDependencies() {
   }
 
   print('✅ Notification Dependencies Registered');
-}
-
-NotificationsBloc getNotificationBloc() {
-  return sl<NotificationsBloc>();
 }

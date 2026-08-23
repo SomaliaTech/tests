@@ -232,32 +232,19 @@ class NotificationsView extends StatelessWidget {
       );
     }
 
-    if (notification.type != null) {
-      switch (notification.type) {
-        case 'order':
-          _navigateToOrder(context, notification);
-          break;
-        case 'message':
-        case 'new_message':
-          _navigateToChat(context, notification);
-          break;
-        case 'payment':
-          _navigateToPayment(context, notification);
-          break;
-        case 'product':
-        case 'promotion':
-          _navigateToProduct(context, notification);
-          break;
-        default:
-          _navigateFromActionLink(
-            context,
-            notification.actionLink,
-            notification,
-          );
-          break;
-      }
-    } else {
-      _navigateFromActionLink(context, notification.actionLink, notification);
+    switch (notification.type) {
+      case NotificationType.order:
+        _navigateToOrder(context, notification);
+        break;
+      case NotificationType.promotion:
+        _navigateToProduct(context, notification);
+        break;
+      case NotificationType.payment:
+        _navigateToPayment(context, notification);
+        break;
+      case NotificationType.system:
+        _navigateFromActionLink(context, notification.actionLink, notification);
+        break;
     }
   }
 

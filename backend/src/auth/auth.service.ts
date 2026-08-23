@@ -118,7 +118,6 @@ export class AuthService {
   // ==========================================
   // OTP SEND
   // ==========================================
-
   async sendOtp(phoneNumber: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -133,18 +132,17 @@ export class AuthService {
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
-      this.logger.log(`OTP stored in Redis`);
+      this.logger.log(`OTP stored in Redis for ${normalizedPhone}`);
 
       if (this.isProduction) {
         await this.hormuudService.sendOtpSms(normalizedPhone, otpCode);
         this.logger.log('OTP sent via SMS');
-
         return {
           message: 'OTP sent successfully',
         };
       } else {
+        // In development, still store in Redis but return the OTP for testing
         this.logger.log(`[DEV] OTP for ${normalizedPhone}: ${otpCode}`);
-
         return {
           message: 'OTP sent successfully (Development Mode)',
           debugOtp: otpCode,
@@ -154,26 +152,15 @@ export class AuthService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send OTP: ${errorMessage}`);
-
       await this.redis.del(redisKey);
-
-      if (!this.isProduction) {
-        return {
-          message: 'OTP generated (SMS failed in dev mode)',
-          debugOtp: otpCode,
-        };
-      }
-
       throw new BadRequestException(
         `Failed to send verification code: ${errorMessage}`,
       );
     }
   }
-
   // ==========================================
   // OTP VERIFY
   // ==========================================
-
   async verifyOtp(phoneNumber: string, otpCode: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const redisKey = `otp:${normalizedPhone}`;
@@ -192,15 +179,6 @@ export class AuthService {
       this.logger.error('Failed to get OTP from Redis');
     }
 
-    if (!this.isProduction && !otpData) {
-      this.logger.warn('[DEV] OTP not found, allowing verification');
-      otpData = {
-        otpCode: otpCode,
-        phoneNumber: normalizedPhone,
-        attempts: 0,
-      };
-    }
-
     if (!otpData) {
       throw new UnauthorizedException(
         'OTP has expired. Please request a new one.',
@@ -214,14 +192,19 @@ export class AuthService {
       );
     }
 
-    if (this.isProduction && otpData.otpCode !== otpCode) {
+    // ✅ ALWAYS check OTP - both in production AND development
+    if (otpData.otpCode !== otpCode) {
       otpData.attempts += 1;
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
+      this.logger.warn(
+        `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS} for ${normalizedPhone}`,
+      );
       throw new UnauthorizedException('Invalid OTP code');
     }
 
+    // ✅ OTP is valid - delete it and proceed
     await this.redis.del(redisKey);
 
     const userResult = await this.drizzle.db
@@ -294,7 +277,7 @@ export class AuthService {
         id: currentUser.id,
         phoneNumber: currentUser.phoneNumber,
         isVerified: true,
-        hasProfile: hasProfile, // ✅ Correctly checks marketId too
+        hasProfile: hasProfile,
         name: currentUser.name,
         profileImage: currentUser.profileImage,
         isAdmin: currentUser.isAdmin ?? false,

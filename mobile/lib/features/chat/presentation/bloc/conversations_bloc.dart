@@ -1,5 +1,6 @@
 // lib/features/chat/presentation/bloc/conversations_bloc.dart
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/chat/domain/repositories/chat_repository.dart';
 import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';

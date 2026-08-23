@@ -1,18 +1,23 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:mobile/core/services/server_status_service.dart';
-import 'package:mobile/features/notifications/data/datasources/notifications_local_datasource.dart';
+import 'package:mobile/features/notifications/data/datasources/local/notifications_local_datasource.dart';
+import 'package:mobile/features/notifications/data/datasources/notifications_datasource.dart';
+
 import '../../../../core/services/storage/storage_service.dart';
 import '../../domain/entities/notification.dart';
 import '../../domain/repositories/notifications_repository.dart';
 
 class NotificationsRepositoryImpl implements NotificationsRepository {
   final NotificationsRemoteDataSource remoteDataSource;
+  final NotificationsLocalDataSource localDataSource;
   final StorageService storageService;
 
   NotificationsRepositoryImpl({
     required this.remoteDataSource,
+    required this.localDataSource,
     required this.storageService,
   });
 
@@ -28,23 +33,50 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
         return const Right([]);
       }
 
-      final notifications = await remoteDataSource.getNotifications(token);
+      // ✅ First, try to get cached notifications
+      final cachedNotifications = await localDataSource
+          .getCachedNotifications();
 
-      // ✅ Server is up!
-      ServerStatusService().markServerUp();
+      // ✅ If we have cached data, return it immediately
+      // The UI will update instantly
+      if (cachedNotifications.isNotEmpty) {
+        // Fire and forget remote fetch to update cache
+        _fetchRemoteAndCache(token);
 
-      return Right(notifications);
-    } on SocketException {
-      // ✅ Server is down
-      ServerStatusService().markServerDown();
-      return const Right([]); // Return empty silently
-    } catch (e) {
-      if (e.toString().contains('Connection refused')) {
-        ServerStatusService().markServerDown();
-        return const Right([]); // Return empty silently
+        // Return cached data immediately
+        return Right(cachedNotifications);
       }
+
+      // No cache, fetch from remote
+      try {
+        final notifications = await remoteDataSource.getNotifications(token);
+        await localDataSource.cacheNotifications(notifications);
+        ServerStatusService().markServerUp();
+        return Right(notifications);
+      } catch (e) {
+        if (e.toString().contains('Connection refused') ||
+            e is SocketException) {
+          ServerStatusService().markServerDown();
+        }
+        return const Right([]);
+      }
+    } on SocketException {
+      ServerStatusService().markServerDown();
+      return const Right([]);
+    } catch (e) {
       debugPrint('⚠️ Failed to fetch notifications: $e');
-      return const Right([]); // Return empty silently for background fetches
+      return const Right([]);
+    }
+  }
+
+  // ✅ Helper method to fetch remote and update cache in background
+  Future<void> _fetchRemoteAndCache(String token) async {
+    try {
+      final notifications = await remoteDataSource.getNotifications(token);
+      await localDataSource.cacheNotifications(notifications);
+      ServerStatusService().markServerUp();
+    } catch (e) {
+      debugPrint('⚠️ Background notification refresh failed: $e');
     }
   }
 
@@ -116,7 +148,6 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
     }
   }
 
-  /// Clean up error message for user display
   String _parseError(dynamic error) {
     final errorStr = error.toString().toLowerCase();
 
@@ -131,15 +162,9 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
       return 'Session expired. Please login again.';
     }
 
-    // Clean up technical error messages
     return errorStr
         .replaceAll('exception: ', '')
         .replaceAll('error: ', '')
         .replaceAll('failed: ', '');
   }
-}
-
-// ✅ Helper function for debug printing
-void debugPrint(String message) {
-  print(message);
 }

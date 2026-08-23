@@ -84,7 +84,7 @@ Future<void> initDependencies() async {
   registerAdminDependencies(sl); // ✅ ONCE
   registerDashboardDependencies(sl); // ✅ ONCE
   trackingRegisterDependencies(sl); // ✅ ONCE
-  registerNotificationDependencies(); // ✅ ONCE
+  registerNotificationDependencies(sl); // ✅ ONCE
   registerChatDependencies(); // ✅ ONCE
   registerSupportDependencies(sl);
   registerAdminFaqDependencies(sl);

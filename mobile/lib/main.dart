@@ -81,6 +81,7 @@ void main() async {
     Hive.openBox<String>('sync_timestamps'),
     Hive.openBox<String>('product_cache'),
     Hive.openBox<String>('category_cache'),
+    Hive.openBox<String>('notifications_cache'), // ✅ ADD THIS
   ]);
 
   // ✅ Initialize dependencies AFTER boxes are open

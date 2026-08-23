@@ -1,4 +1,5 @@
 // lib/features/product/presentation/blocs/banner/banner_bloc.dart
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/common/entities/no_params.dart';
 import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';

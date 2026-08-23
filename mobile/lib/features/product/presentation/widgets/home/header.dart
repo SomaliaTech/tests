@@ -26,32 +26,20 @@ class Header extends StatefulWidget {
 
 class _HeaderState extends State<Header> {
   StreamSubscription? _notificationSub;
-
-  // ✅ Cache the last known unread count to prevent flickering
-  int _cachedUnreadCount = 0;
-  bool _hasLoadedOnce = false;
+  bool _hasLoadedNotifications = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
+      _loadCart();
       _setupRealtimeNotifications();
     });
   }
 
-  void _loadData() {
+  void _loadCart() {
     if (mounted) {
       context.read<CartBloc>().add(LoadCartEvent());
-    }
-
-    final authState = context.read<AuthBloc>().state;
-    if (authState is Authenticated ||
-        authState is OtpVerified ||
-        authState is ProfileCompleted) {
-      if (mounted) {
-        context.read<NotificationsBloc>().add(LoadNotifications());
-      }
     }
   }
 
@@ -60,11 +48,6 @@ class _HeaderState extends State<Header> {
       final socketService = GetIt.instance<ChatSocketService>();
       _notificationSub = socketService.onNewNotification.listen((data) {
         if (mounted) {
-          // ✅ Increment cached count immediately for instant feedback
-          setState(() {
-            _cachedUnreadCount++;
-          });
-          // Then refresh from API in background
           context.read<NotificationsBloc>().add(LoadNotifications());
         }
       });
@@ -81,56 +64,72 @@ class _HeaderState extends State<Header> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF2ED573),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(20),
-          bottomRight: Radius.circular(20),
+    return BlocListener<AuthBloc, AuthState>(
+      listener: (context, authState) {
+        // ✅ Load notifications when auth state becomes authenticated
+        if (!_hasLoadedNotifications &&
+            (authState is Authenticated ||
+                authState is OtpVerified ||
+                authState is ProfileCompleted)) {
+          _hasLoadedNotifications = true;
+          if (mounted) {
+            context.read<NotificationsBloc>().add(LoadNotifications());
+          }
+        }
+      },
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF2ED573),
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
         ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(15, 10, 15, 15),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(color: Color(0xFF2ED573)),
-                        child: Icon(Iconsax.shopping_bag, color: Colors.white),
-                      ),
-                      const Text(
-                        "FARXADA",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 1,
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(15, 10, 15, 15),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF2ED573),
+                          ),
+                          child: const Icon(
+                            Iconsax.shopping_bag,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      _NotificationIcon(
-                        cachedCount: _cachedUnreadCount,
-                        hasLoadedOnce: _hasLoadedOnce,
-                      ),
-                      const SizedBox(width: 5),
-                      const _CartIcon(),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              _SearchBar(onSearch: widget.onSearch),
-            ],
+                        const Text(
+                          "FARXADA",
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        const _NotificationIcon(),
+                        const SizedBox(width: 5),
+                        const _CartIcon(),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                _SearchBar(onSearch: widget.onSearch),
+              ],
+            ),
           ),
         ),
       ),
@@ -138,15 +137,8 @@ class _HeaderState extends State<Header> {
   }
 }
 
-// ✅ Notification Icon - No flickering
 class _NotificationIcon extends StatelessWidget {
-  final int cachedCount;
-  final bool hasLoadedOnce;
-
-  const _NotificationIcon({
-    required this.cachedCount,
-    required this.hasLoadedOnce,
-  });
+  const _NotificationIcon();
 
   @override
   Widget build(BuildContext context) {
@@ -172,20 +164,8 @@ class _NotificationIcon extends StatelessWidget {
         }
 
         return BlocBuilder<NotificationsBloc, NotificationsState>(
-          // ✅ Only rebuild when count actually changes
-          buildWhen: (previous, current) {
-            if (previous is NotificationsLoaded &&
-                current is NotificationsLoaded) {
-              return previous.unreadCount != current.unreadCount;
-            }
-            if (previous is NotificationsLoading &&
-                current is NotificationsLoaded) {
-              return true;
-            }
-            return false;
-          },
           builder: (context, state) {
-            int unreadCount = cachedCount;
+            int unreadCount = 0;
 
             if (state is NotificationsLoaded) {
               unreadCount = state.unreadCount;
@@ -210,7 +190,6 @@ class _NotificationIcon extends StatelessWidget {
                   },
                   icon: const Icon(Iconsax.notification, color: Colors.white),
                 ),
-                // ✅ Show badge if count > 0, regardless of loading state
                 if (unreadCount > 0)
                   Positioned(
                     right: 8,
@@ -252,7 +231,6 @@ class _CartIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CartBloc, CartState>(
-      // ✅ Only rebuild when count changes
       buildWhen: (previous, current) {
         if (previous is CartLoaded && current is CartLoaded) {
           return previous.itemCount != current.itemCount;
@@ -312,7 +290,7 @@ class _CartIcon extends StatelessWidget {
   }
 }
 
-// ✅ Search Bar - Now with search button and clear functionality
+// ✅ Search Bar - Keep as is
 class _SearchBar extends StatefulWidget {
   final Function(String)? onSearch;
 
@@ -340,7 +318,6 @@ class _SearchBarState extends State<_SearchBar> {
 
   void _clearSearch() {
     _controller.clear();
-    // Trigger empty search to reset results
     if (widget.onSearch != null) {
       widget.onSearch!('');
     }

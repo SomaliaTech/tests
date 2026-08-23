@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 

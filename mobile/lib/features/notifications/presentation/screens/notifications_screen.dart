@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/core/services/notification_injection.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_event.dart';
+import 'package:mobile/features/notifications/presentation/bloc/notifications_state.dart';
 import 'notifications_view.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -22,10 +23,16 @@ class NotificationsScreen extends StatelessWidget {
           );
         }
 
-        return BlocProvider.value(
-          value: getNotificationBloc()..add(LoadNotifications()),
-          child: const NotificationsView(),
-        );
+        // ✅ Use the existing NotificationsBloc from the parent MultiBlocProvider
+        // Don't create a new one - just dispatch the load event
+        final notificationsBloc = context.read<NotificationsBloc>();
+
+        // ✅ Only dispatch if not already loaded
+        if (notificationsBloc.state is! NotificationsLoaded) {
+          notificationsBloc.add(LoadNotifications());
+        }
+
+        return const NotificationsView();
       },
     );
   }

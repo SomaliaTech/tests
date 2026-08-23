@@ -56,12 +56,10 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
       }
     });
   }
-
   Future<void> _onLoadNotifications(
     LoadNotifications event,
     Emitter<NotificationsState> emit,
   ) async {
-    // ✅ Don't show loading if we already have data (silent refresh)
     final currentState = state;
     final isSilentRefresh = currentState is NotificationsLoaded;
 
@@ -72,20 +70,23 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
     final result = await getNotifications.call();
     result.fold(
       (failure) {
-        // ✅ Only emit error if this is a user-initiated action
         if (!isSilentRefresh) {
           emit(NotificationsError(failure.message));
         }
-        // If silent refresh fails, keep current state
       },
-      (notifications) => emit(
-        NotificationsLoaded(
-          notifications: notifications,
-          currentFilter: isSilentRefresh
-              ? (currentState as NotificationsLoaded).currentFilter
-              : NotificationFilter.all,
-        ),
-      ),
+      (notifications) {
+        print(
+          '✅ Emitting ${notifications.length} notifications, unread: ${notifications.where((n) => !n.read).length}',
+        );
+        emit(
+          NotificationsLoaded(
+            notifications: notifications,
+            currentFilter: isSilentRefresh
+                ? (currentState as NotificationsLoaded).currentFilter
+                : NotificationFilter.all,
+          ),
+        );
+      },
     );
   }
 

@@ -12,6 +12,7 @@ class NotificationsInitial extends NotificationsState {}
 
 class NotificationsLoading extends NotificationsState {}
 
+// In notifications_state.dart
 class NotificationsLoaded extends NotificationsState {
   final List<NotificationEntity> notifications;
   final NotificationFilter currentFilter;
@@ -21,8 +22,12 @@ class NotificationsLoaded extends NotificationsState {
     required this.currentFilter,
   });
 
+  int get unreadCount => notifications.where((n) => !n.read).length;
+
   List<NotificationEntity> get filteredNotifications {
     switch (currentFilter) {
+      case NotificationFilter.all:
+        return notifications;
       case NotificationFilter.unread:
         return notifications.where((n) => !n.read).toList();
       case NotificationFilter.orders:
@@ -33,12 +38,9 @@ class NotificationsLoaded extends NotificationsState {
         return notifications
             .where((n) => n.type == NotificationType.promotion)
             .toList();
-      case NotificationFilter.all:
-        return notifications;
     }
   }
 
-  int get unreadCount => notifications.where((n) => !n.read).length;
   bool get isEmpty => filteredNotifications.isEmpty;
 
   @override
