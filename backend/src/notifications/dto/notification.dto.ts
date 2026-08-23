@@ -10,36 +10,30 @@ import {
 import { NotificationType } from '../notification.entity';
 
 export class CreateNotificationDto {
-  @ApiProperty({ description: 'User ID' })
-  @IsUUID()
+  @IsString()
   userId: string;
 
-  @ApiProperty({ description: 'Notification type', enum: NotificationType })
   @IsEnum(NotificationType)
   type: NotificationType;
 
-  @ApiProperty({ description: 'Notification title', maxLength: 255 })
   @IsString()
-  @MaxLength(255)
   title: string;
 
-  @ApiProperty({ description: 'Notification message' })
   @IsString()
   message: string;
 
-  @ApiProperty({ description: 'Action button text', required: false })
-  @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @IsOptional()
   actionText?: string;
 
-  @ApiProperty({ description: 'Action link URL', required: false })
-  @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @IsOptional()
   actionLink?: string;
-}
 
+  @IsString()
+  @IsOptional()
+  imageUrl?: string; // ✅ ADD THIS
+}
 export class UpdateNotificationDto {
   @ApiProperty({
     description: 'Notification type',

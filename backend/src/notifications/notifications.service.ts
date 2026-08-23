@@ -182,19 +182,22 @@ export class NotificationsService {
     message: string;
     actionText?: string;
     actionLink?: string;
+    imageUrl?: string;
+    targetAudience?: string;
+    sendPush?: boolean;
+    scheduledAt?: Date;
   }) {
     this.logger.log(`📢 Broadcasting custom notification to all users...`);
 
+    // 1. Get all users (You can add filtering logic here later based on targetAudience)
     const allUsers = await this.drizzle.db.select({ id: users.id }).from(users);
     const userIds = allUsers.map((u) => u.id);
-    if (userIds.length === 0) return { message: 'No users to notify' };
 
-    const title = dto.title;
-    const message = dto.message;
-    const actionText = dto.actionText || 'View';
-    const actionLink = dto.actionLink || null;
+    if (userIds.length === 0) {
+      return { message: 'No users to notify', recipientsCount: 0 };
+    }
 
-    // 1. Save to DB (Chunked)
+    // 2. Save to DB (Chunked to avoid SQL query size limits)
     const dbChunkSize = 100;
     for (let i = 0; i < userIds.length; i += dbChunkSize) {
       const chunk = userIds.slice(i, i + dbChunkSize);
@@ -202,47 +205,89 @@ export class NotificationsService {
         id: uuidv4(),
         userId,
         type: NotificationType.PROMOTION,
-        title,
-        message,
+        title: dto.title,
+        message: dto.message,
         isRead: false,
-        actionText,
-        actionLink,
-        createdAt: new Date(),
+        actionText: dto.actionText || 'View',
+        actionLink: dto.actionLink || null,
+        imageUrl: dto.imageUrl || null, // ✅ Save image URL to DB
+        createdAt: dto.scheduledAt || new Date(),
       }));
       await this.drizzle.db.insert(notifications).values(values);
     }
+    this.logger.log(`✅ Saved ${userIds.length} notifications to DB.`);
 
-    // 2. Send FCM Push (Chunked)
-    const tokensResult = await this.drizzle.db
-      .select({ token: deviceTokens.token })
-      .from(deviceTokens)
-      .where(eq(deviceTokens.isActive, true));
-    const allTokens = tokensResult.map((t) => t.token).filter(Boolean);
-    if (allTokens.length > 0) {
-      const data = { type: 'broadcast', actionLink: actionLink || '' };
-      const pushChunkSize = 500;
-      for (let i = 0; i < allTokens.length; i += pushChunkSize) {
-        await this.firebaseService.sendMulticastNotification(
-          allTokens.slice(i, i + pushChunkSize),
-          title,
-          message,
-          data,
+    // 3. Send FCM Push Notifications (Chunked for Firebase limits)
+    if (dto.sendPush && !dto.scheduledAt) {
+      const tokensResult = await this.drizzle.db
+        .select({ token: deviceTokens.token })
+        .from(deviceTokens)
+        .where(eq(deviceTokens.isActive, true));
+
+      const allTokens = tokensResult.map((t) => t.token).filter(Boolean);
+
+      if (allTokens.length > 0) {
+        // ✅ Include imageUrl in the data payload for foreground handling in Flutter
+        const dataPayload: Record<string, string> = {
+          type: 'promotion',
+          actionLink: dto.actionLink || '',
+        };
+        if (dto.imageUrl) {
+          dataPayload.imageUrl = dto.imageUrl;
+        }
+
+        const pushChunkSize = 500; // Firebase limit per request
+        let successCount = 0;
+        let failureCount = 0;
+
+        for (let i = 0; i < allTokens.length; i += pushChunkSize) {
+          const tokenChunk = allTokens.slice(i, i + pushChunkSize);
+          try {
+            const result = await this.firebaseService.sendMulticastNotification(
+              tokenChunk,
+              dto.title,
+              dto.message,
+              dataPayload,
+            );
+            successCount += result.successCount || 0;
+            failureCount += result.failureCount || 0;
+          } catch (error) {
+            this.logger.error(`FCM chunk failed: ${error}`);
+          }
+        }
+        this.logger.log(
+          `✅ Push sent: ${successCount} succeeded, ${failureCount} failed.`,
+        );
+      } else {
+        this.logger.log(
+          '⚠️ No active device tokens found for push notifications.',
         );
       }
     }
 
-    // 3. WebSocket Broadcast
-    this.chatGateway.server.emit('new_notification', {
-      type: NotificationType.PROMOTION,
-      title,
-      message,
-      actionText,
-      actionLink,
-      createdAt: new Date().toISOString(),
-      isRead: false,
-    });
+    // 4. WebSocket Broadcast (for currently connected users)
+    if (!dto.scheduledAt) {
+      try {
+        this.chatGateway.server.emit('new_notification', {
+          type: NotificationType.PROMOTION,
+          title: dto.title,
+          message: dto.message,
+          actionText: dto.actionText || 'View',
+          actionLink: dto.actionLink || null,
+          imageUrl: dto.imageUrl || null, // ✅ Include in WS payload
+          createdAt: new Date().toISOString(),
+          isRead: false,
+        });
+        this.logger.log('✅ WebSocket broadcast sent.');
+      } catch (error) {
+        this.logger.warn(`WebSocket broadcast failed: ${error}`);
+      }
+    }
 
-    return { message: `Successfully sent to ${userIds.length} users` };
+    return {
+      message: `Successfully broadcasted to ${userIds.length} users`,
+      recipientsCount: userIds.length,
+    };
   }
   /**
    * ✅ Bulk create notifications

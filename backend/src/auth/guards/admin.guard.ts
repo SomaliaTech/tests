@@ -6,7 +6,6 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 
-// In admin.guard.ts
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -17,7 +16,7 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // ✅ Strict boolean check - no truthy/falsy
+    // ✅ Strict boolean check - allows both Admins and Super Admins
     if (user.isAdmin !== true && user.isSuperAdmin !== true) {
       throw new ForbiddenException('Admin access required');
     }

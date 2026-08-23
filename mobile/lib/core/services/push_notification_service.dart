@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io'; // ✅ Changed from 'dart:io' show Platform
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart'; // ✅ Add this import
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/navigation_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
@@ -26,11 +27,8 @@ class PushNotificationService {
   PushNotificationService._internal();
 
   bool _isInitialized = false;
-
-  // ✅ Track if app is in foreground
   bool _isAppInForeground = true;
 
-  // ✅ Notification channels for different types
   static const String _chatChannelId = 'chat_messages';
   static const String _orderChannelId = 'order_updates';
   static const String _paymentChannelId = 'payment_updates';
@@ -42,31 +40,21 @@ class PushNotificationService {
 
     debugPrint('📱 Initializing push notification service...');
 
-    // ✅ Set background message handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-    // Request permission
     await _requestPermission();
-
-    // Initialize local notifications with channels
     await _initLocalNotifications();
-
-    // Get and register FCM token
     await _setupToken();
 
-    // ✅ Listen for foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('📩 Foreground message: ${message.notification?.title}');
       _showLocalNotification(message);
     });
 
-    // ✅ Listen for notification taps (from background)
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('📩 Opened from notification: ${message.data}');
       _handleNotificationTap(message.data);
     });
 
-    // ✅ Handle terminated app (launched from notification)
     _firebaseMessaging.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
         debugPrint('📩 Launched from terminated state: ${message.data}');
@@ -77,7 +65,6 @@ class PushNotificationService {
     debugPrint('✅ Push notification service initialized');
   }
 
-  /// Call this from main.dart when app lifecycle changes
   void setAppInForeground(bool isForeground) {
     _isAppInForeground = isForeground;
   }
@@ -93,14 +80,12 @@ class PushNotificationService {
   }
 
   Future<void> _initLocalNotifications() async {
-    // ✅ Create Android notification channels
     if (Platform.isAndroid) {
       final androidPlugin = _localNotifications
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
           >();
 
-      // Default channel for Firebase notifications
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           'fcm_default_channel',
@@ -108,22 +93,8 @@ class PushNotificationService {
           description: 'General notifications',
           importance: Importance.high,
           playSound: true,
-          sound: RawResourceAndroidNotificationSound('message_received'),
         ),
       );
-
-      // Channel matching package name
-      await androidPlugin?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          'com.example.mobile',
-          'Default',
-          description: 'Default notifications',
-          importance: Importance.high,
-          playSound: true,
-        ),
-      );
-
-      // Chat channel
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _chatChannelId,
@@ -132,8 +103,6 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
-
-      // Order channel
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _orderChannelId,
@@ -142,8 +111,6 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
-
-      // Payment channel
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _paymentChannelId,
@@ -152,8 +119,6 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
-
-      // System channel
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _systemChannelId,
@@ -209,14 +174,9 @@ class PushNotificationService {
     try {
       final storageService = GetIt.instance<StorageService>();
       final authToken = await storageService.getAuthToken();
-
-      if (authToken == null) {
-        debugPrint('❌ No auth token, cannot register device token');
-        return;
-      }
+      if (authToken == null) return;
 
       final platform = Platform.isIOS ? 'ios' : 'android';
-
       final response = await http.post(
         Uri.parse('${ApiConstants.baseUrl}/chat/device-token'),
         headers: {
@@ -228,43 +188,80 @@ class PushNotificationService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint('✅ Device token registered successfully');
-      } else {
-        debugPrint('❌ Failed to register token: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('❌ Failed to register token: $e');
     }
   }
 
+  // ✅ UPDATED: Downloads image for foreground Big Picture display
   Future<void> _showLocalNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
 
     final type = message.data['type']?.toString() ?? 'system';
+    final imageUrl = message.data['imageUrl']?.toString();
 
-    // ✅ Don't show local notification for chat messages when app is in foreground
     if ((type == 'message' || type == 'new_message') && _isAppInForeground) {
       debugPrint('📩 Skipping local notification - app in foreground');
       return;
     }
 
     final androidChannelId = _getChannelIdForType(type);
+    AndroidNotificationDetails? androidPlatformChannelSpecifics;
+
+    // ✅ If there's an image URL, download it and show as Big Picture
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      try {
+        final response = await http.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200) {
+          final tempDir = await getTemporaryDirectory();
+          final messageId = message.messageId ?? 'default';
+          final file = File(
+            '${tempDir.path}/notification_image_$messageId.jpg',
+          );
+          await file.writeAsBytes(response.bodyBytes);
+
+          androidPlatformChannelSpecifics = AndroidNotificationDetails(
+            androidChannelId,
+            _getChannelNameForType(type),
+            channelDescription: _getChannelDescriptionForType(type),
+            importance: Importance.high,
+            priority: Priority.high,
+            showWhen: true,
+            enableVibration: true,
+            playSound: true,
+            styleInformation: BigPictureStyleInformation(
+              FilePathAndroidBitmap(file.path),
+              hideExpandedLargeIcon: true,
+              contentTitle: notification.title,
+              summaryText: notification.body,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ Failed to download notification image: $e');
+      }
+    }
+
+    // ✅ Fallback if no image or download failed
+    androidPlatformChannelSpecifics ??= AndroidNotificationDetails(
+      androidChannelId,
+      _getChannelNameForType(type),
+      channelDescription: _getChannelDescriptionForType(type),
+      importance: Importance.high,
+      priority: Priority.high,
+      showWhen: true,
+      enableVibration: true,
+      playSound: true,
+    );
 
     await _localNotifications.show(
       message.hashCode,
       notification.title,
       notification.body,
       NotificationDetails(
-        android: AndroidNotificationDetails(
-          androidChannelId,
-          _getChannelNameForType(type),
-          channelDescription: _getChannelDescriptionForType(type),
-          importance: Importance.high,
-          priority: Priority.high,
-          showWhen: true,
-          enableVibration: true,
-          playSound: true,
-        ),
+        android: androidPlatformChannelSpecifics,
         iOS: DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
@@ -321,6 +318,7 @@ class PushNotificationService {
     debugPrint('📩 Notification tapped: $data');
 
     final type = data['type']?.toString();
+    final actionLink = data['actionLink']?.toString();
     final context = NavigationService.navigatorKey.currentContext;
 
     if (context == null) {
@@ -328,14 +326,58 @@ class PushNotificationService {
       return;
     }
 
+    // ✅ 1. PRIORITY: Handle actionLink if it exists (e.g., /products/xyz, /orders/123)
+    if (actionLink != null && actionLink.isNotEmpty) {
+      debugPrint('🔗 Navigating via actionLink: $actionLink');
+      final uri = Uri.tryParse(actionLink);
+      if (uri != null) {
+        final segments = uri.path
+            .split('/')
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (segments.isNotEmpty) {
+          final resource = segments[0];
+          final id = segments.length >= 2 ? segments[1] : null;
+
+          if (resource == 'products' && id != null) {
+            NavigationService.navigateTo(
+              '/product-details',
+              arguments: {'productId': id},
+            );
+            return;
+          } else if (resource == 'orders' && id != null) {
+            NavigationService.navigateTo(
+              '/order-details',
+              arguments: {'orderId': id},
+            );
+            return;
+          } else if (resource == 'chat' && id != null) {
+            NavigationService.navigateTo(
+              '/chat-room',
+              arguments: {'partnerId': id},
+            );
+            return;
+          } else if (resource == 'home') {
+            NavigationService.popToRoot();
+            return;
+          } else if (resource == 'admin') {
+            NavigationService.navigateTo('/admin');
+            return;
+          }
+        }
+      }
+    }
+
+    // ✅ 2. FALLBACK: Type-based navigation if no actionLink or parsing failed
     switch (type) {
       case 'message':
       case 'new_message':
         final senderId = data['senderId'];
         if (senderId != null) {
-          Navigator.of(
-            context,
-          ).pushNamed('/chat-room', arguments: {'partnerId': senderId});
+          NavigationService.navigateTo(
+            '/chat-room',
+            arguments: {'partnerId': senderId},
+          );
         }
         break;
 
@@ -343,14 +385,16 @@ class PushNotificationService {
       case 'payment':
         final orderId = data['orderId'];
         if (orderId != null) {
-          Navigator.of(
-            context,
-          ).pushNamed('/order-details', arguments: {'orderId': orderId});
+          NavigationService.navigateTo(
+            '/order-details',
+            arguments: {'orderId': orderId},
+          );
         }
         break;
 
       default:
-        Navigator.of(context).pushNamed('/notifications');
+        // If no actionLink and no specific type match, go to notifications
+        NavigationService.navigateTo('/notifications');
         break;
     }
   }

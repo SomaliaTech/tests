@@ -20,38 +20,42 @@ import { FaqModule } from './faq/faq.module';
 import { PermissionGuard } from './auth/guards/permission.guard';
 import { PaymentModule } from './payment/payment.module';
 import { BannersModule } from './banners/banners.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
+
+    // ✅ GLOBAL RATE LIMIT CONFIGURATION
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
         {
           name: 'default',
-          ttl: config.get('RATE_LIMIT_TTL', 60000),
-          limit: config.get('RATE_LIMIT_MAX', 100),
+          ttl: 60000, // 1 minute
+          limit: 500, // ✅ INCREASED to 500 to prevent 429 on app startup
         },
         {
           name: 'auth',
-          ttl: config.get('AUTH_RATE_TTL', 60000),
-          limit: config.get('AUTH_RATE_LIMIT', 10),
+          ttl: 60000,
+          limit: 20,
         },
         {
           name: 'otp',
-          ttl: config.get('OTP_RATE_TTL', 60000),
-          limit: config.get('OTP_RATE_LIMIT', 3),
+          ttl: 60000,
+          limit: 5,
         },
         {
           name: 'payment',
-          ttl: config.get('PAYMENT_RATE_TTL', 60000),
-          limit: config.get('PAYMENT_RATE_LIMIT', 5),
+          ttl: 60000,
+          limit: 10,
         },
       ],
     }),
+
+    // Feature Modules
+    RedisModule,
     DrizzleModule,
     SupabaseModule,
     CategoriesModule,
@@ -73,7 +77,7 @@ import { BannersModule } from './banners/banners.module';
     PermissionGuard,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard, // ✅ Global rate limiting applied
+      useClass: ThrottlerGuard, // ✅ Applies the 500 req/min limit globally
     },
   ],
 })

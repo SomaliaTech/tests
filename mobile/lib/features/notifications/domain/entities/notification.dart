@@ -84,6 +84,7 @@ class NotificationEntity extends Equatable {
   final bool read;
   final String? actionText;
   final String? actionLink;
+  final String? imageUrl; // ✅ ADD THIS
 
   const NotificationEntity({
     required this.id,
@@ -94,24 +95,19 @@ class NotificationEntity extends Equatable {
     required this.read,
     this.actionText,
     this.actionLink,
+    this.imageUrl, // ✅ ADD THIS
   });
 
   String get timeAgo {
     final now = DateTime.now();
     final difference = now.difference(date);
 
-    if (difference.inSeconds < 60) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d ago';
-    } else {
-      final weeks = (difference.inDays / 7).floor();
-      return '${weeks}w ago';
-    }
+    if (difference.inSeconds < 60) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+    final weeks = (difference.inDays / 7).floor();
+    return '${weeks}w ago';
   }
 
   NotificationEntity copyWith({
@@ -123,6 +119,7 @@ class NotificationEntity extends Equatable {
     bool? read,
     String? actionText,
     String? actionLink,
+    String? imageUrl, // ✅ ADD THIS
   }) {
     return NotificationEntity(
       id: id ?? this.id,
@@ -133,12 +130,11 @@ class NotificationEntity extends Equatable {
       read: read ?? this.read,
       actionText: actionText ?? this.actionText,
       actionLink: actionLink ?? this.actionLink,
+      imageUrl: imageUrl ?? this.imageUrl, // ✅ ADD THIS
     );
   }
 
-  // ✅ ADD fromJson method for API response
   factory NotificationEntity.fromJson(Map<String, dynamic> json) {
-    // Handle both camelCase and snake_case
     return NotificationEntity(
       id: json['id'] as String,
       type: _parseNotificationType(json['type'] as String),
@@ -150,8 +146,10 @@ class NotificationEntity extends Equatable {
       read: json['isRead'] ?? json['is_read'] ?? false,
       actionText: json['actionText'] ?? json['action_text'],
       actionLink: json['actionLink'] ?? json['action_link'],
+      imageUrl: json['imageUrl'] ?? json['image_url'], // ✅ ADD THIS
     );
   }
+
   static NotificationType _parseNotificationType(String type) {
     switch (type.toLowerCase()) {
       case 'order':
@@ -177,5 +175,6 @@ class NotificationEntity extends Equatable {
     read,
     actionText,
     actionLink,
+    imageUrl, // ✅ ADD THIS
   ];
 }

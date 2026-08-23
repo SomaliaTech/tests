@@ -1,5 +1,6 @@
 class ApiConstants {
-  static const String baseUrl = 'http://162.0.225.86';
+  static const String baseUrl = 'http://10.20.30.206:8080';
+  // static const String baseUrl = 'http://162.0.225.86';
 
   static const String products = '/products';
   static const String categories = '/categories';

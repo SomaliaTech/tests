@@ -217,9 +217,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     });
   }
 
-  // ... rest of your existing code remains the same ...
-
-  // ✅ Clear ALL Hive caches on logout
   Future<void> _clearAllCaches() async {
     try {
       final boxesToClear = [
@@ -415,13 +412,26 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     if (!emit.isDone) emit(Authenticated(localUser, token));
     chatSocketService.connect();
-
     try {
       final userResult = await getCurrentUser();
       if (isClosed || emit.isDone) return;
+
       await userResult.fold(
         (failure) async {
           developer.log('Failed to get current user: ${failure.message}');
+
+          // ✅ CRITICAL FIX: Auto-logout on 401 Unauthorized (expired/invalid token)
+          if (failure.message.contains('401') ||
+              failure.message.contains('Unauthorized') ||
+              failure.message.contains('expired') ||
+              failure.message.contains('invalid token')) {
+            developer.log('🔴 Token expired or invalid. Logging out...');
+            await _clearAllCaches();
+            await storageService.clearAuthData();
+            chatSocketService.disconnect();
+
+            if (!emit.isDone) emit(Unauthenticated());
+          }
         },
         (user) async {
           await storageService.saveUserId(user.id);
@@ -433,6 +443,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           await storageService.saveIsAdmin(user.isAdmin ?? false);
           await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
           await storageService.saveLoginStatus(true);
+
           if (!isClosed && !emit.isDone && state is Authenticated) {
             emit(Authenticated(user, token));
           }

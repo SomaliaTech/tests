@@ -305,14 +305,28 @@ export class SupabaseService {
   /**
    * ✅ Upload multipart file
    */
+  // src/supabase/supabase.service.ts
+
   async uploadFile(
     file: Express.Multer.File,
     folder: string = 'products',
   ): Promise<{ secure_url: string; public_id: string }> {
     try {
+      let mimeType = file.mimetype;
+      const extension =
+        file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
+
+      // ✅ FALLBACK: If client sends 'application/octet-stream', guess from extension
+      if (mimeType === 'application/octet-stream') {
+        if (extension === 'png') mimeType = 'image/png';
+        else if (extension === 'webp') mimeType = 'image/webp';
+        else if (extension === 'gif') mimeType = 'image/gif';
+        else mimeType = 'image/jpeg'; // Default fallback
+      }
+
       // ✅ Validate file type
-      if (!this.ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-        throw new Error(`Unsupported file type: ${file.mimetype}`);
+      if (!this.ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+        throw new Error(`Unsupported file type: ${mimeType}`);
       }
 
       // ✅ Validate file size
@@ -324,14 +338,12 @@ export class SupabaseService {
 
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(7);
-      const extension =
-        file.originalname.split('.').pop()?.toLowerCase() || 'jpg';
       const filePath = `${folder}/${timestamp}-${random}.${extension}`;
 
       const { data, error } = await this.supabase.storage
         .from(this.bucketName)
         .upload(filePath, file.buffer, {
-          contentType: file.mimetype,
+          contentType: mimeType, // ✅ Use the resolved mimeType
           cacheControl: '3600',
           upsert: false,
         });

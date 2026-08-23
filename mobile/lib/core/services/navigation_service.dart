@@ -5,4 +5,32 @@ class NavigationService {
       GlobalKey<NavigatorState>();
 
   static BuildContext? get context => navigatorKey.currentContext;
+
+  static void navigateToChat(String partnerId) {
+    navigatorKey.currentState?.pushNamed(
+      '/chat-room',
+      arguments: {'partnerId': partnerId},
+    );
+  }
+
+  static void navigateToOrderDetails(String orderId) {
+    navigatorKey.currentState?.pushNamed(
+      '/order-details',
+      arguments: {'orderId': orderId},
+    );
+  }
+
+  static void navigateToNotifications() {
+    navigatorKey.currentState?.pushNamed('/notifications');
+  }
+
+  // ✅ Generic navigation method
+  static void navigateTo(String routeName, {Object? arguments}) {
+    navigatorKey.currentState?.pushNamed(routeName, arguments: arguments);
+  }
+
+  // ✅ Pop to root
+  static void popToRoot() {
+    navigatorKey.currentState?.popUntil((route) => route.isFirst);
+  }
 }

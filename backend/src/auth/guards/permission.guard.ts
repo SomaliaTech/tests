@@ -13,6 +13,7 @@ import { eq } from 'drizzle-orm';
 
 export const PERMISSIONS_KEY = 'permissions';
 
+// Decorator to set required permissions on routes
 export const Permissions = (...permissions: string[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
 
@@ -41,6 +42,7 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
+    // 1. Fetch user to check Super Admin status
     const [user] = await this.drizzle.db
       .select()
       .from(users)
@@ -51,11 +53,12 @@ export class PermissionGuard implements CanActivate {
       throw new ForbiddenException('User not found');
     }
 
-    // ✅ Super admin bypass
+    // ✅ Super admin bypass - they have all permissions
     if (user.isSuperAdmin) {
       return true;
     }
 
+    // 2. Fetch user's roles and associated permissions
     const roleRows = await this.drizzle.db
       .select({ permissions: roles.permissions })
       .from(userRoles)
@@ -70,20 +73,21 @@ export class PermissionGuard implements CanActivate {
       });
     });
 
+    // 3. Check if user has at least ONE of the required permissions
     const hasPermission = requiredPermissions.some((permission) => {
+      // Direct match
       if (userPermissions.has(permission)) {
         return true;
       }
 
-      // ✅ Wildcard support:
-      // product:manage allows product:view, product:create, etc.
+      // ✅ Wildcard support: 'module:manage' allows 'module:view', 'module:create', etc.
       const moduleName = permission.split(':')[0];
       return userPermissions.has(`${moduleName}:manage`);
     });
 
     if (!hasPermission) {
       throw new ForbiddenException(
-        `You do not have permission. Required: ${requiredPermissions.join(' or ')}`,
+        `Insufficient permissions. Required: ${requiredPermissions.join(' or ')}`,
       );
     }
 

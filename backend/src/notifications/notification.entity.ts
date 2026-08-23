@@ -18,4 +18,5 @@ export class Notification {
   actionLink?: string;
   createdAt: Date;
   updatedAt: Date;
+  imageUrl?: string; // ✅ ADD THIS
 }

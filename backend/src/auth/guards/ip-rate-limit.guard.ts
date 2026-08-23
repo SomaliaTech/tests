@@ -1,3 +1,4 @@
+// src/common/guards/ip-rate-limit.guard.ts
 import {
   Injectable,
   CanActivate,
@@ -21,11 +22,12 @@ export class IpRateLimitGuard implements CanActivate {
     const current = await this.redis.incr(key);
 
     if (current === 1) {
-      // Set expiry on first request
+      // Set expiry on the very first request in this window
       await this.redis.expire(key, 60); // 60 seconds window
     }
 
     if (current > 100) {
+      // Adjust this limit per route as needed
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,

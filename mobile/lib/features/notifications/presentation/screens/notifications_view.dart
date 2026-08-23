@@ -29,9 +29,9 @@ class NotificationsView extends StatelessWidget {
         title: const Text(
           'Notifications',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
+            color: Color(0xFF111111),
           ),
         ),
         centerTitle: false,
@@ -62,6 +62,7 @@ class NotificationsView extends StatelessWidget {
               return const SizedBox.shrink();
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: BlocListener<NotificationsBloc, NotificationsState>(
@@ -170,12 +171,12 @@ class NotificationsView extends StatelessWidget {
                     child: state.isEmpty
                         ? EmptyState(filter: state.currentFilter)
                         : RefreshIndicator(
+                            color: const Color(0xFF2ED573),
                             onRefresh: () async {
                               context.read<NotificationsBloc>().add(
                                 RefreshNotifications(),
                               );
                             },
-                            color: const Color(0xFF2ED573),
                             child: ListView.builder(
                               padding: const EdgeInsets.all(15),
                               itemCount: state.filteredNotifications.length,
@@ -221,7 +222,6 @@ class NotificationsView extends StatelessWidget {
   // ==========================================
   // NOTIFICATION PRESS HANDLER
   // ==========================================
-
   void _handleNotificationPress(
     BuildContext context,
     NotificationEntity notification,
@@ -232,11 +232,6 @@ class NotificationsView extends StatelessWidget {
       );
     }
 
-    debugPrint(
-      '🔔 Notification pressed: type=${notification.type}, actionLink=${notification.actionLink}',
-    );
-
-    // Handle navigation based on notification type
     if (notification.type != null) {
       switch (notification.type) {
         case 'order':
@@ -250,14 +245,8 @@ class NotificationsView extends StatelessWidget {
           _navigateToPayment(context, notification);
           break;
         case 'product':
+        case 'promotion':
           _navigateToProduct(context, notification);
-          break;
-        case 'system':
-          _navigateFromActionLink(
-            context,
-            notification.actionLink,
-            notification,
-          );
           break;
         default:
           _navigateFromActionLink(
@@ -275,15 +264,12 @@ class NotificationsView extends StatelessWidget {
   // ==========================================
   // NAVIGATION HELPERS
   // ==========================================
-
   void _navigateFromActionLink(
     BuildContext context,
     String? actionLink,
     NotificationEntity notification,
   ) {
     if (actionLink == null || actionLink.isEmpty) return;
-
-    debugPrint('🔗 Navigating to: $actionLink');
 
     final uri = Uri.tryParse(actionLink);
     if (uri == null) return;
@@ -293,18 +279,13 @@ class NotificationsView extends StatelessWidget {
 
     switch (segments[0]) {
       case 'orders':
-        if (segments.length >= 2) {
-          _navigateToOrderById(context, segments[1]);
-        }
+        if (segments.length >= 2) _navigateToOrderById(context, segments[1]);
         break;
       case 'products':
-        if (segments.length >= 2) {
-          _navigateToProductById(context, segments[1]);
-        }
+        if (segments.length >= 2) _navigateToProductById(context, segments[1]);
         break;
       case 'chat':
         if (segments.length >= 2) {
-          // ✅ Extract name from notification title
           final partnerName = _extractNameFromTitle(notification.title);
           _navigateToChatById(context, segments[1], partnerName);
         }
@@ -329,9 +310,6 @@ class NotificationsView extends StatelessWidget {
       case 'profile':
         Navigator.pushNamed(context, '/settings');
         break;
-      default:
-        debugPrint('⚠️ Unknown action link pattern: $actionLink');
-        break;
     }
   }
 
@@ -347,7 +325,6 @@ class NotificationsView extends StatelessWidget {
   void _navigateToChat(BuildContext context, NotificationEntity notification) {
     final partnerId = _extractIdFromLink(notification.actionLink, 'chat');
     if (partnerId != null) {
-      // ✅ Extract name from notification title (e.g., "New message from Hussein mahamed")
       final partnerName = _extractNameFromTitle(notification.title);
       _navigateToChatById(context, partnerId, partnerName);
     } else {
@@ -375,12 +352,9 @@ class NotificationsView extends StatelessWidget {
   }
 
   void _navigateToOrderById(BuildContext context, String orderId) {
-    debugPrint('📦 Navigating to order: $orderId');
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => OrderDetailsScreen(orderId: orderId),
-      ),
+      MaterialPageRoute(builder: (_) => OrderDetailsScreen(orderId: orderId)),
     );
   }
 
@@ -389,8 +363,6 @@ class NotificationsView extends StatelessWidget {
     String partnerId, [
     String partnerName = 'User',
   ]) {
-    debugPrint('💬 Navigating to chat with: $partnerId ($partnerName)');
-
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -404,7 +376,6 @@ class NotificationsView extends StatelessWidget {
   }
 
   void _navigateToProductById(BuildContext context, String productId) {
-    debugPrint('🛍️ Navigating to product: $productId');
     Navigator.pushNamed(
       context,
       '/product-details',
@@ -415,28 +386,14 @@ class NotificationsView extends StatelessWidget {
   // ==========================================
   // LINK PARSING HELPERS
   // ==========================================
-
-  /// ✅ Extract partner name from notification title
-  /// Examples:
-  /// - "New message from Hussein mahamed" -> "Hussein mahamed"
-  /// - "New message from +252615328654" -> "+252615328654"
-  /// - "Payment Successful" -> "User" (fallback)
   String _extractNameFromTitle(String? title) {
     if (title == null || title.isEmpty) return 'User';
+    if (title.contains('from ')) return title.split('from ').last.trim();
 
-    // Try to extract name after "from "
-    if (title.contains('from ')) {
-      return title.split('from ').last.trim();
-    }
-
-    // Try common patterns
     final patterns = ['from ', 'with ', 'by '];
     for (final pattern in patterns) {
-      if (title.contains(pattern)) {
-        return title.split(pattern).last.trim();
-      }
+      if (title.contains(pattern)) return title.split(pattern).last.trim();
     }
-
     return 'User';
   }
 
@@ -455,91 +412,76 @@ class NotificationsView extends StatelessWidget {
     return null;
   }
 
-  String? _extractOrderIdFromActionLink(String? actionLink) {
-    return _extractIdFromLink(actionLink, 'orders');
-  }
-
   // ==========================================
   // DIALOGS
   // ==========================================
-
   void _showDeleteDialog(BuildContext context, String id) {
     showDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete Notification'),
-          content: const Text(
-            'Are you sure you want to delete this notification?',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Notification'),
+        content: const Text(
+          'Are you sure you want to delete this notification?',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.read<NotificationsBloc>().add(
+                DeleteNotificationEvent(id),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF4757),
+            ),
+            child: const Text('Delete'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                context.read<NotificationsBloc>().add(
-                  DeleteNotificationEvent(id),
-                );
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFFF4757),
-              ),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
   void _showClearAllDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Clear All Notifications'),
-          content: const Text(
-            'Are you sure you want to delete all notifications?',
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear All Notifications'),
+        content: const Text(
+          'Are you sure you want to delete all notifications?',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.read<NotificationsBloc>().add(
+                ClearAllNotificationsEvent(),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF4757),
+            ),
+            child: const Text('Clear All'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                context.read<NotificationsBloc>().add(
-                  ClearAllNotificationsEvent(),
-                );
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFFF4757),
-              ),
-              child: const Text('Clear All'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
   }
 
   // ==========================================
   // ERROR STATE
   // ==========================================
-
   Widget _buildErrorState(BuildContext context, String message) {
     final friendlyMessage = ErrorHandler.parseError(message);
-
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -571,9 +513,8 @@ class NotificationsView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
-                context.read<NotificationsBloc>().add(LoadNotifications());
-              },
+              onPressed: () =>
+                  context.read<NotificationsBloc>().add(LoadNotifications()),
               icon: const Icon(Iconsax.refresh, size: 18),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(

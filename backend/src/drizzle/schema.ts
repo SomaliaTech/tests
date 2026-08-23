@@ -617,6 +617,8 @@ export const notifications = pgTable(
     isRead: boolean('is_read').default(false),
     actionText: varchar('action_text', { length: 100 }),
     actionLink: varchar('action_link', { length: 500 }),
+    imageUrl: varchar('image_url', { length: 500 }), // ✅ ADD THIS
+
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

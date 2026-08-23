@@ -12,10 +12,11 @@ import {
   DefaultValuePipe,
   ParseIntPipe,
   ParseUUIDPipe,
-  HttpCode,
-  HttpStatus,
   BadRequestException,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -24,10 +25,13 @@ import {
   ApiParam,
   ApiBody,
   ApiQuery,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { SuperAdminGuard } from '../auth/guards/super-admin.guard'; // Optional: if you want strict super admin for broadcast
+import { SupabaseService } from '../supabase/supabase.service'; // Adjust import to match your project
 import {
   CreateNotificationDto,
   UpdateNotificationDto,
@@ -39,18 +43,71 @@ import { NotificationType } from './notification.entity';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly supabaseService: SupabaseService, // Inject storage service
+  ) {}
 
+  // ==========================================
+  // BROADCAST (With Image Support)
+  // ==========================================
+  @Post('broadcast')
+  @UseGuards(SuperAdminGuard) // Or AdminGuard depending on your security policy
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data', 'application/json')
+  @ApiOperation({
+    summary: 'Broadcast notification to all users with optional image',
+  })
+  async broadcastNotification(
+    @Request() req,
+    @Body() body: any,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    // Handle case where data might be sent as a JSON string inside multipart form
+    let dto = body;
+    if (typeof body === 'string') {
+      try {
+        dto = JSON.parse(body);
+      } catch {
+        dto = {};
+      }
+    }
+
+    let imageUrl: string | undefined = undefined;
+
+    // ✅ Upload Image if present
+    if (file) {
+      try {
+        // ✅ FIX 1: Pass only the file object (1 argument).
+        // If your service actually expects a base64 string, use the commented code below instead.
+        const uploadResult = await this.supabaseService.uploadFile(file);
+
+        // const base64Image = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+        // const uploadResult = await this.supabaseService.uploadImage(base64Image);
+
+        // ✅ FIX 2: Use 'secure_url' instead of 'publicUrl' based on the TypeScript error
+        imageUrl = uploadResult.secure_url;
+      } catch (error) {
+        console.error('Image upload error:', error);
+        throw new BadRequestException('Failed to upload broadcast image');
+      }
+    }
+
+    return this.notificationsService.broadcastToAllUsers({
+      title: dto.title,
+      message: dto.message,
+      actionText: dto.actionText,
+      actionLink: dto.actionLink,
+      imageUrl, // ✅ Pass URL to service
+      targetAudience: dto.targetAudience || 'all_users',
+      sendPush: dto.sendPush === 'true' || dto.sendPush === true,
+      scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
+    });
+  }
   // ==========================================
   // USER ENDPOINTS
   // ==========================================
 
-  @Post('broadcast')
-  @UseGuards(JwtAuthGuard) // Add your Admin/Permission guard here
-  @ApiOperation({ summary: 'Broadcast custom notification to all users' })
-  async broadcastToAll(@Body() body: any) {
-    return this.notificationsService.broadcastToAllUsers(body);
-  }
   @Get()
   @ApiOperation({
     summary: 'Get user notifications',
@@ -65,10 +122,7 @@ export class NotificationsController {
     status: 200,
     description: 'Notifications retrieved successfully',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getUserNotifications(
     @Request() req,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -88,85 +142,33 @@ export class NotificationsController {
   }
 
   @Get('unread/count')
-  @ApiOperation({
-    summary: 'Get unread notification count',
-    description:
-      'Returns the count of unread notifications for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Unread count retrieved',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiOperation({ summary: 'Get unread notification count' })
+  @ApiResponse({ status: 200, description: 'Unread count retrieved' })
   async getUnreadCount(@Request() req) {
     return this.notificationsService.getUnreadCount(req.user.userId);
   }
 
   @Put(':id/read')
-  @ApiOperation({
-    summary: 'Mark notification as read',
-    description: 'Marks a specific notification as read.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Notification marked as read',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiOperation({ summary: 'Mark notification as read' })
+  @ApiParam({ name: 'id', description: 'Notification UUID' })
+  @ApiResponse({ status: 200, description: 'Notification marked as read' })
   async markAsRead(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.notificationsService.markAsRead(id, req.user.userId);
   }
 
   @Put('read-all')
-  @ApiOperation({
-    summary: 'Mark all as read',
-    description: 'Marks all notifications as read for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'All notifications marked as read',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiOperation({ summary: 'Mark all as read' })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   async markAllAsRead(@Request() req) {
     return this.notificationsService.markAllAsRead(req.user.userId);
   }
 
   @Delete(':id')
-  @ApiOperation({
-    summary: 'Delete notification',
-    description: 'Deletes a specific notification.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-  })
+  @ApiOperation({ summary: 'Delete notification' })
+  @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({
     status: 200,
     description: 'Notification deleted successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
   })
   async deleteNotification(
     @Request() req,
@@ -176,18 +178,8 @@ export class NotificationsController {
   }
 
   @Delete()
-  @ApiOperation({
-    summary: 'Clear all notifications',
-    description: 'Deletes all notifications for the authenticated user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'All notifications cleared',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
+  @ApiOperation({ summary: 'Clear all notifications' })
+  @ApiResponse({ status: 200, description: 'All notifications cleared' })
   async clearAllNotifications(@Request() req) {
     return this.notificationsService.clearAllNotifications(req.user.userId);
   }
@@ -198,26 +190,14 @@ export class NotificationsController {
 
   @Get('admin/all')
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Get all notifications (Admin)',
-    description:
-      'Returns all notifications with pagination. Requires admin privileges.',
-  })
+  @ApiOperation({ summary: 'Get all notifications (Admin)' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({
-    name: 'userId',
-    required: false,
-    description: 'Filter by user ID',
-  })
+  @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'type', required: false, enum: NotificationType })
   @ApiResponse({
     status: 200,
     description: 'All notifications retrieved successfully',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin access required',
   })
   async getAllNotificationsAdmin(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -235,27 +215,11 @@ export class NotificationsController {
 
   @Post()
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Create notification (Admin)',
-    description:
-      'Creates a new notification for a user. Requires admin privileges.',
-  })
+  @ApiOperation({ summary: 'Create notification (Admin)' })
   @ApiBody({ type: CreateNotificationDto })
   @ApiResponse({
     status: 201,
     description: 'Notification created successfully',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Invalid notification data',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin access required',
   })
   async createNotification(
     @Body() createNotificationDto: CreateNotificationDto,
@@ -265,20 +229,12 @@ export class NotificationsController {
 
   @Post('bulk')
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Bulk create notifications (Admin)',
-    description:
-      'Creates notifications for multiple users. Requires admin privileges.',
-  })
+  @ApiOperation({ summary: 'Bulk create notifications (Admin)' })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
-        userIds: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Array of user IDs',
-        },
+        userIds: { type: 'array', items: { type: 'string' } },
         type: { type: 'string', enum: Object.values(NotificationType) },
         title: { type: 'string' },
         message: { type: 'string' },
@@ -311,30 +267,12 @@ export class NotificationsController {
 
   @Put(':id')
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Update notification (Admin)',
-    description: 'Updates a specific notification. Requires admin privileges.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-  })
+  @ApiOperation({ summary: 'Update notification (Admin)' })
+  @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiBody({ type: UpdateNotificationDto })
   @ApiResponse({
     status: 200,
     description: 'Notification updated successfully',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Notification not found',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin access required',
   })
   async updateNotification(
     @Param('id', ParseUUIDPipe) id: string,
@@ -348,14 +286,8 @@ export class NotificationsController {
 
   @Delete('admin/:id')
   @UseGuards(AdminGuard)
-  @ApiOperation({
-    summary: 'Delete notification (Admin)',
-    description: 'Deletes any notification. Requires admin privileges.',
-  })
-  @ApiParam({
-    name: 'id',
-    description: 'Notification UUID',
-  })
+  @ApiOperation({ summary: 'Delete notification (Admin)' })
+  @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({
     status: 200,
     description: 'Notification deleted successfully',
