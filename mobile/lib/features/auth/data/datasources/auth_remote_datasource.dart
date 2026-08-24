@@ -23,6 +23,7 @@ abstract class AuthRemoteDataSource {
     String base64Image,
   );
   Future<Map<String, dynamic>> googleSignIn(String idToken);
+  Future<Map<String, dynamic>> facebookSignIn(String accessToken);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -47,6 +48,26 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       } else {
         final error = json.decode(response.body);
         throw ServerException(error['message'] ?? 'Google sign in failed');
+      }
+    } catch (e) {
+      throw ServerException('Network error: $e');
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> facebookSignIn(String accessToken) async {
+    try {
+      final response = await client.post(
+        Uri.parse('${ApiConstants.baseUrl}/auth/facebook'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'accessToken': accessToken}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body);
+      } else {
+        final error = json.decode(response.body);
+        throw ServerException(error['message'] ?? 'Facebook sign in failed');
       }
     } catch (e) {
       throw ServerException('Network error: $e');

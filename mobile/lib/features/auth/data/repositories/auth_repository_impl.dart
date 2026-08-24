@@ -19,6 +19,21 @@ class AuthRepositoryImpl implements AuthRepository {
   });
 
   @override
+  Future<Either<Failure, ({String token, User user})>> facebookSignIn(
+    String accessToken,
+  ) async {
+    try {
+      final response = await remoteDataSource.facebookSignIn(accessToken);
+      // ✅ FIX: Use UserModel.fromJson instead of User.fromJson
+      final user = UserModel.fromJson(response['user']);
+      return Right((token: response['token'] as String, user: user));
+    } catch (e) {
+      // ✅ FIX: Use ServerFailure instead of abstract Failure class
+      return Left(ServerFailure(e.toString()));
+    }
+  }
+
+  @override
   ResultFuture<bool> checkAuthStatus() async {
     try {
       final token = await storageService.getAuthToken();

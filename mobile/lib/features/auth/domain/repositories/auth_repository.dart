@@ -23,4 +23,5 @@ abstract class AuthRepository {
   ResultFuture<void> logout();
   Future<bool> isAuthenticated();
   ResultFuture<({String token, User user})> googleSignIn(String idToken);
+  ResultFuture<({String token, User user})> facebookSignIn(String accessToken);
 }

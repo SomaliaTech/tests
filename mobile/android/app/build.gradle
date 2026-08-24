@@ -1,19 +1,15 @@
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
-    namespace = "com.example.mobile"
+    namespace = "com.yourcompany.farxada"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
-    // ✅ ADD THIS: Enable core library desugaring
     compileOptions {
         coreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -25,13 +21,18 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.yourcompany.farxada"
+        applicationId = "com.yourcompany.farxada"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // ✅ ADD THIS
         multiDexEnabled = true
+        
+        // Facebook SDK metadata - MUST match strings.xml
+        manifestPlaceholders = [
+            facebookAppId: "476493349999779",
+            facebookClientToken: "8c49f38b5ccf7ca3c9405f2e6fd070f7"
+        ]
     }
 
     buildTypes {
@@ -41,9 +42,9 @@ android {
     }
 }
 
-// ✅ ADD THIS
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation("com.facebook.android:facebook-android-sdk:17.0.0")
 }
 
 flutter {

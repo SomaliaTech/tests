@@ -67,20 +67,51 @@
 	
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to change profile picture</string>
-
-<!-- ✅ GOOGLE SIGN-IN: Use REVERSED_CLIENT_ID -->
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <!-- ✅ iOS Reversed Client ID -->
-            <string>com.googleusercontent.apps.159665748516-q57ehiuvg427bluh15gdj701disc746r</string>
-        </array>
-    </dict>
-</array>
+	
+	<!-- ✅ FACEBOOK: URL Schemes -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb476493349999779</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.159665748516-q57ehiuvg427bluh15gdj701disc746r</string>
+			</array>
+		</dict>
+	</array>
+	
+	<!-- ✅ FACEBOOK: App ID -->
+	<key>FacebookAppID</key>
+	<string>476493349999779</string>
+	
+	<!-- ✅ FACEBOOK: Client Token -->
+	<key>FacebookClientToken</key>
+	<string>8c49f38b5ccf7ca3c9405f2e6fd070f7</string>
+	
+	<!-- ✅ FACEBOOK: Display Name -->
+	<key>FacebookDisplayName</key>
+	<string>Farxada</string>
+	
+	<!-- ✅ FACEBOOK: Auto Log App Events -->
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<true/>
+	
+	<!-- ✅ FACEBOOK: Query Schemes -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
+	
 	<!-- ✅ HTTPS ONLY -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

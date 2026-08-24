@@ -29,6 +29,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UploadProfileImageDto } from './dto/upload-profile-image.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
+import { FacebookAuthDto } from './dto/facebook-auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -78,6 +79,15 @@ export class AuthController {
   @ApiBody({ type: GoogleAuthDto })
   async googleSignIn(@Body() dto: GoogleAuthDto) {
     return this.authService.googleSignIn(dto);
+  }
+
+  @Post('facebook')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ auth: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: 'Facebook Sign-In' })
+  @ApiBody({ type: FacebookAuthDto })
+  async facebookSignIn(@Body() dto: FacebookAuthDto) {
+    return this.authService.facebookSignIn(dto);
   }
 
   @Post('upload-profile-image')

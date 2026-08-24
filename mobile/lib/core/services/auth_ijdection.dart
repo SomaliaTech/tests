@@ -6,6 +6,7 @@ import 'package:mobile/features/auth/data/repositories/auth_repository_impl.dart
 import 'package:mobile/features/auth/domain/repositories/auth_repository.dart';
 import 'package:mobile/features/auth/domain/usecases/check_auth_status.dart';
 import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
+import 'package:mobile/features/auth/domain/usecases/facebook_sign_in.dart';
 import 'package:mobile/features/auth/domain/usecases/get_current_user.dart';
 import 'package:mobile/features/auth/domain/usecases/google_sign_in.dart';
 import 'package:mobile/features/auth/domain/usecases/logout.dart';
@@ -62,6 +63,7 @@ void authRegisterDependencies(GetIt sl) {
   if (!sl.isRegistered<Logout>()) {
     sl.registerLazySingleton(() => Logout(sl()));
   }
+  sl.registerLazySingleton<FacebookSignIn>(() => FacebookSignIn(sl()));
 
   // BLoC
   // In your auth_di.dart or wherever you register dependencies
@@ -77,6 +79,7 @@ void authRegisterDependencies(GetIt sl) {
       storageService: sl(),
       chatSocketService: sl<ChatSocketService>(),
       googleSignInUseCase: sl(), // ✅ Add this
+      facebookSignInUseCase: sl(), // ✅ ADD THIS
     ),
   );
 

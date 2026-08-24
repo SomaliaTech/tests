@@ -285,6 +285,8 @@ export const users = pgTable(
     lastSeen: timestamp('last_seen', { withTimezone: true }),
     otpCode: varchar('otp_code', { length: 6 }),
     otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
+    facebookId: varchar('facebook_id', { length: 255 }).unique(), // ✅ ADD THIS
+
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/auth/presentation/screens/complete_profile_screen.dart';
 import 'package:toastification/toastification.dart';
@@ -76,6 +77,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
   void initState() {
     super.initState();
     _phoneController = TextEditingController();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _phoneFocusNode.requestFocus();
     });
@@ -88,7 +90,46 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
     super.dispose();
   }
 
-  @override
+  Future<void> _handleFacebookSignIn() async {
+    try {
+      // Don't call logOut - it causes MissingPluginException
+      // Just try to login directly
+
+      final LoginResult result = await FacebookAuth.instance.login(
+        permissions: ['email', 'public_profile'],
+        loginBehavior: LoginBehavior.webOnly, // Force web login
+      );
+
+      debugPrint('📘 FB status: ${result.status}');
+      debugPrint('📘 FB message: ${result.message}');
+
+      if (result.status == LoginStatus.success) {
+        final accessToken = result.accessToken!.tokenString;
+        debugPrint('📘 FB token length: ${accessToken.length}');
+        debugPrint('📘 FB token: ${accessToken.substring(0, 20)}...');
+
+        if (mounted) {
+          context.read<AuthBloc>().add(FacebookSignInEvent(accessToken));
+        }
+      } else {
+        debugPrint('❌ FB login failed: ${result.status} - ${result.message}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Facebook login: ${result.message}')),
+          );
+        }
+      }
+    } catch (e, stack) {
+      debugPrint('❌ FB login exception: $e');
+      debugPrint('Stack: $stack');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Facebook error: $e')));
+      }
+    }
+  }
+
   // In phone_input_screen.dart - update the BlocListener
   @override
   Widget build(BuildContext context) {
@@ -279,7 +320,11 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       const SizedBox(height: 16),
                       _buildDivider(),
                       const SizedBox(height: 16),
+
                       _buildGoogleSignInButton(),
+
+                      const SizedBox(height: 24),
+                      _buildFacebookSignInButton(),
                       const SizedBox(height: 24),
                       _buildInfoCard(),
                       const SizedBox(height: 24),
@@ -688,6 +733,57 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF3C4043),
               side: const BorderSide(color: Color(0xFFDADCE0)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 0,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFacebookSignInButton() {
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, state) {
+        final isLoading = state is AuthLoading;
+        return SizedBox(
+          width: double.infinity,
+          height: 56,
+          child: OutlinedButton.icon(
+            onPressed: isLoading
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    _handleFacebookSignIn(); // Call your Facebook login method here
+                  },
+            icon: isLoading
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.grey,
+                    ),
+                  )
+                : const Icon(
+                    Icons.facebook, // ✅ Use the built-in Flutter Facebook icon
+                    color: Color(0xFF1877F2),
+                    size: 28,
+                  ),
+            label: Text(
+              isLoading ? 'La galaya...' : 'Continue With Facebook',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1877F2), // ✅ Make text Facebook blue
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF1877F2),
+              side: const BorderSide(color: Color(0xFF1877F2), width: 1.5),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),

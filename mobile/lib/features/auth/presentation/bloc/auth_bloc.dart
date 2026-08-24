@@ -10,6 +10,7 @@ import 'package:mobile/core/services/push_notification_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
 import 'package:mobile/features/auth/domain/usecases/complete_profile.dart';
+import 'package:mobile/features/auth/domain/usecases/facebook_sign_in.dart';
 import 'package:mobile/features/auth/domain/usecases/google_sign_in.dart'
     as google_use_case;
 import '../../domain/usecases/check_auth_status.dart';
@@ -37,6 +38,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
   // ✅ Add a flag to prevent duplicate Google sign-in attempts
   bool _isGoogleSignInProgress = false;
+  final FacebookSignIn facebookSignInUseCase; // ✅ ADD THIS
 
   AuthBloc({
     required this.sendOtp,
@@ -48,6 +50,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.logout,
     required this.storageService,
     required this.chatSocketService,
+    required this.facebookSignInUseCase, // ✅ ADD THIS
+
     required this.googleSignInUseCase,
   }) : super(AuthInitial()) {
     on<SendOtpEvent>(_onSendOtp);
@@ -57,6 +61,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<CheckAuthStatusEvent>(_onCheckAuthStatus);
     on<LogoutEvent>(_onLogout);
     on<GoogleSignInEvent>(_onGoogleSignIn);
+    on<FacebookSignInEvent>(_onFacebookSignIn);
   }
 
   Future<void> _onGoogleSignIn(
@@ -174,6 +179,50 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(AuthError('Google sign in failed. Please try again.'));
       }
     }
+  }
+
+  Future<void> _onFacebookSignIn(
+    FacebookSignInEvent event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await facebookSignInUseCase(event.accessToken);
+
+    result.fold((failure) => emit(AuthError(failure.message)), (data) {
+      _saveFacebookUserData(data);
+
+      // Facebook users won't have phone/marketId initially, so hasProfile will be false
+      // This correctly routes them to the Complete Profile screen
+      if (!data.user.hasProfile) {
+        emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
+      } else {
+        emit(Authenticated(data.user, data.token));
+      }
+    });
+  }
+
+  // Helper to save data (similar to _saveGoogleUserData)
+  void _saveFacebookUserData(dynamic data) {
+    Future(() async {
+      try {
+        await storageService.saveAuthToken(data.token);
+        await storageService.saveUserId(data.user.id);
+        await storageService.saveLoginStatus(true);
+        await storageService.saveUserName(data.user.name ?? '');
+        if (data.user.email != null) {
+          await storageService.saveUserEmail(data.user.email!);
+        }
+        if (data.user.profileImage != null) {
+          await storageService.saveUserProfileImage(data.user.profileImage!);
+        }
+        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
+
+        chatSocketService.connect();
+      } catch (e) {
+        developer.log('❌ Error saving Facebook user data: $e');
+      }
+    });
   }
 
   // ✅ Helper method for async operations after emit
@@ -321,6 +370,44 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
   }
 
+  // Future<void> _onCompleteProfile(
+  //   CompleteProfileEvent event,
+  //   Emitter<AuthState> emit,
+  // ) async {
+  //   if (!emit.isDone) emit(AuthLoading());
+  //   final result = await completeProfile(
+  //     name: event.name,
+  //     marketId: event.marketId,
+  //     profileImageUrl: event.profileImageUrl,
+  //     phoneNumber: event.phoneNumber,
+  //   );
+  //   if (isClosed || emit.isDone) return;
+  //   await result.fold(
+  //     (failure) async {
+  //       if (!emit.isDone) emit(AuthError(failure.message));
+  //     },
+  //     (data) async {
+  //       await storageService.saveUserName(event.name);
+  //       await storageService.saveUserMarketId(event.marketId);
+  //       if (event.phoneNumber != null && event.phoneNumber!.isNotEmpty) {
+  //         await storageService.saveUserPhone(event.phoneNumber!);
+  //       }
+  //       if (event.profileImageUrl != null) {
+  //         await storageService.saveUserProfileImage(event.profileImageUrl!);
+  //       }
+  //       if (data.user != null) {
+  //         await storageService.saveIsSuperAdmin(
+  //           data.user.isSuperAdmin ?? false,
+  //         );
+  //         await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+  //       }
+  //       await storageService.saveLoginStatus(true);
+  //       chatSocketService.connect();
+  //       if (!emit.isDone) emit(ProfileCompleted(data.token, data.user));
+  //     },
+  //   );
+  // }
+
   Future<void> _onCompleteProfile(
     CompleteProfileEvent event,
     Emitter<AuthState> emit,
@@ -346,12 +433,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         if (event.profileImageUrl != null) {
           await storageService.saveUserProfileImage(event.profileImageUrl!);
         }
-        if (data.user != null) {
-          await storageService.saveIsSuperAdmin(
-            data.user.isSuperAdmin ?? false,
-          );
-          await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-        }
+
+        // ✅ FIX: Removed "if (data.user != null)" because data.user is never null in this record type
+        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
+        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+
         await storageService.saveLoginStatus(true);
         chatSocketService.connect();
         if (!emit.isDone) emit(ProfileCompleted(data.token, data.user));

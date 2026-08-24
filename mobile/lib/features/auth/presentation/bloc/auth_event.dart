@@ -57,6 +57,11 @@ class LogoutEvent extends AuthEvent {
   const LogoutEvent();
 }
 
+class FacebookSignInEvent extends AuthEvent {
+  final String accessToken;
+  FacebookSignInEvent(this.accessToken);
+}
+
 // Add to auth_event.dart
 // auth_event.dart
 class GoogleSignInEvent extends AuthEvent {

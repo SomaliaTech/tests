@@ -19,7 +19,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { HormuudService } from '../hormuud/hormuud.service';
 import { GoogleAuthDto } from './dto/google-auth.dto';
-
+import { FacebookAuthDto } from './dto/facebook-auth.dto';
+import axios from 'axios';
 interface User {
   id: string;
   phoneNumber: string;
@@ -370,6 +371,57 @@ export class AuthService {
     }
   }
 
+  async facebookSignIn(dto: FacebookAuthDto) {
+    try {
+      // 1. First verify the token with Facebook Graph API
+      const appId = this.configService.get<string>('FACEBOOK_APP_ID');
+      const appSecret = this.configService.get<string>('FACEBOOK_APP_SECRET');
+
+      if (!appId || !appSecret) {
+        this.logger.error('Facebook credentials not configured');
+        throw new UnauthorizedException(
+          'Facebook authentication not configured',
+        );
+      }
+
+      // Verify the access token
+      const verifyResponse = await axios.get(
+        `https://graph.facebook.com/debug_token`,
+        {
+          params: {
+            input_token: dto.accessToken,
+            access_token: `${appId}|${appSecret}`,
+          },
+        },
+      );
+
+      const tokenData = verifyResponse.data?.data;
+
+      if (!tokenData?.is_valid) {
+        this.logger.error('Invalid Facebook token');
+        throw new UnauthorizedException('Invalid Facebook token');
+      }
+
+      // 2. Get user info from Facebook
+      const graphResponse = await axios.get(`https://graph.facebook.com/me`, {
+        params: {
+          fields: 'id,name,email,picture',
+          access_token: dto.accessToken,
+        },
+      });
+
+      const fbUser = graphResponse.data;
+      const fbId = fbUser.id;
+      const email = fbUser.email || null;
+      const name = fbUser.name || 'Facebook User';
+      const profileImage = fbUser.picture?.data?.url || null;
+
+      // Rest of your existing code...
+    } catch (error) {
+      this.logger.error('Facebook sign in failed:', error);
+      throw new UnauthorizedException('Facebook authentication failed');
+    }
+  }
   /**
    * ✅ Verify Google ID Token and return TokenPayload
    */
