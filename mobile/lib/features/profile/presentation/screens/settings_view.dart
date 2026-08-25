@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
 import 'package:mobile/features/auth/presentation/screens/phone_input_screen.dart';
+import 'package:mobile/features/auth/presentation/screens/welcome_screen.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -130,7 +131,7 @@ class _SettingsViewState extends State<SettingsView> {
           if (state is Unauthenticated) {
             // ✅ Clear stack and navigate to login
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const PhoneInputScreen()),
+              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
               (route) => false,
             );
           }

@@ -12,8 +12,7 @@ import 'package:toastification/toastification.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/core/theme/theme.dart';
-import 'package:http_parser/http_parser.dart'; // ✅ Add this import
-// Import BLoCs for product/category selection
+import 'package:http_parser/http_parser.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_state.dart';
@@ -41,13 +40,18 @@ class _BroadcastNotificationScreenState
   bool _scheduleForLater = false;
   DateTime? _scheduledTime;
 
-  // ✅ Image handling state
+  // Image handling state
   File? _selectedImage;
   final ImagePicker _imagePicker = ImagePicker();
 
   final sl = GetIt.instance;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+
+  // ✅ Selected product info
+  String? _selectedProductId;
+  String? _selectedProductName;
+  String? _selectedProductSlug;
 
   @override
   void initState() {
@@ -118,7 +122,6 @@ class _BroadcastNotificationScreenState
       final buttonText = _buttonTextController.text.trim();
 
       if (_selectedImage != null) {
-        // ✅ Use MultipartRequest when an image is attached
         final uri = Uri.parse(
           '${ApiConstants.baseUrl}/notifications/broadcast',
         );
@@ -143,10 +146,7 @@ class _BroadcastNotificationScreenState
             'image',
             _selectedImage!.path,
             filename: 'broadcast_image.jpg',
-            contentType: MediaType(
-              'image',
-              'jpeg',
-            ), // ✅ Explicitly force image/jpeg
+            contentType: MediaType('image', 'jpeg'),
           ),
         );
 
@@ -169,7 +169,6 @@ class _BroadcastNotificationScreenState
           throw Exception('Failed: ${response.body}');
         }
       } else {
-        // ✅ Standard JSON request when no image
         final body = {
           'title': _titleController.text.trim(),
           'message': _messageController.text.trim(),
@@ -285,6 +284,14 @@ class _BroadcastNotificationScreenState
               label: 'Push Notification',
               value: _sendPushNotification ? 'Yes' : 'No',
             ),
+            if (_selectedProductName != null) ...[
+              const SizedBox(height: 8),
+              _buildConfirmationRow(
+                icon: Iconsax.box_1,
+                label: 'Product',
+                value: _selectedProductName!,
+              ),
+            ],
             if (_scheduleForLater && _scheduledTime != null) ...[
               const SizedBox(height: 8),
               _buildConfirmationRow(
@@ -447,362 +454,23 @@ class _BroadcastNotificationScreenState
   }
 
   // ==========================================
-  // VISUAL ACTION LINK SELECTOR
-  // ==========================================
-
-  Widget _buildActionLinkSelector() {
-    final link = _actionLinkController.text;
-
-    String displayText = 'Select a destination...';
-    IconData displayIcon = Iconsax.link_21;
-    Color displayColor = Colors.grey;
-
-    if (link.isNotEmpty) {
-      if (link == '/home') {
-        displayText = 'Home Page';
-        displayIcon = Iconsax.home_2;
-        displayColor = Colors.blue;
-      } else if (link == '/categories') {
-        displayText = 'All Categories';
-        displayIcon = Iconsax.category;
-        displayColor = Colors.purple;
-      } else if (link == '/hot-deals') {
-        displayText = 'Hot Deals Section';
-        displayIcon = Iconsax.flash_1;
-        displayColor = Colors.red;
-      } else if (link == '/latest-products') {
-        displayText = 'Latest Products';
-        displayIcon = Iconsax.star;
-        displayColor = Colors.green;
-      } else if (link.startsWith('/products/category/')) {
-        displayText = 'Category: ${link.split('/').last}';
-        displayIcon = Iconsax.cake;
-        displayColor = Colors.orange;
-      } else if (link.startsWith('/products/')) {
-        displayText = 'Product: ${link.split('/').last}';
-        displayIcon = Iconsax.box_1;
-        displayColor = Colors.teal;
-      } else {
-        displayText = 'Custom: $link';
-        displayIcon = Iconsax.link;
-        displayColor = Colors.indigo;
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Button Destination (Optional)',
-          style: TextStyle(
-            color: Color(0xFF6B7280),
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        GestureDetector(
-          onTap: _showLinkSelectorSheet,
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: link.isEmpty
-                    ? const Color(0xFFE5E7EB)
-                    : displayColor.withOpacity(0.5),
-                width: link.isEmpty ? 1 : 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: displayColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(displayIcon, color: displayColor, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    displayText,
-                    style: TextStyle(
-                      color: link.isEmpty
-                          ? const Color(0xFF9CA3AF)
-                          : const Color(0xFF1F2937),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (link.isNotEmpty)
-                  GestureDetector(
-                    onTap: () => setState(() => _actionLinkController.clear()),
-                    child: const Icon(
-                      Iconsax.close_circle,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                  )
-                else
-                  const Icon(
-                    Iconsax.arrow_down_1,
-                    color: Colors.grey,
-                    size: 20,
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showLinkSelectorSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (_, scrollController) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 16),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Choose Destination',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ListView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    children: [
-                      const Text(
-                        'Specific Targets',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSheetOption(
-                        Iconsax.cake,
-                        'Select Category',
-                        'Link to a specific category',
-                        Colors.orange,
-                        () {
-                          Navigator.pop(ctx);
-                          _showCategoryPicker();
-                        },
-                      ),
-                      _buildSheetOption(
-                        Iconsax.box_1,
-                        'Select Product',
-                        'Link to a specific product',
-                        Colors.teal,
-                        () {
-                          Navigator.pop(ctx);
-                          _showProductPicker();
-                        },
-                      ),
-                      const Divider(height: 32),
-                      _buildSheetOption(
-                        Iconsax.link,
-                        'Custom Link',
-                        'Enter a custom path or URL',
-                        Colors.grey,
-                        () {
-                          Navigator.pop(ctx);
-                          _showCustomLinkDialog();
-                        },
-                      ),
-                      const Divider(height: 32),
-                      const SizedBox(height: 20),
-                      _buildSheetOption(
-                        Iconsax.home_2,
-                        'Home Page',
-                        'Main landing page',
-                        Colors.blue,
-                        () {
-                          Navigator.pop(ctx);
-                          _selectLink('/home');
-                        },
-                      ),
-                      _buildSheetOption(
-                        Iconsax.category,
-                        'All Categories',
-                        'Browse all categories',
-                        Colors.purple,
-                        () {
-                          Navigator.pop(ctx);
-                          _selectLink('/categories');
-                        },
-                      ),
-                      _buildSheetOption(
-                        Iconsax.flash_1,
-                        'Hot Deals',
-                        'Discounted items section',
-                        Colors.red,
-                        () {
-                          Navigator.pop(ctx);
-                          _selectLink('/hot-deals');
-                        },
-                      ),
-                      _buildSheetOption(
-                        Iconsax.star,
-                        'Latest Products',
-                        'New arrivals section',
-                        Colors.green,
-                        () {
-                          Navigator.pop(ctx);
-                          _selectLink('/latest-products');
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSheetOption(
-    IconData icon,
-    String title,
-    String subtitle,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2937),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Iconsax.arrow_right_3, color: Colors.grey),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _selectLink(String link) {
-    setState(() => _actionLinkController.text = link);
-  }
-
-  void _showCustomLinkDialog() {
-    final controller = TextEditingController(text: _actionLinkController.text);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Custom Link'),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            hintText: '/custom/path or https://...',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6C5CE7),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _selectLink(controller.text.trim());
-            },
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // PRODUCT PICKER
+  // PRODUCT PICKER - ONLY PRODUCT SELECTION
   // ==========================================
 
   void _showProductPicker() {
-    context.read<AdminProductBloc>().add(FetchAllAdminProductsEvent());
+    final currentState = context.read<AdminProductBloc>().state;
 
+    if (currentState is AdminProductsLoaded &&
+        currentState.products.isNotEmpty) {
+      _showProductPickerSheet();
+      return;
+    }
+
+    context.read<AdminProductBloc>().add(FetchAllAdminProductsEvent());
+    _showProductPickerSheet();
+  }
+
+  void _showProductPickerSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -849,17 +517,34 @@ class _BroadcastNotificationScreenState
                     builder: (context, state) {
                       if (state is AdminProductsLoading) {
                         return const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF6C5CE7),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                color: Color(0xFF6C5CE7),
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'Loading products...',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ],
                           ),
                         );
                       }
                       if (state is AdminProductsLoaded) {
                         if (state.products.isEmpty) {
                           return const Center(
-                            child: Text(
-                              'No products found.',
-                              style: TextStyle(color: Colors.grey),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Iconsax.box, size: 48, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text(
+                                  'No products found.',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ],
                             ),
                           );
                         }
@@ -875,13 +560,43 @@ class _BroadcastNotificationScreenState
                       }
                       if (state is AdminProductsError) {
                         return Center(
-                          child: Text(
-                            'Error: ${state.message}',
-                            style: const TextStyle(color: Colors.red),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Iconsax.warning_2,
+                                size: 48,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Error: ${state.message}',
+                                style: const TextStyle(color: Colors.red),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  context.read<AdminProductBloc>().add(
+                                    FetchAllAdminProductsEvent(),
+                                  );
+                                },
+                                icon: const Icon(Iconsax.refresh),
+                                label: const Text('Retry'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6C5CE7),
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       }
-                      return const SizedBox.shrink();
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF6C5CE7),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -894,52 +609,131 @@ class _BroadcastNotificationScreenState
   }
 
   Widget _buildProductListItem(dynamic product) {
-    // Helper to extract image safely
     String? imageUrl;
+
+    // ✅ Extract image from AdminProductModel
     try {
-      if (product.imageUrl != null)
-        imageUrl = product.imageUrl.toString();
-      else if (product.mainImage != null)
-        imageUrl = product.mainImage.toString();
-      else if (product.images != null && product.images.isNotEmpty) {
-        final first = product.images.first;
-        if (first is String)
-          imageUrl = first;
-        else if (first.url != null)
-          imageUrl = first.url.toString();
+      // Check images list first (AdminProductImageModel)
+      if (product.images != null && product.images.isNotEmpty) {
+        final firstImage = product.images.first;
+        // Handle AdminProductImageModel
+        try {
+          if (firstImage.url != null && firstImage.url.toString().isNotEmpty) {
+            imageUrl = firstImage.url.toString();
+          }
+        } catch (_) {}
+        // Handle Map type
+        if (imageUrl == null) {
+          try {
+            if (firstImage is Map) {
+              if (firstImage['url'] != null &&
+                  firstImage['url'].toString().isNotEmpty) {
+                imageUrl = firstImage['url'].toString();
+              }
+            }
+          } catch (_) {}
+        }
+        // Handle String type
+        if (imageUrl == null) {
+          try {
+            if (firstImage is String && firstImage.isNotEmpty) {
+              imageUrl = firstImage;
+            }
+          } catch (_) {}
+        }
       }
     } catch (_) {}
 
+    // If no image found, check other fields
+    if (imageUrl == null) {
+      try {
+        if (product.imageUrl != null &&
+            product.imageUrl.toString().isNotEmpty) {
+          imageUrl = product.imageUrl.toString();
+        }
+      } catch (_) {}
+    }
+    if (imageUrl == null) {
+      try {
+        if (product.mainImage != null &&
+            product.mainImage.toString().isNotEmpty) {
+          imageUrl = product.mainImage.toString();
+        }
+      } catch (_) {}
+    }
+    if (imageUrl == null) {
+      try {
+        if (product.image != null && product.image.toString().isNotEmpty) {
+          imageUrl = product.image.toString();
+        }
+      } catch (_) {}
+    }
+    if (imageUrl == null) {
+      try {
+        if (product.imageUrls != null && product.imageUrls.isNotEmpty) {
+          imageUrl = product.imageUrls.first.toString();
+        }
+      } catch (_) {}
+    }
+
+    // Extract name
     String name = 'Unknown Product';
     try {
-      name = product.name ?? 'Unknown Product';
+      if (product.name != null) {
+        name = product.name.toString();
+      }
     } catch (_) {}
 
+    // Extract price
     String price = '\$0.00';
     try {
-      price = '\$${(product.price as num).toStringAsFixed(2)}';
+      double priceValue = 0;
+      if (product.finalPrice != null) {
+        priceValue = (product.finalPrice as num).toDouble();
+      } else if (product.price != null) {
+        priceValue = (product.price as num).toDouble();
+      }
+      price = '\$${priceValue.toStringAsFixed(2)}';
     } catch (_) {}
 
+    // Extract slug or id for link
     String linkTarget = '';
     try {
-      if (product.slug != null && product.slug.toString().isNotEmpty)
-        linkTarget = product.slug;
-      else
-        linkTarget = product.id;
+      if (product.slug != null && product.slug.toString().isNotEmpty) {
+        linkTarget = product.slug.toString();
+      } else if (product.id != null) {
+        linkTarget = product.id.toString();
+      }
     } catch (_) {}
+
+    if (linkTarget.isEmpty) {
+      linkTarget = 'product_${DateTime.now().millisecondsSinceEpoch}';
+    }
 
     return GestureDetector(
       onTap: () {
         Navigator.pop(context);
-        _selectLink('/products/$linkTarget');
+        setState(() {
+          _selectedProductId = linkTarget;
+          _selectedProductName = name;
+          _selectedProductSlug = linkTarget;
+          _actionLinkController.text = '/products/$linkTarget';
+        });
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
+          color: _selectedProductId == linkTarget
+              ? const Color(0xFF6C5CE7).withOpacity(0.1)
+              : const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
+          border: Border.all(
+            color: _selectedProductId == linkTarget
+                ? const Color(0xFF6C5CE7)
+                : const Color(0xFFE5E7EB),
+            width: _selectedProductId == linkTarget ? 2 : 1,
+          ),
         ),
         child: Row(
           children: [
@@ -949,14 +743,17 @@ class _BroadcastNotificationScreenState
               decoration: BoxDecoration(
                 color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(10),
-                image: imageUrl != null
+                image: imageUrl != null && imageUrl.isNotEmpty
                     ? DecorationImage(
                         image: NetworkImage(imageUrl),
                         fit: BoxFit.cover,
+                        onError: (exception, stackTrace) {
+                          debugPrint('❌ Failed to load image: $imageUrl');
+                        },
                       )
                     : null,
               ),
-              child: imageUrl == null
+              child: imageUrl == null || imageUrl.isEmpty
                   ? const Icon(Iconsax.image, color: Colors.grey, size: 24)
                   : null,
             ),
@@ -983,169 +780,26 @@ class _BroadcastNotificationScreenState
                 ],
               ),
             ),
-            const Icon(Iconsax.arrow_right_3, color: Colors.grey),
+            if (_selectedProductId == linkTarget)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6C5CE7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Iconsax.tick_circle,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              )
+            else
+              const Icon(Iconsax.arrow_right_3, color: Colors.grey),
           ],
         ),
       ),
     );
   }
-
-  // ==========================================
-  // CATEGORY PICKER
-  // ==========================================
-
-  void _showCategoryPicker() {
-    context.read<AdminProductBloc>().add(FetchCategoriesTreeEvent());
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.4,
-        maxChildSize: 0.9,
-        builder: (_, scrollController) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 16),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Select a Category',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: BlocBuilder<AdminProductBloc, AdminProductState>(
-                    builder: (context, state) {
-                      if (state is AdminCategoriesLoading) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF6C5CE7),
-                          ),
-                        );
-                      }
-                      if (state is AdminCategoriesLoaded) {
-                        if (state.categories.isEmpty) {
-                          return const Center(
-                            child: Text(
-                              'No categories found.',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          );
-                        }
-                        return ListView.builder(
-                          controller: scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          itemCount: state.categories.length,
-                          itemBuilder: (context, index) {
-                            final category = state.categories[index];
-                            return _buildCategoryListItem(category);
-                          },
-                        );
-                      }
-                      if (state is AdminCategoriesError) {
-                        return Center(
-                          child: Text(
-                            'Error: ${state.message}',
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildCategoryListItem(dynamic category) {
-    String name = 'Unknown Category';
-    try {
-      name = category.name ?? 'Unknown Category';
-    } catch (_) {}
-
-    String linkTarget = '';
-    try {
-      if (category.slug != null && category.slug.toString().isNotEmpty)
-        linkTarget = category.slug;
-      else
-        linkTarget = category.id;
-    } catch (_) {}
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(context);
-        _selectLink('/products/category/$linkTarget');
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF9FAFB),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Iconsax.category,
-                color: Colors.orange,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                name,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-            ),
-            const Icon(Iconsax.arrow_right_3, color: Colors.grey),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ==========================================
   // BUILD METHOD
   // ==========================================
@@ -1208,7 +862,7 @@ class _BroadcastNotificationScreenState
                 ),
                 const SizedBox(height: 16),
 
-                // ✅ NEW: Image Picker UI
+                // Image Picker
                 _buildImagePicker(),
                 const SizedBox(height: 16),
 
@@ -1219,7 +873,9 @@ class _BroadcastNotificationScreenState
                   icon: Iconsax.mouse,
                 ),
                 const SizedBox(height: 16),
-                _buildActionLinkSelector(),
+
+                // ✅ ONLY PRODUCT SELECTION
+                _buildProductSelector(),
               ],
             ),
             const SizedBox(height: 16),
@@ -1322,7 +978,7 @@ class _BroadcastNotificationScreenState
             ),
             const SizedBox(height: 24),
 
-            // ✅ Updated Preview Card to show image
+            // Preview Card
             _buildPreviewCard(),
             const SizedBox(height: 24),
 
@@ -1359,10 +1015,7 @@ class _BroadcastNotificationScreenState
                   ),
                   elevation: 4,
                   shadowColor: const Color(0xFF6C5CE7).withOpacity(0.4),
-                  minimumSize: const Size(
-                    double.infinity,
-                    56,
-                  ), // Ensures fixed size
+                  minimumSize: const Size(double.infinity, 56),
                 ),
               ),
             ),
@@ -1374,7 +1027,109 @@ class _BroadcastNotificationScreenState
   }
 
   // ==========================================
-  // NEW: IMAGE PICKER WIDGET
+  // PRODUCT SELECTOR WIDGET
+  // ==========================================
+  Widget _buildProductSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Select Product (Optional)',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF6B7280),
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _showProductPicker,
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _selectedProductId != null
+                    ? const Color(0xFF6C5CE7)
+                    : const Color(0xFFE5E7EB),
+                width: _selectedProductId != null ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6C5CE7).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Iconsax.box_1,
+                    color: Color(0xFF6C5CE7),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _selectedProductName ?? 'Tap to select a product',
+                        style: TextStyle(
+                          color: _selectedProductId != null
+                              ? const Color(0xFF1F2937)
+                              : const Color(0xFF9CA3AF),
+                          fontSize: 14,
+                          fontWeight: _selectedProductId != null
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                        ),
+                      ),
+                      if (_selectedProductId != null)
+                        Text(
+                          'Selected product will be linked',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (_selectedProductId != null)
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedProductId = null;
+                        _selectedProductName = null;
+                        _selectedProductSlug = null;
+                        _actionLinkController.clear();
+                      });
+                    },
+                    child: const Icon(
+                      Iconsax.close_circle,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Iconsax.arrow_down_1,
+                    color: Colors.grey,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==========================================
+  // IMAGE PICKER WIDGET
   // ==========================================
   Widget _buildImagePicker() {
     return Column(
@@ -1470,7 +1225,7 @@ class _BroadcastNotificationScreenState
   }
 
   // ==========================================
-  // UPDATED: PREVIEW CARD WITH IMAGE
+  // PREVIEW CARD
   // ==========================================
   Widget _buildPreviewCard() {
     final title = _titleController.text.trim();
@@ -1525,7 +1280,6 @@ class _BroadcastNotificationScreenState
           ),
           const SizedBox(height: 12),
 
-          // ✅ Show image in preview if selected
           if (_selectedImage != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -1565,6 +1319,38 @@ class _BroadcastNotificationScreenState
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (_selectedProductName != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Iconsax.box_1,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _selectedProductName!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
                 if (buttonText.isNotEmpty) ...[
