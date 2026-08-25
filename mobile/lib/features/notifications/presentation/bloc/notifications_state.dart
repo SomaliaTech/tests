@@ -12,7 +12,6 @@ class NotificationsInitial extends NotificationsState {}
 
 class NotificationsLoading extends NotificationsState {}
 
-// In notifications_state.dart
 class NotificationsLoaded extends NotificationsState {
   final List<NotificationEntity> notifications;
   final NotificationFilter currentFilter;
@@ -37,6 +36,11 @@ class NotificationsLoaded extends NotificationsState {
       case NotificationFilter.promotions:
         return notifications
             .where((n) => n.type == NotificationType.promotion)
+            .toList();
+      // ✅ ADDED: Handle the new messages filter
+      case NotificationFilter.messages:
+        return notifications
+            .where((n) => n.type == NotificationType.message)
             .toList();
     }
   }

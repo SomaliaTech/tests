@@ -54,7 +54,6 @@ class NotificationCard extends StatelessWidget {
             children: [
               _buildLeading(hasImage),
               const SizedBox(width: 12),
-
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -84,8 +83,7 @@ class NotificationCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          notification
-                              .timeAgo, // ✅ FIXED: Use timeAgo instead of createdAt
+                          notification.timeAgo,
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade500,
@@ -106,7 +104,6 @@ class NotificationCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 10),
-
                     if (notification.actionText != null &&
                         notification.actionText!.isNotEmpty)
                       Container(
@@ -115,9 +112,7 @@ class NotificationCard extends StatelessWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF2ED573,
-                          ).withValues(alpha: 0.1), // ✅ FIXED: withValues
+                          color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -155,8 +150,7 @@ class NotificationCard extends StatelessWidget {
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: CachedNetworkImage(
-          imageUrl: notification
-              .imageUrl!, // ✅ FIXED: Now defined in NotificationEntity
+          imageUrl: notification.imageUrl!,
           width: 64,
           height: 64,
           fit: BoxFit.cover,
@@ -180,7 +174,6 @@ class NotificationCard extends StatelessWidget {
     Color color;
     Color bgColor;
 
-    // ✅ FIXED: Switch directly on the enum, no .toLowerCase() needed
     switch (notification.type) {
       case NotificationType.order:
         icon = Iconsax.tick_circle;
@@ -201,6 +194,12 @@ class NotificationCard extends StatelessWidget {
         icon = Iconsax.card;
         color = const Color(0xFF2ED573);
         bgColor = const Color(0xFFE8F5E9);
+        break;
+      // ✅ ADDED: Handle the new message type
+      case NotificationType.message:
+        icon = Iconsax.message;
+        color = const Color(0xFF1877F2);
+        bgColor = const Color(0xFFE3F2FD);
         break;
     }
 

@@ -6,9 +6,6 @@ import 'package:mobile/features/admin/presentation/widgets/banner_form/banner_se
 import 'package:mobile/features/admin/presentation/widgets/banner_form/banner_text_field.dart';
 import 'package:mobile/features/admin/presentation/widgets/banner_form/banner_switch.dart';
 import 'package:mobile/features/product/data/models/banner_form_data.dart';
-// lib/features/admin/presentation/widgets/banner_form/banner_flash_sale_section.dart
-
-// ... imports ...
 
 class BannerFlashSaleSection extends StatelessWidget {
   final BannerFormData formData;
@@ -116,7 +113,7 @@ class BannerFlashSaleSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
 
-        // ✅ FIXED: Countdown Preview - use Expanded to prevent overflow
+        // ✅ FIXED: Countdown Preview with better responsive handling
         if (formData.flashSaleEndTime != null) _buildCountdownPreview(),
       ],
     );
@@ -162,7 +159,7 @@ class BannerFlashSaleSection extends StatelessWidget {
             Expanded(
               child: Text(
                 selectedDate != null
-                    ? '${selectedDate.day}/${selectedDate.month} ${selectedDate.hour}:${selectedDate.minute.toString().padLeft(2, '0')}'
+                    ? '${selectedDate.day}/${selectedDate.month} ${selectedDate.hour.toString().padLeft(2, '0')}:${selectedDate.minute.toString().padLeft(2, '0')}'
                     : label,
                 style: TextStyle(
                   color: selectedDate != null
@@ -170,7 +167,7 @@ class BannerFlashSaleSection extends StatelessWidget {
                       : Colors.grey,
                   fontSize: 12,
                 ),
-                overflow: TextOverflow.ellipsis, // ✅ Prevent overflow
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -179,7 +176,7 @@ class BannerFlashSaleSection extends StatelessWidget {
     );
   }
 
-  // ✅ FIXED: Wrapped in Flexible/Expanded to prevent overflow
+  // ✅ OPTIMIZED: Better responsive countdown preview
   Widget _buildCountdownPreview() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -188,42 +185,107 @@ class BannerFlashSaleSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
-      child: Row(
-        children: [
-          const Icon(Iconsax.timer_1, color: Colors.orange, size: 20),
-          const SizedBox(width: 8),
-          // ✅ FIXED: Use Flexible to prevent overflow
-          const Flexible(
-            child: Text(
-              'Countdown Timer Preview:',
-              style: TextStyle(
-                fontSize: 12, // Reduced font size
-                fontWeight: FontWeight.w600,
-                color: Colors.orange,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // ✅ If screen is too narrow, stack vertically
+          if (constraints.maxWidth < 360) {
+            return Column(
+              children: [
+                const Row(
+                  children: [
+                    Icon(Iconsax.timer_1, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'Countdown Timer Preview:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildTimerBox('24'),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2),
+                      child: Text(
+                        ':',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    _buildTimerBox('59'),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 2),
+                      child: Text(
+                        ':',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    _buildTimerBox('59'),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          // ✅ Default horizontal layout for wider screens
+          return Row(
+            children: [
+              const Icon(Iconsax.timer_1, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              const Flexible(
+                child: Text(
+                  'Countdown Timer Preview:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Timer boxes
-          _buildTimerBox('24'),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 2),
-            child: Text(
-              ':',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-          ),
-          _buildTimerBox('59'),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 2),
-            child: Text(
-              ':',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-          ),
-          _buildTimerBox('59'),
-        ],
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTimerBox('24'),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 2),
+                    child: Text(
+                      ':',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  _buildTimerBox('59'),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 2),
+                    child: Text(
+                      ':',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  _buildTimerBox('59'),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

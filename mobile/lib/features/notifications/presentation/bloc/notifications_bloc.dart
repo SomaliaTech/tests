@@ -59,12 +59,25 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
       }
     });
   }
+  // lib/features/notifications/presentation/bloc/notifications_bloc.dart
   Future<void> _onLoadNotifications(
     LoadNotifications event,
     Emitter<NotificationsState> emit,
   ) async {
     if (_isLoading) return;
+
+    // ✅ FIX: Prevent API spam (429 error).
+    // If not forcing refresh and we have fresh data, do nothing.
+    if (!event.forceRefresh && state is NotificationsLoaded) {
+      if (_lastFetchTime != null &&
+          DateTime.now().difference(_lastFetchTime!) <
+              const Duration(seconds: 15)) {
+        return;
+      }
+    }
+
     _isLoading = true;
+    _lastFetchTime = DateTime.now();
 
     final currentState = state;
     final isSilentRefresh = currentState is NotificationsLoaded;
@@ -73,10 +86,10 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
       emit(NotificationsLoading());
     }
 
-    // ✅ Pass forceRefresh when explicitly loading
     final result = await getNotifications.call(
       forceRefresh: event.forceRefresh,
     );
+
     _isLoading = false;
 
     result.fold(

@@ -13,25 +13,20 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
   BadRequestException,
-  UseInterceptors,
-  UploadedFile,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle, ThrottlerGuard, SkipThrottle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiQuery,
   ApiParam,
   ApiBody,
-  ApiQuery,
-  ApiConsumes,
 } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
-import { SuperAdminGuard } from '../auth/guards/super-admin.guard'; // Optional: if you want strict super admin for broadcast
-import { SupabaseService } from '../supabase/supabase.service'; // Adjust import to match your project
 import {
   CreateNotificationDto,
   UpdateNotificationDto,
@@ -43,77 +38,19 @@ import { NotificationType } from './notification.entity';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class NotificationsController {
-  constructor(
-    private readonly notificationsService: NotificationsService,
-    private readonly supabaseService: SupabaseService, // Inject storage service
-  ) {}
+  constructor(private readonly notificationsService: NotificationsService) {}
 
-  // ==========================================
-  // BROADCAST (With Image Support)
-  // ==========================================
   @Post('broadcast')
-  @UseGuards(SuperAdminGuard) // Or AdminGuard depending on your security policy
-  @UseInterceptors(FileInterceptor('image'))
-  @ApiConsumes('multipart/form-data', 'application/json')
-  @ApiOperation({
-    summary: 'Broadcast notification to all users with optional image',
-  })
-  async broadcastNotification(
-    @Request() req,
-    @Body() body: any,
-    @UploadedFile() file?: Express.Multer.File,
-  ) {
-    // Handle case where data might be sent as a JSON string inside multipart form
-    let dto = body;
-    if (typeof body === 'string') {
-      try {
-        dto = JSON.parse(body);
-      } catch {
-        dto = {};
-      }
-    }
-
-    let imageUrl: string | undefined = undefined;
-
-    // ✅ Upload Image if present
-    if (file) {
-      try {
-        // ✅ FIX 1: Pass only the file object (1 argument).
-        // If your service actually expects a base64 string, use the commented code below instead.
-        const uploadResult = await this.supabaseService.uploadFile(file);
-
-        // const base64Image = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-        // const uploadResult = await this.supabaseService.uploadImage(base64Image);
-
-        // ✅ FIX 2: Use 'secure_url' instead of 'publicUrl' based on the TypeScript error
-        imageUrl = uploadResult.secure_url;
-      } catch (error) {
-        console.error('Image upload error:', error);
-        throw new BadRequestException('Failed to upload broadcast image');
-      }
-    }
-
-    return this.notificationsService.broadcastToAllUsers({
-      title: dto.title,
-      message: dto.message,
-      actionText: dto.actionText,
-      actionLink: dto.actionLink,
-      imageUrl, // ✅ Pass URL to service
-      targetAudience: dto.targetAudience || 'all_users',
-      sendPush: dto.sendPush === 'true' || dto.sendPush === true,
-      scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
-    });
+  @UseGuards(AdminGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Broadcast notification to all users (Admin only)' })
+  async broadcastNotification(@Request() req, @Body() body: any) {
+    return this.notificationsService.broadcastToAllUsers(body);
   }
-  // ==========================================
-  // USER ENDPOINTS
-  // ==========================================
 
   @Get()
-  @ApiOperation({
-    summary: 'Get user notifications',
-    description:
-      'Returns all notifications for the authenticated user with pagination.',
-  })
+  @SkipThrottle() // ✅ Skip rate limiting for GET notifications
+  @ApiOperation({ summary: 'Get user notifications' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'type', required: false, enum: NotificationType })
@@ -122,7 +59,6 @@ export class NotificationsController {
     status: 200,
     description: 'Notifications retrieved successfully',
   })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getUserNotifications(
     @Request() req,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
@@ -142,6 +78,7 @@ export class NotificationsController {
   }
 
   @Get('unread/count')
+  @SkipThrottle() // ✅ Skip rate limiting
   @ApiOperation({ summary: 'Get unread notification count' })
   @ApiResponse({ status: 200, description: 'Unread count retrieved' })
   async getUnreadCount(@Request() req) {
@@ -149,6 +86,7 @@ export class NotificationsController {
   }
 
   @Put(':id/read')
+  @SkipThrottle() // ✅ Skip rate limiting for marking as read
   @ApiOperation({ summary: 'Mark notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
@@ -157,6 +95,7 @@ export class NotificationsController {
   }
 
   @Put('read-all')
+  @SkipThrottle() // ✅ Skip rate limiting
   @ApiOperation({ summary: 'Mark all as read' })
   @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   async markAllAsRead(@Request() req) {
@@ -164,6 +103,7 @@ export class NotificationsController {
   }
 
   @Delete(':id')
+  @SkipThrottle() // ✅ Skip rate limiting
   @ApiOperation({ summary: 'Delete notification' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({
@@ -178,15 +118,12 @@ export class NotificationsController {
   }
 
   @Delete()
+  @SkipThrottle() // ✅ Skip rate limiting
   @ApiOperation({ summary: 'Clear all notifications' })
   @ApiResponse({ status: 200, description: 'All notifications cleared' })
   async clearAllNotifications(@Request() req) {
     return this.notificationsService.clearAllNotifications(req.user.userId);
   }
-
-  // ==========================================
-  // ADMIN ENDPOINTS
-  // ==========================================
 
   @Get('admin/all')
   @UseGuards(AdminGuard)
@@ -215,6 +152,7 @@ export class NotificationsController {
 
   @Post()
   @UseGuards(AdminGuard)
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
   @ApiOperation({ summary: 'Create notification (Admin)' })
   @ApiBody({ type: CreateNotificationDto })
   @ApiResponse({
@@ -229,39 +167,13 @@ export class NotificationsController {
 
   @Post('bulk')
   @UseGuards(AdminGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Bulk create notifications (Admin)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        userIds: { type: 'array', items: { type: 'string' } },
-        type: { type: 'string', enum: Object.values(NotificationType) },
-        title: { type: 'string' },
-        message: { type: 'string' },
-        actionText: { type: 'string' },
-        actionLink: { type: 'string' },
-      },
-      required: ['userIds', 'type', 'title', 'message'],
-    },
-  })
   @ApiResponse({
     status: 201,
     description: 'Notifications created successfully',
   })
-  async bulkCreateNotifications(
-    @Body()
-    body: {
-      userIds: string[];
-      type: NotificationType;
-      title: string;
-      message: string;
-      actionText?: string;
-      actionLink?: string;
-    },
-  ) {
-    if (!body.userIds || body.userIds.length === 0) {
-      throw new BadRequestException('userIds array is required');
-    }
+  async bulkCreateNotifications(@Body() body: any) {
     return this.notificationsService.bulkCreateNotifications(body);
   }
 

@@ -1,19 +1,51 @@
 import 'dart:convert';
-import 'dart:io'; // ✅ Changed from 'dart:io' show Platform
+import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart'; // ✅ Add this import
+import 'package:path_provider/path_provider.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/navigation_service.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 
-// ✅ Top-level handler for background messages
+// ✅ TOP-LEVEL FUNCTION: Must be outside any class
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('📩 Background message: ${message.messageId}');
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Initialize Firebase if needed for background processing
+  // await Firebase.initializeApp();
+
+  debugPrint('📩 [BG] Background message received: ${message.messageId}');
+
+  // Show local notification in background/terminated state
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+  const androidDetails = AndroidNotificationDetails(
+    'farxada_channel',
+    'Farxada Notifications',
+    channelDescription: 'Notifications for Farxada app',
+    importance: Importance.high,
+    priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+  );
+
+  const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+
+  await flutterLocalNotificationsPlugin.show(
+    message.hashCode,
+    message.notification?.title ?? 'New Notification',
+    message.notification?.body ?? '',
+    details,
+    payload: json.encode(message.data),
+  );
 }
 
 class PushNotificationService {
@@ -27,7 +59,7 @@ class PushNotificationService {
   PushNotificationService._internal();
 
   bool _isInitialized = false;
-  bool _isAppInForeground = true;
+  bool _backgroundHandlerRegistered = false; // ✅ Prevent duplicate registration
 
   static const String _chatChannelId = 'chat_messages';
   static const String _orderChannelId = 'order_updates';
@@ -40,33 +72,42 @@ class PushNotificationService {
 
     debugPrint('📱 Initializing push notification service...');
 
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    // ✅ Register background handler ONLY ONCE
+    if (!_backgroundHandlerRegistered) {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      _backgroundHandlerRegistered = true;
+      debugPrint('✅ [Push] Background handler registered');
+    }
+
     await _requestPermission();
     await _initLocalNotifications();
     await _setupToken();
 
+    // ✅ Handle FOREGROUND messages only
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('📩 Foreground message: ${message.notification?.title}');
-      _showLocalNotification(message);
+      debugPrint('📩 [FG] Foreground message: ${message.notification?.title}');
+      _showForegroundNotification(message);
     });
 
+    // Handle notification taps when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('📩 Opened from notification: ${message.data}');
+      debugPrint(
+        '📩 [Tap] Notification tapped from background: ${message.data}',
+      );
       _handleNotificationTap(message.data);
     });
 
+    // Handle notification tap when app was terminated
     _firebaseMessaging.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
-        debugPrint('📩 Launched from terminated state: ${message.data}');
+        debugPrint(
+          '📩 [Launch] App launched from notification: ${message.data}',
+        );
         _handleNotificationTap(message.data);
       }
     });
 
     debugPrint('✅ Push notification service initialized');
-  }
-
-  void setAppInForeground(bool isForeground) {
-    _isAppInForeground = isForeground;
   }
 
   Future<void> _requestPermission() async {
@@ -88,13 +129,15 @@ class PushNotificationService {
 
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
-          'fcm_default_channel',
-          'General',
-          description: 'General notifications',
+          'farxada_channel',
+          'Farxada Notifications',
+          description: 'General notifications for Farxada',
           importance: Importance.high,
           playSound: true,
+          enableVibration: true,
         ),
       );
+
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _chatChannelId,
@@ -103,6 +146,7 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
+
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _orderChannelId,
@@ -111,6 +155,7 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
+
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _paymentChannelId,
@@ -119,6 +164,7 @@ class PushNotificationService {
           importance: Importance.high,
         ),
       );
+
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           _systemChannelId,
@@ -188,29 +234,26 @@ class PushNotificationService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         debugPrint('✅ Device token registered successfully');
+      } else {
+        debugPrint('⚠️ Failed to register token: ${response.statusCode}');
       }
     } catch (e) {
       debugPrint('❌ Failed to register token: $e');
     }
   }
 
-  // ✅ UPDATED: Downloads image for foreground Big Picture display
-  Future<void> _showLocalNotification(RemoteMessage message) async {
+  /// ✅ Show notification ONLY when app is in FOREGROUND
+  Future<void> _showForegroundNotification(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
 
     final type = message.data['type']?.toString() ?? 'system';
     final imageUrl = message.data['imageUrl']?.toString();
-
-    if ((type == 'message' || type == 'new_message') && _isAppInForeground) {
-      debugPrint('📩 Skipping local notification - app in foreground');
-      return;
-    }
-
     final androidChannelId = _getChannelIdForType(type);
+
     AndroidNotificationDetails? androidPlatformChannelSpecifics;
 
-    // ✅ If there's an image URL, download it and show as Big Picture
+    // If there's an image URL, download it and show as Big Picture
     if (imageUrl != null && imageUrl.isNotEmpty) {
       try {
         final response = await http.get(Uri.parse(imageUrl));
@@ -244,7 +287,7 @@ class PushNotificationService {
       }
     }
 
-    // ✅ Fallback if no image or download failed
+    // Fallback if no image or download failed
     androidPlatformChannelSpecifics ??= AndroidNotificationDetails(
       androidChannelId,
       _getChannelNameForType(type),
@@ -262,7 +305,7 @@ class PushNotificationService {
       notification.body,
       NotificationDetails(
         android: androidPlatformChannelSpecifics,
-        iOS: DarwinNotificationDetails(
+        iOS: const DarwinNotificationDetails(
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
@@ -315,7 +358,7 @@ class PushNotificationService {
   }
 
   void _handleNotificationTap(Map<String, dynamic> data) {
-    debugPrint('📩 Notification tapped: $data');
+    debugPrint('🔔 Handling notification tap: $data');
 
     final type = data['type']?.toString();
     final actionLink = data['actionLink']?.toString();
@@ -326,7 +369,7 @@ class PushNotificationService {
       return;
     }
 
-    // ✅ 1. PRIORITY: Handle actionLink if it exists (e.g., /products/xyz, /orders/123)
+    // 1. PRIORITY: Handle actionLink if it exists
     if (actionLink != null && actionLink.isNotEmpty) {
       debugPrint('🔗 Navigating via actionLink: $actionLink');
       final uri = Uri.tryParse(actionLink);
@@ -368,7 +411,7 @@ class PushNotificationService {
       }
     }
 
-    // ✅ 2. FALLBACK: Type-based navigation if no actionLink or parsing failed
+    // 2. FALLBACK: Type-based navigation
     switch (type) {
       case 'message':
       case 'new_message':
@@ -380,7 +423,6 @@ class PushNotificationService {
           );
         }
         break;
-
       case 'order':
       case 'payment':
         final orderId = data['orderId'];
@@ -391,16 +433,19 @@ class PushNotificationService {
           );
         }
         break;
-
       default:
-        // If no actionLink and no specific type match, go to notifications
         NavigationService.navigateTo('/notifications');
         break;
     }
   }
 
   Future<String?> getToken() async {
-    return await _firebaseMessaging.getToken();
+    try {
+      return await _firebaseMessaging.getToken();
+    } catch (e) {
+      debugPrint('⚠️ Could not get FCM token: $e');
+      return null;
+    }
   }
 
   Future<void> unregisterToken() async {

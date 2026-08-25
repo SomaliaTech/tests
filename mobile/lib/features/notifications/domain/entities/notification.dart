@@ -2,7 +2,8 @@ import 'package:equatable/equatable.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 
-enum NotificationType { order, promotion, system, payment }
+// ✅ ADD 'message' to the enum
+enum NotificationType { order, promotion, system, payment, message }
 
 extension NotificationTypeExtension on NotificationType {
   String get displayName {
@@ -15,6 +16,8 @@ extension NotificationTypeExtension on NotificationType {
         return 'system';
       case NotificationType.payment:
         return 'payment';
+      case NotificationType.message:
+        return 'message';
     }
   }
 
@@ -28,6 +31,8 @@ extension NotificationTypeExtension on NotificationType {
         return Iconsax.user;
       case NotificationType.payment:
         return Iconsax.card;
+      case NotificationType.message:
+        return Iconsax.message;
     }
   }
 
@@ -41,6 +46,8 @@ extension NotificationTypeExtension on NotificationType {
         return const Color(0xFF666666);
       case NotificationType.payment:
         return const Color(0xFF2ED573);
+      case NotificationType.message:
+        return const Color(0xFF1877F2); // Message blue
     }
   }
 
@@ -54,11 +61,14 @@ extension NotificationTypeExtension on NotificationType {
         return const Color(0xFFF5F5F5);
       case NotificationType.payment:
         return const Color(0xFFE8F5E9);
+      case NotificationType.message:
+        return const Color(0xFFE3F2FD); // Light blue background
     }
   }
 }
 
-enum NotificationFilter { all, unread, orders, promotions }
+// ✅ Added 'messages' to filter enum
+enum NotificationFilter { all, unread, orders, promotions, messages }
 
 extension NotificationFilterExtension on NotificationFilter {
   String get displayName {
@@ -71,6 +81,8 @@ extension NotificationFilterExtension on NotificationFilter {
         return 'Orders';
       case NotificationFilter.promotions:
         return 'Promotions';
+      case NotificationFilter.messages:
+        return 'Messages';
     }
   }
 }
@@ -84,7 +96,7 @@ class NotificationEntity extends Equatable {
   final bool read;
   final String? actionText;
   final String? actionLink;
-  final String? imageUrl; // ✅ ADD THIS
+  final String? imageUrl;
 
   const NotificationEntity({
     required this.id,
@@ -95,7 +107,7 @@ class NotificationEntity extends Equatable {
     required this.read,
     this.actionText,
     this.actionLink,
-    this.imageUrl, // ✅ ADD THIS
+    this.imageUrl,
   });
 
   String get timeAgo {
@@ -119,7 +131,7 @@ class NotificationEntity extends Equatable {
     bool? read,
     String? actionText,
     String? actionLink,
-    String? imageUrl, // ✅ ADD THIS
+    String? imageUrl,
   }) {
     return NotificationEntity(
       id: id ?? this.id,
@@ -130,31 +142,8 @@ class NotificationEntity extends Equatable {
       read: read ?? this.read,
       actionText: actionText ?? this.actionText,
       actionLink: actionLink ?? this.actionLink,
-      imageUrl: imageUrl ?? this.imageUrl, // ✅ ADD THIS
+      imageUrl: imageUrl ?? this.imageUrl,
     );
-  }
-
-  static NotificationType _parseNotificationType(String type) {
-    final normalized = type.toLowerCase().trim();
-
-    switch (normalized) {
-      case 'order':
-      case 'orders':
-        return NotificationType.order;
-      case 'promotion':
-      case 'promotions':
-      case 'promo':
-        return NotificationType.promotion;
-      case 'system':
-      case 'admin':
-        return NotificationType.system;
-      case 'payment':
-      case 'payments':
-        return NotificationType.payment;
-      default:
-        print('⚠️ Unknown notification type: $type, defaulting to system');
-        return NotificationType.system;
-    }
   }
 
   factory NotificationEntity.fromJson(Map<String, dynamic> json) {
@@ -166,10 +155,14 @@ class NotificationEntity extends Equatable {
         type = NotificationType.order;
         break;
       case 'promotion':
+      case 'promo':
         type = NotificationType.promotion;
         break;
       case 'payment':
         type = NotificationType.payment;
+        break;
+      case 'message': // ✅ ADDED MESSAGE TYPE
+        type = NotificationType.message;
         break;
       case 'system':
       case 'admin':
@@ -189,9 +182,11 @@ class NotificationEntity extends Equatable {
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
       read: json['isRead'] == true || json['is_read'] == true,
-      actionText: json['actionText']?.toString(),
-      actionLink: json['actionLink']?.toString(),
-      imageUrl: json['imageUrl']?.toString(),
+      actionText:
+          json['actionText']?.toString() ?? json['action_text']?.toString(),
+      actionLink:
+          json['actionLink']?.toString() ?? json['action_link']?.toString(),
+      imageUrl: json['imageUrl']?.toString() ?? json['image_url']?.toString(),
     );
   }
 
@@ -205,6 +200,6 @@ class NotificationEntity extends Equatable {
     read,
     actionText,
     actionLink,
-    imageUrl, // ✅ ADD THIS
+    imageUrl,
   ];
 }

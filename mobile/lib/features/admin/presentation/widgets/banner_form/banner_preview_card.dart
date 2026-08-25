@@ -3,15 +3,18 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile/features/product/data/models/banner_form_data.dart';
+import 'package:iconsax/iconsax.dart';
 
 class BannerPreviewCard extends StatelessWidget {
   final BannerFormData formData;
   final File? selectedImage;
+  final String? selectedProductName; // ✅ Add this
 
   const BannerPreviewCard({
     super.key,
     required this.formData,
     this.selectedImage,
+    this.selectedProductName, // ✅ Add this
   });
 
   @override
@@ -134,6 +137,33 @@ class BannerPreviewCard extends StatelessWidget {
             Text(
               formData.subtitle!,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+          // ✅ Show selected product if available
+          if (selectedProductName != null &&
+              selectedProductName!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Iconsax.box_1, color: Colors.white, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    selectedProductName!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
           if (formData.buttonText?.isNotEmpty == true) ...[

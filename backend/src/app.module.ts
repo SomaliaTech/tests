@@ -26,35 +26,33 @@ import { RedisModule } from './redis/redis.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // ✅ GLOBAL RATE LIMIT CONFIGURATION
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
         {
           name: 'default',
-          ttl: 60000, // 1 minute
-          limit: 500, // ✅ INCREASED to 500 to prevent 429 on app startup
+          ttl: 60000,
+          limit: 2000, // ✅ Increased to 2000 requests per minute
         },
         {
           name: 'auth',
           ttl: 60000,
-          limit: 20,
+          limit: 30, // Increased from 20
         },
         {
           name: 'otp',
           ttl: 60000,
-          limit: 5,
+          limit: 10, // Increased from 5
         },
         {
           name: 'payment',
           ttl: 60000,
-          limit: 10,
+          limit: 20, // Increased from 10
         },
       ],
     }),
 
-    // Feature Modules
     RedisModule,
     DrizzleModule,
     SupabaseModule,
@@ -77,7 +75,7 @@ import { RedisModule } from './redis/redis.module';
     PermissionGuard,
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard, // ✅ Applies the 500 req/min limit globally
+      useClass: ThrottlerGuard,
     },
   ],
 })
