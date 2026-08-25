@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">hingaad-2</string>
+    <string name="app_name">hingaad</string>
     
-    <!-- Use the SAME App ID everywhere -->
-    <string name="facebook_app_id">1074105878540436</string>
+    <!-- Your App ID -->
+    <string name="facebook_app_id">476493349999779</string>
     
     <!-- MUST be "fb" + App ID -->
     <string name="fb_login_protocol_scheme">fb476493349999779</string>
     
-    <!-- Your real Client Token -->
-    <string name="facebook_client_token">ca4c8eaf337de9831139e3b173553bf0</string>
+    <!-- Your Client Token -->
+    <string name="facebook_client_token">8c49f38b5ccf7ca3c9405f2e6fd070f7</string>
 </resources>

@@ -30,8 +30,8 @@ android {
         
         // Facebook SDK metadata - MUST match strings.xml
         manifestPlaceholders = [
-            facebookAppId: "476493349999779",
-            facebookClientToken: "8c49f38b5ccf7ca3c9405f2e6fd070f7"
+          facebookAppId: "476493349999779",
+    facebookClientToken: "8c49f38b5ccf7ca3c9405f2e6fd070f7"
         ]
     }
 

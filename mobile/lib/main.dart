@@ -1,4 +1,4 @@
-// lib/main.dart - Fixed version
+// lib/main.dart - Improved version
 import 'dart:io';
 import 'package:hive_flutter/adapters.dart';
 import 'package:iconsax/iconsax.dart';
@@ -9,6 +9,7 @@ import 'package:mobile/core/network/internet_banner.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/banner/admin_banner_bloc.dart';
 import 'package:mobile/features/auth/presentation/screens/complete_profile_screen.dart';
+import 'package:mobile/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:mobile/features/product/presentation/blocs/banner/banner_bloc.dart';
 import 'package:mobile/features/product/presentation/screens/category_view.dart';
 import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
@@ -81,7 +82,7 @@ void main() async {
     Hive.openBox<String>('sync_timestamps'),
     Hive.openBox<String>('product_cache'),
     Hive.openBox<String>('category_cache'),
-    Hive.openBox<String>('notifications_cache'), // ✅ ADD THIS
+    Hive.openBox<String>('notifications_cache'),
   ]);
 
   // ✅ Initialize dependencies AFTER boxes are open
@@ -263,7 +264,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ],
             );
           },
-          // ✅ Use a separate method for home to avoid rebuilds
           home: _buildHome(),
           onGenerateRoute: (settings) {
             if (settings.name == '/product-details') {
@@ -332,7 +332,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             } else if (state is Authenticated) {
               return const MainNavigationScreen();
             } else if (state is Unauthenticated) {
-              return const PhoneInputScreen();
+              return const WelcomeScreen();
             } else if (state is OtpVerified) {
               // ✅ Handle OtpVerified state here too
               if (state.isGoogleSignIn) {
@@ -355,13 +355,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             } else if (state is ProfileCompleted) {
               return const MainNavigationScreen();
             } else if (state is AuthError) {
-              // Show error and go back to login
+              // ✅ Show error and return to WelcomeScreen after a delay
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
-                  // Error is already shown in the screen
+                  // The error toast is already shown in the screens
+                  // Just return to WelcomeScreen
+                  context.read<AuthBloc>().add(const CheckAuthStatusEvent());
                 }
               });
-              return const PhoneInputScreen();
+              return const WelcomeScreen();
             } else {
               return const SplashScreen();
             }

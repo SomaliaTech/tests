@@ -134,35 +134,65 @@ class NotificationEntity extends Equatable {
     );
   }
 
-  factory NotificationEntity.fromJson(Map<String, dynamic> json) {
-    return NotificationEntity(
-      id: json['id'] as String,
-      type: _parseNotificationType(json['type'] as String),
-      title: json['title'] as String,
-      message: json['message'] as String,
-      date: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
-          : DateTime.now(),
-      read: json['isRead'] ?? json['is_read'] ?? false,
-      actionText: json['actionText'] ?? json['action_text'],
-      actionLink: json['actionLink'] ?? json['action_link'],
-      imageUrl: json['imageUrl'] ?? json['image_url'], // ✅ ADD THIS
-    );
-  }
-
   static NotificationType _parseNotificationType(String type) {
-    switch (type.toLowerCase()) {
+    final normalized = type.toLowerCase().trim();
+
+    switch (normalized) {
       case 'order':
+      case 'orders':
         return NotificationType.order;
       case 'promotion':
+      case 'promotions':
+      case 'promo':
         return NotificationType.promotion;
       case 'system':
+      case 'admin':
         return NotificationType.system;
       case 'payment':
+      case 'payments':
         return NotificationType.payment;
       default:
+        print('⚠️ Unknown notification type: $type, defaulting to system');
         return NotificationType.system;
     }
+  }
+
+  factory NotificationEntity.fromJson(Map<String, dynamic> json) {
+    final typeValue = json['type']?.toString().toLowerCase() ?? 'system';
+
+    NotificationType type;
+    switch (typeValue) {
+      case 'order':
+        type = NotificationType.order;
+        break;
+      case 'promotion':
+        type = NotificationType.promotion;
+        break;
+      case 'payment':
+        type = NotificationType.payment;
+        break;
+      case 'system':
+      case 'admin':
+        type = NotificationType.system;
+        break;
+      default:
+        print('⚠️ Unknown type: $typeValue');
+        type = NotificationType.system;
+    }
+
+    return NotificationEntity(
+      id: json['id']?.toString() ?? '',
+      type: type,
+      title: json['title']?.toString() ?? 'Notification',
+      message: json['message']?.toString() ?? '',
+      date: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      read: json['isRead'] == true || json['is_read'] == true,
+      actionText: json['actionText']?.toString(),
+      actionLink: json['actionLink']?.toString(),
+      imageUrl: json['imageUrl']?.toString(),
+    );
   }
 
   @override

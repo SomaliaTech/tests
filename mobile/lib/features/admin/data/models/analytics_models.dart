@@ -6,13 +6,12 @@ class DailyRevenueModel extends DailyRevenueEntity {
     required super.revenue,
     required super.orders,
   });
-
   factory DailyRevenueModel.fromJson(Map<String, dynamic> json) {
     return DailyRevenueModel(
-      date: json['date'] as String,
+      date: json['date']?.toString() ?? '',
       revenue: (json['revenue'] is num)
           ? (json['revenue'] as num).toDouble()
-          : double.parse(json['revenue'].toString()),
+          : double.tryParse(json['revenue']?.toString() ?? '0') ?? 0,
       orders: json['orders'] as int? ?? 0,
     );
   }
@@ -30,13 +29,17 @@ class TopProductModel extends TopProductEntity {
 
   factory TopProductModel.fromJson(Map<String, dynamic> json) {
     return TopProductModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      imageUrl: json['imageUrl'] as String?,
+      id: json['id']?.toString() ?? json['productId']?.toString() ?? '',
+      name:
+          json['name']?.toString() ??
+          json['productName']?.toString() ??
+          'Unknown',
+      imageUrl:
+          json['imageUrl']?.toString() ?? json['productImage']?.toString(),
       totalSold: json['totalSold'] as int? ?? 0,
       totalRevenue: (json['totalRevenue'] is num)
           ? (json['totalRevenue'] as num).toDouble()
-          : double.parse(json['totalRevenue'].toString()),
+          : double.tryParse(json['totalRevenue']?.toString() ?? '0') ?? 0,
       orderCount: json['orderCount'] as int? ?? 0,
     );
   }
@@ -53,11 +56,14 @@ class CategoryRevenueModel extends CategoryRevenueEntity {
 
   factory CategoryRevenueModel.fromJson(Map<String, dynamic> json) {
     return CategoryRevenueModel(
-      id: json['id'] as String?,
-      name: json['name'] as String,
+      id: json['id']?.toString() ?? json['categoryId']?.toString(),
+      name:
+          json['name']?.toString() ??
+          json['categoryName']?.toString() ??
+          'Unknown',
       totalRevenue: (json['totalRevenue'] is num)
           ? (json['totalRevenue'] as num).toDouble()
-          : double.parse(json['totalRevenue'].toString()),
+          : double.tryParse(json['totalRevenue']?.toString() ?? '0') ?? 0,
       orderCount: json['orderCount'] as int? ?? 0,
       itemCount: json['itemCount'] as int? ?? 0,
     );
@@ -73,11 +79,11 @@ class OrderStatusModel extends OrderStatusEntity {
 
   factory OrderStatusModel.fromJson(Map<String, dynamic> json) {
     return OrderStatusModel(
-      status: json['status'] as String,
+      status: json['status']?.toString() ?? 'UNKNOWN',
       count: json['count'] as int? ?? 0,
       totalRevenue: (json['totalRevenue'] is num)
           ? (json['totalRevenue'] as num).toDouble()
-          : double.parse(json['totalRevenue'].toString()),
+          : double.tryParse(json['totalRevenue']?.toString() ?? '0') ?? 0,
     );
   }
 }
@@ -94,14 +100,14 @@ class LowStockProductModel extends LowStockProductEntity {
 
   factory LowStockProductModel.fromJson(Map<String, dynamic> json) {
     return LowStockProductModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Unknown',
       stock: json['stock'] as int? ?? 0,
       price: (json['price'] is num)
           ? (json['price'] as num).toDouble()
-          : double.parse(json['price'].toString()),
-      imageUrl: json['imageUrl'] as String?,
-      categoryName: json['categoryName'] as String?,
+          : double.tryParse(json['price']?.toString() ?? '0') ?? 0,
+      imageUrl: json['imageUrl']?.toString(),
+      categoryName: json['categoryName']?.toString(),
     );
   }
 }
@@ -118,12 +124,17 @@ class RecentSignupModel extends RecentSignupEntity {
 
   factory RecentSignupModel.fromJson(Map<String, dynamic> json) {
     return RecentSignupModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      phoneNumber: json['phoneNumber'] as String,
-      email: json['email'] as String?,
-      joinedAt: DateTime.parse(json['joinedAt'] as String),
-      isVerified: json['isVerified'] as bool? ?? false,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Anonymous',
+      phoneNumber: json['phoneNumber']?.toString() ?? '',
+      email: json['email']?.toString(),
+      joinedAt: json['joinedAt'] != null || json['createdAt'] != null
+          ? DateTime.tryParse(
+                  (json['joinedAt'] ?? json['createdAt'] ?? '').toString(),
+                ) ??
+                DateTime.now()
+          : DateTime.now(),
+      isVerified: json['isVerified'] == true || json['is_verified'] == true,
     );
   }
 }

@@ -84,12 +84,13 @@ export class AuthController {
   @Post('facebook')
   @UseGuards(ThrottlerGuard)
   @Throttle({ auth: { limit: 5, ttl: 60000 } })
-  @ApiOperation({ summary: 'Facebook Sign-In' })
-  @ApiBody({ type: FacebookAuthDto })
   async facebookSignIn(@Body() dto: FacebookAuthDto) {
-    return this.authService.facebookSignIn(dto);
-  }
+    console.log('📘 Facebook endpoint called');
+    console.log('📘 DTO:', dto);
 
+    // ✅ Make sure to RETURN the result
+    return await this.authService.facebookSignIn(dto);
+  }
   @Post('upload-profile-image')
   @UseGuards(JwtAuthGuard, ThrottlerGuard)
   @Throttle({ auth: { limit: 5, ttl: 60000 } })

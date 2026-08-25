@@ -26,24 +26,34 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
   }
 
   @override
-  Future<Either<Failure, List<NotificationEntity>>> getNotifications() async {
+  Future<Either<Failure, List<NotificationEntity>>> getNotifications({
+    bool forceRefresh = false,
+  }) async {
     try {
       final token = await _getToken();
       if (token == null || token.isEmpty) {
         return const Right([]);
       }
 
-      // ✅ First, try to get cached notifications
+      // ✅ If force refresh, skip cache and fetch from remote
+      if (forceRefresh) {
+        try {
+          final notifications = await remoteDataSource.getNotifications(token);
+          await localDataSource.cacheNotifications(notifications);
+          ServerStatusService().markServerUp();
+          return Right(notifications);
+        } catch (e) {
+          // If remote fails, try cache
+          final cachedNotifications = await localDataSource
+              .getCachedNotifications();
+          return Right(cachedNotifications);
+        }
+      }
+
+      // Normal flow: check cache first
       final cachedNotifications = await localDataSource
           .getCachedNotifications();
-
-      // ✅ If we have cached data, return it immediately
-      // The UI will update instantly
       if (cachedNotifications.isNotEmpty) {
-        // Fire and forget remote fetch to update cache
-        _fetchRemoteAndCache(token);
-
-        // Return cached data immediately
         return Right(cachedNotifications);
       }
 
@@ -66,17 +76,6 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
     } catch (e) {
       debugPrint('⚠️ Failed to fetch notifications: $e');
       return const Right([]);
-    }
-  }
-
-  // ✅ Helper method to fetch remote and update cache in background
-  Future<void> _fetchRemoteAndCache(String token) async {
-    try {
-      final notifications = await remoteDataSource.getNotifications(token);
-      await localDataSource.cacheNotifications(notifications);
-      ServerStatusService().markServerUp();
-    } catch (e) {
-      debugPrint('⚠️ Background notification refresh failed: $e');
     }
   }
 

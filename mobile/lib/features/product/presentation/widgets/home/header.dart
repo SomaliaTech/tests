@@ -163,6 +163,8 @@ class _NotificationIcon extends StatelessWidget {
           );
         }
 
+        // ✅ DON'T dispatch LoadNotifications here
+        // Let the Header's initState handle it
         return BlocBuilder<NotificationsBloc, NotificationsState>(
           builder: (context, state) {
             int unreadCount = 0;

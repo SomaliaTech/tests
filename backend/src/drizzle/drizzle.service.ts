@@ -6,7 +6,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import * as schema from './schema';
 
 interface DrizzleConfig {
@@ -19,6 +19,9 @@ interface DrizzleConfig {
   retryDelayMs?: number;
   statementTimeout?: number;
   queryTimeout?: number;
+  keepAlive?: boolean;
+  keepAliveInitialDelayMillis?: number;
+  connectionRetryInterval?: number;
 }
 
 @Injectable()
@@ -27,18 +30,25 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   private pool!: Pool;
   public db!: NodePgDatabase<typeof schema>;
   private config: Required<DrizzleConfig>;
+  private isShuttingDown = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private isReconnecting = false;
+  private connectionMonitorInterval: NodeJS.Timeout | null = null;
 
   constructor(@Optional() config: DrizzleConfig = {}) {
     this.config = {
-      max: 10, // Neon can handle more connections
-      min: 2,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      maxUses: 100,
-      retryAttempts: 3,
-      retryDelayMs: 500,
-      statementTimeout: 10000,
-      queryTimeout: 10000,
+      max: 5, // Reduced for Neon free tier
+      min: 1,
+      idleTimeoutMillis: 20000,
+      connectionTimeoutMillis: 15000,
+      maxUses: 50,
+      retryAttempts: 5,
+      retryDelayMs: 1000,
+      statementTimeout: 15000,
+      queryTimeout: 15000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 5000,
+      connectionRetryInterval: 30000,
       ...config,
     };
   }
@@ -46,6 +56,7 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.validateEnvironment();
     await this.initializePool();
+    this.startConnectionMonitor();
   }
 
   private validateEnvironment(): void {
@@ -56,18 +67,19 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const parsed = new URL(url);
-      
+
       if (!parsed.username) {
         throw new Error('DATABASE_URL missing username');
       }
-      
+
       if (!parsed.password) {
         throw new Error('DATABASE_URL missing password');
       }
 
-      this.logger.log(`📍 Database: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace('/', '')}`);
+      this.logger.log(
+        `📍 Database: ${parsed.hostname}:${parsed.port || 5432}/${parsed.pathname.replace('/', '')}`,
+      );
       this.logger.log(`👤 User: ${parsed.username}`);
-      
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`Invalid DATABASE_URL: ${error.message}`);
@@ -82,20 +94,19 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     this.logger.log('🔌 Connecting to Neon PostgreSQL...');
 
     try {
-      // Neon uses sslmode=require in the connection string
-      // We don't need to add SSL config separately
       this.pool = new Pool({
         connectionString,
-        // Neon optimized settings
         max: this.config.max,
         min: this.config.min,
         idleTimeoutMillis: this.config.idleTimeoutMillis,
         connectionTimeoutMillis: this.config.connectionTimeoutMillis,
         maxUses: this.config.maxUses,
-        allowExitOnIdle: true,
-        // Neon specific: Keep connections alive
-        keepAlive: true,
-        keepAliveInitialDelayMillis: 10000,
+        allowExitOnIdle: false,
+        keepAlive: this.config.keepAlive,
+        keepAliveInitialDelayMillis: this.config.keepAliveInitialDelayMillis,
+        ssl: {
+          rejectUnauthorized: false, // Neon requires SSL
+        },
       });
 
       this.setupPoolEventHandlers();
@@ -104,37 +115,111 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       this.db = drizzle(this.pool, { schema });
       this.logger.log('✅ Neon PostgreSQL connected successfully');
     } catch (error) {
-      this.logger.error(`Failed to initialize pool: ${(error as Error).message}`);
+      this.logger.error(
+        `Failed to initialize pool: ${(error as Error).message}`,
+      );
       throw error;
+    }
+  }
+
+  /**
+   * Monitor connection health and reconnect if needed
+   */
+  private startConnectionMonitor(): void {
+    this.connectionMonitorInterval = setInterval(async () => {
+      if (this.isShuttingDown || this.isReconnecting) return;
+
+      const isHealthy = await this.checkHealth();
+      if (!isHealthy) {
+        this.logger.warn(
+          '⚠️ Database connection unhealthy, attempting reconnect...',
+        );
+        await this.reconnect();
+      }
+    }, this.config.connectionRetryInterval);
+  }
+
+  /**
+   * Reconnect the pool
+   */
+  private async reconnect(): Promise<void> {
+    if (this.isReconnecting || this.isShuttingDown) return;
+
+    this.isReconnecting = true;
+    this.logger.warn('🔄 Reconnecting to Neon PostgreSQL...');
+
+    try {
+      // Close old pool
+      if (this.pool) {
+        await this.pool.end().catch(() => {});
+      }
+
+      // Reinitialize pool
+      await this.initializePool();
+      this.logger.log('✅ Successfully reconnected to Neon PostgreSQL');
+    } catch (error) {
+      this.logger.error(`❌ Reconnection failed: ${(error as Error).message}`);
+
+      // Schedule retry
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+      }
+
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnect();
+      }, this.config.retryDelayMs * 2);
+    } finally {
+      this.isReconnecting = false;
     }
   }
 
   private setupPoolEventHandlers(): void {
     this.pool.on('error', (err) => {
-      // Neon connections are stable, but handle errors gracefully
-      this.logger.error(`Pool error: ${err.message}`, err.stack);
+      this.logger.error(`Pool error: ${err.message}`);
+
+      // Auto-reconnect on connection termination
+      if (
+        err.message.includes('Connection terminated') ||
+        err.message.includes('Connection terminated unexpectedly') ||
+        err.message.includes(
+          'terminating connection due to administrator command',
+        )
+      ) {
+        this.logger.warn(
+          '🔄 Neon connection terminated, scheduling reconnect...',
+        );
+        setTimeout(() => {
+          this.reconnect();
+        }, 1000);
+      }
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      this.pool.on('connect', () => {
-        this.logger.debug('New client connected to pool');
-      });
-      
-      this.pool.on('acquire', () => {
-        this.logger.debug('Client acquired from pool');
-      });
-      
-      this.pool.on('remove', () => {
-        this.logger.debug('Client removed from pool');
-      });
-    }
+    this.pool.on('connect', (client) => {
+      this.logger.debug('New client connected to pool');
+
+      // Set statement timeout for each connection
+      client
+        .query(`SET statement_timeout = ${this.config.statementTimeout}`)
+        .catch(() => {});
+      client
+        .query(
+          `SET idle_in_transaction_session_timeout = ${this.config.queryTimeout}`,
+        )
+        .catch(() => {});
+    });
+
+    this.pool.on('remove', () => {
+      this.logger.debug('Client removed from pool');
+    });
   }
 
   private async testConnection(): Promise<void> {
-    let client;
+    let client: PoolClient | undefined;
     try {
       client = await this.pool.connect();
-      const result = await client.query('SELECT version(), current_database(), current_user');
+      const result = await client.query(
+        'SELECT version(), current_database(), current_user',
+      );
       this.logger.log(`✅ Database connection test successful`);
       this.logger.log(`📊 PostgreSQL version: ${result.rows[0].version}`);
       this.logger.log(`📊 Database: ${result.rows[0].current_database}`);
@@ -142,16 +227,17 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const err = error as Error;
       this.logger.error(`❌ Failed to connect: ${err.message}`);
-      
-      // Helpful hints for Neon
+
       if (err.message.includes('no pg_hba.conf entry')) {
-        this.logger.error('💡 Neon might have IP restrictions. Check your Neon dashboard for allowed IPs.');
+        this.logger.error(
+          '💡 Neon might have IP restrictions. Check your Neon dashboard for allowed IPs.',
+        );
       }
-      
+
       if (err.message.includes('password authentication failed')) {
-        this.logger.error('💡 Check your DATABASE_URL password. Make sure it\'s correct.');
+        this.logger.error('💡 Check your DATABASE_URL password.');
       }
-      
+
       throw error;
     } finally {
       if (client) {
@@ -175,6 +261,12 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
             `Connection error (${attempt}/${maxRetries}), retrying in ${delay}ms`,
           );
           await this.sleep(delay);
+
+          // Try to reconnect if needed
+          if (attempt === Math.ceil(maxRetries / 2)) {
+            await this.reconnect();
+          }
+
           continue;
         }
         throw error;
@@ -192,6 +284,7 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       'ETIMEDOUT',
       'Connection terminated unexpectedly',
       'no pg_hba.conf entry',
+      'terminating connection due to administrator command',
     ].some((term) => message.includes(term));
   }
 
@@ -209,7 +302,7 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   }
 
   async checkHealth(): Promise<boolean> {
-    let client;
+    let client: PoolClient | undefined;
     try {
       client = await this.pool.connect();
       await client.query('SELECT 1');
@@ -224,6 +317,16 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy() {
+    this.isShuttingDown = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    if (this.connectionMonitorInterval) {
+      clearInterval(this.connectionMonitorInterval);
+    }
+
     if (this.pool) {
       try {
         await this.pool.end();

@@ -23,14 +23,14 @@ class NotificationsScreen extends StatelessWidget {
           );
         }
 
-        // ✅ Use the existing NotificationsBloc from the parent MultiBlocProvider
-        // Don't create a new one - just dispatch the load event
-        final notificationsBloc = context.read<NotificationsBloc>();
-
-        // ✅ Only dispatch if not already loaded
-        if (notificationsBloc.state is! NotificationsLoaded) {
-          notificationsBloc.add(LoadNotifications());
-        }
+        // ✅ Force refresh when opening the screen
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            context.read<NotificationsBloc>().add(
+              const LoadNotifications(forceRefresh: true),
+            );
+          }
+        });
 
         return const NotificationsView();
       },

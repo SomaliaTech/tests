@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
+import 'package:mobile/features/notifications/data/datasources/local/notifications_local_datasource.dart';
 import 'package:mobile/features/notifications/domain/entities/notification.dart';
 import 'package:mobile/features/notifications/domain/usecases/clear_all_notifications.dart';
 import 'package:mobile/features/notifications/domain/usecases/delete_notification.dart';
@@ -18,10 +20,11 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
   final MarkAllAsRead markAllAsRead;
   final DeleteNotification deleteNotification;
   final ClearAllNotifications clearAllNotifications;
-
+  bool _isLoading = false;
+  DateTime? _lastFetchTime;
   final ChatSocketService _socketService = GetIt.instance<ChatSocketService>();
   StreamSubscription? _notificationSub;
-
+  static const Duration _minFetchInterval = Duration(seconds: 30);
   NotificationsBloc({
     required this.getNotifications,
     required this.markAsRead,
@@ -60,6 +63,9 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
     LoadNotifications event,
     Emitter<NotificationsState> emit,
   ) async {
+    if (_isLoading) return;
+    _isLoading = true;
+
     final currentState = state;
     final isSilentRefresh = currentState is NotificationsLoaded;
 
@@ -67,7 +73,12 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
       emit(NotificationsLoading());
     }
 
-    final result = await getNotifications.call();
+    // ✅ Pass forceRefresh when explicitly loading
+    final result = await getNotifications.call(
+      forceRefresh: event.forceRefresh,
+    );
+    _isLoading = false;
+
     result.fold(
       (failure) {
         if (!isSilentRefresh) {
@@ -75,9 +86,6 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
         }
       },
       (notifications) {
-        print(
-          '✅ Emitting ${notifications.length} notifications, unread: ${notifications.where((n) => !n.read).length}',
-        );
         emit(
           NotificationsLoaded(
             notifications: notifications,
@@ -94,20 +102,94 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
     MarkNotificationAsRead event,
     Emitter<NotificationsState> emit,
   ) async {
+    // ✅ Update local state immediately
+    if (state is NotificationsLoaded) {
+      final currentState = state as NotificationsLoaded;
+      final updatedNotifications = currentState.notifications.map((n) {
+        if (n.id == event.id) {
+          return n.copyWith(read: true);
+        }
+        return n;
+      }).toList();
+
+      emit(
+        NotificationsLoaded(
+          notifications: updatedNotifications,
+          currentFilter: currentState.currentFilter,
+        ),
+      );
+    }
+
+    // ✅ Then update backend in background
     final result = await markAsRead.call(event.id);
     result.fold(
-      (failure) => emit(NotificationsError(failure.message)),
-      (_) => add(LoadNotifications()),
+      (failure) {
+        // If backend fails, revert local change
+        if (state is NotificationsLoaded) {
+          final currentState = state as NotificationsLoaded;
+          final revertedNotifications = currentState.notifications.map((n) {
+            if (n.id == event.id) {
+              return n.copyWith(read: false);
+            }
+            return n;
+          }).toList();
+
+          emit(
+            NotificationsLoaded(
+              notifications: revertedNotifications,
+              currentFilter: currentState.currentFilter,
+            ),
+          );
+        }
+        emit(NotificationsError(failure.message));
+      },
+      (_) {
+        // ✅ Backend updated successfully
+        // Also update cache
+        if (state is NotificationsLoaded) {
+          final currentState = state as NotificationsLoaded;
+          // Update cache in background
+          _updateCache(currentState.notifications);
+        }
+      },
     );
+  }
+
+  // ✅ Helper to update cache
+  Future<void> _updateCache(List<NotificationEntity> notifications) async {
+    try {
+      final localDataSource = GetIt.instance<NotificationsLocalDataSource>();
+      await localDataSource.cacheNotifications(notifications);
+    } catch (e) {
+      debugPrint('⚠️ Failed to update cache: $e');
+    }
   }
 
   Future<void> _onMarkAllAsRead(
     MarkAllNotificationsAsRead event,
     Emitter<NotificationsState> emit,
   ) async {
+    // ✅ Update local state immediately
+    if (state is NotificationsLoaded) {
+      final currentState = state as NotificationsLoaded;
+      final updatedNotifications = currentState.notifications.map((n) {
+        return n.copyWith(read: true);
+      }).toList();
+
+      emit(
+        NotificationsLoaded(
+          notifications: updatedNotifications,
+          currentFilter: currentState.currentFilter,
+        ),
+      );
+    }
+
+    // ✅ Then update backend
     final result = await markAllAsRead.call();
     result.fold((failure) => emit(NotificationsError(failure.message)), (_) {
-      add(LoadNotifications());
+      if (state is NotificationsLoaded) {
+        _updateCache((state as NotificationsLoaded).notifications);
+      }
       emit(const NotificationsSuccess('All notifications marked as read'));
     });
   }
@@ -116,20 +198,49 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
     DeleteNotificationEvent event,
     Emitter<NotificationsState> emit,
   ) async {
+    // ✅ Update local state immediately
+    if (state is NotificationsLoaded) {
+      final currentState = state as NotificationsLoaded;
+      final updatedNotifications = currentState.notifications
+          .where((n) => n.id != event.id)
+          .toList();
+
+      emit(
+        NotificationsLoaded(
+          notifications: updatedNotifications,
+          currentFilter: currentState.currentFilter,
+        ),
+      );
+    }
+
+    // ✅ Then update backend
     final result = await deleteNotification.call(event.id);
-    result.fold(
-      (failure) => emit(NotificationsError(failure.message)),
-      (_) => add(LoadNotifications()),
-    );
+    result.fold((failure) => emit(NotificationsError(failure.message)), (_) {
+      if (state is NotificationsLoaded) {
+        _updateCache((state as NotificationsLoaded).notifications);
+      }
+    });
   }
 
   Future<void> _onClearAllNotifications(
     ClearAllNotificationsEvent event,
     Emitter<NotificationsState> emit,
   ) async {
+    // ✅ Clear local state immediately
+    if (state is NotificationsLoaded) {
+      final currentState = state as NotificationsLoaded;
+      emit(
+        NotificationsLoaded(
+          notifications: [],
+          currentFilter: currentState.currentFilter,
+        ),
+      );
+    }
+
+    // ✅ Then update backend
     final result = await clearAllNotifications.call();
     result.fold((failure) => emit(NotificationsError(failure.message)), (_) {
-      add(LoadNotifications());
+      _updateCache([]);
       emit(const NotificationsSuccess('All notifications cleared'));
     });
   }

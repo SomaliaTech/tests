@@ -372,37 +372,10 @@ export class AuthService {
   }
 
   async facebookSignIn(dto: FacebookAuthDto) {
+    this.logger.log('📘 Facebook sign in called');
+
     try {
-      // 1. First verify the token with Facebook Graph API
-      const appId = this.configService.get<string>('FACEBOOK_APP_ID');
-      const appSecret = this.configService.get<string>('FACEBOOK_APP_SECRET');
-
-      if (!appId || !appSecret) {
-        this.logger.error('Facebook credentials not configured');
-        throw new UnauthorizedException(
-          'Facebook authentication not configured',
-        );
-      }
-
-      // Verify the access token
-      const verifyResponse = await axios.get(
-        `https://graph.facebook.com/debug_token`,
-        {
-          params: {
-            input_token: dto.accessToken,
-            access_token: `${appId}|${appSecret}`,
-          },
-        },
-      );
-
-      const tokenData = verifyResponse.data?.data;
-
-      if (!tokenData?.is_valid) {
-        this.logger.error('Invalid Facebook token');
-        throw new UnauthorizedException('Invalid Facebook token');
-      }
-
-      // 2. Get user info from Facebook
+      // Get user info from Facebook
       const graphResponse = await axios.get(`https://graph.facebook.com/me`, {
         params: {
           fields: 'id,name,email,picture',
@@ -410,15 +383,76 @@ export class AuthService {
         },
       });
 
+      this.logger.log(
+        `📘 Facebook user: ${JSON.stringify(graphResponse.data)}`,
+      );
+
       const fbUser = graphResponse.data;
       const fbId = fbUser.id;
-      const email = fbUser.email || null;
       const name = fbUser.name || 'Facebook User';
+      const email = fbUser.email || null;
       const profileImage = fbUser.picture?.data?.url || null;
 
-      // Rest of your existing code...
+      // Check if user exists
+      let userResult = await this.drizzle.db
+        .select()
+        .from(users)
+        .where(eq(users.facebookId, fbId))
+        .limit(1);
+
+      if (userResult.length === 0) {
+        const newUser = {
+          id: uuidv4(),
+          facebookId: fbId,
+          email: email,
+          name: name,
+          profileImage: profileImage,
+          phoneNumber: null,
+          isVerified: true,
+          isAdmin: false,
+          isSuperAdmin: false,
+          isActive: true,
+          isOnline: false,
+          marketId: null,
+          otpCode: null,
+          otpExpiresAt: null,
+          lastSeen: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        await this.drizzle.db.insert(users).values(newUser);
+        userResult = [newUser as typeof users.$inferSelect];
+      }
+
+      const currentUser = userResult[0];
+
+      const token = this.generateToken(
+        currentUser.id,
+        currentUser.phoneNumber || '',
+        currentUser.isAdmin ?? false,
+        currentUser.isSuperAdmin ?? false,
+      );
+
+      // ✅ RETURN the result
+      return {
+        message: 'Facebook login successful',
+        token,
+        user: {
+          id: currentUser.id,
+          phoneNumber: currentUser.phoneNumber || null,
+          email: currentUser.email,
+          name: currentUser.name,
+          profileImage: currentUser.profileImage,
+          marketId: currentUser.marketId,
+          isVerified: currentUser.isVerified,
+          hasProfile: !!currentUser.phoneNumber,
+          isAdmin: currentUser.isAdmin ?? false,
+          isSuperAdmin: currentUser.isSuperAdmin ?? false,
+        },
+      };
     } catch (error) {
-      this.logger.error('Facebook sign in failed:', error);
+      this.logger.error('❌ Facebook sign in error:', error);
       throw new UnauthorizedException('Facebook authentication failed');
     }
   }

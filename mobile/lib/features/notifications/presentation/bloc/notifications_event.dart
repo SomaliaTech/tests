@@ -8,7 +8,13 @@ abstract class NotificationsEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class LoadNotifications extends NotificationsEvent {}
+class LoadNotifications extends NotificationsEvent {
+  final bool forceRefresh;
+  const LoadNotifications({this.forceRefresh = false});
+
+  @override
+  List<Object?> get props => [forceRefresh];
+}
 
 // Renamed from MarkAsRead to MarkNotificationAsRead
 class MarkNotificationAsRead extends NotificationsEvent {

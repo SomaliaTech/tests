@@ -8,7 +8,9 @@ class Failure {
 }
 
 abstract class NotificationsRepository {
-  Future<Either<Failure, List<NotificationEntity>>> getNotifications();
+  Future<Either<Failure, List<NotificationEntity>>> getNotifications({
+    bool forceRefresh = false,
+  });
   Future<Either<Failure, void>> markAsRead(String id);
   Future<Either<Failure, void>> markAllAsRead();
   Future<Either<Failure, void>> deleteNotification(String id);
