@@ -1,3 +1,5 @@
+// lib/core/services/injection_container.dart
+
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
@@ -10,6 +12,7 @@ import 'package:mobile/core/services/analytics_injection.dart';
 import 'package:mobile/core/services/auth_ijdection.dart';
 import 'package:mobile/core/services/banner_injection.dart';
 import 'package:mobile/core/services/cart_injection.dart';
+import 'package:mobile/core/services/connectivity_service.dart'; // ✅ ADD THIS IMPORT
 import 'package:mobile/core/services/dashboard_injection.dart';
 import 'package:mobile/core/services/notification_injection.dart';
 import 'package:mobile/core/services/order_injection.dart';
@@ -61,6 +64,10 @@ Future<void> initDependencies() async {
     ),
   );
 
+  // ✅ REGISTER ConnectivityService HERE (BEFORE any BLoC that depends on it)
+  sl.registerLazySingleton<ConnectivityService>(() => ConnectivityService());
+  print('✅ ConnectivityService registered');
+
   sl.registerLazySingleton<ServerStatusService>(() => ServerStatusService());
   sl.registerLazySingleton(() => GetAdminUsers(sl()));
 
@@ -69,27 +76,27 @@ Future<void> initDependencies() async {
       () => PermissionService(storageService: sl(), client: sl()),
     );
   }
+
   // ==========================================
-  // ✅ Register each dependency group ONLY ONCE
+  // ✅ Register each dependency group
   // ==========================================
-  registerCategoryDependencies(sl); // ✅ ONCE
-  registerProductDependencies(sl); // ✅ ONCE
-  registerWishlistDependencies(sl); // ✅ ONCE
-  authRegisterDependencies(sl); // ✅ ONCE
-  registerProfileDependencies(sl); // ✅ ONCE
-  addressRegisterDependencies(sl); // ✅ ONCE
-  registerMarketDependencies(sl); // ✅ ONCE
-  orderRegisterDependencies(sl); // ✅ ONCE
-  registerCartDependencies(sl); // ✅ ONCE
-  registerAdminDependencies(sl); // ✅ ONCE
-  registerDashboardDependencies(sl); // ✅ ONCE
-  trackingRegisterDependencies(sl); // ✅ ONCE
-  registerNotificationDependencies(sl); // ✅ ONCE
-  registerChatDependencies(); // ✅ ONCE
+  registerCategoryDependencies(sl);
+  registerProductDependencies(sl);
+  registerWishlistDependencies(sl);
+  authRegisterDependencies(sl);
+  registerProfileDependencies(sl);
+  addressRegisterDependencies(sl);
+  registerMarketDependencies(sl);
+  orderRegisterDependencies(sl);
+  registerCartDependencies(sl);
+  registerAdminDependencies(sl);
+  registerDashboardDependencies(sl);
+  trackingRegisterDependencies(sl);
+  registerNotificationDependencies(sl);
+  registerChatDependencies(); // ⚠️ This doesn't use sl parameter
   registerSupportDependencies(sl);
   registerAdminFaqDependencies(sl);
   registerAnalyticsDependencies(sl);
   registerAdminRoleDependencies(sl);
-  // Banner
   registerBannerDependencies(sl);
 }

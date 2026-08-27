@@ -1,7 +1,8 @@
+// src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler'; // Keep module for specific guards
+// ❌ REMOVED: ThrottlerGuard from imports (no longer global)
 
 import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
@@ -26,30 +27,15 @@ import { RedisModule } from './redis/redis.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
 
+    // ✅ KEEP ThrottlerModule so @Throttle() decorators in AuthController still work
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
-        {
-          name: 'default',
-          ttl: 60000,
-          limit: 2000, // ✅ Increased to 2000 requests per minute
-        },
-        {
-          name: 'auth',
-          ttl: 60000,
-          limit: 30, // Increased from 20
-        },
-        {
-          name: 'otp',
-          ttl: 60000,
-          limit: 10, // Increased from 5
-        },
-        {
-          name: 'payment',
-          ttl: 60000,
-          limit: 20, // Increased from 10
-        },
+        { name: 'default', ttl: 60000, limit: 100 },
+        { name: 'auth', ttl: 60000, limit: 20 },
+        { name: 'otp', ttl: 60000, limit: 5 },
+        { name: 'payment', ttl: 60000, limit: 10 },
       ],
     }),
 
@@ -73,10 +59,8 @@ import { RedisModule } from './redis/redis.module';
   providers: [
     AppService,
     PermissionGuard,
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    // ❌ CRITICAL FIX: REMOVED ThrottlerGuard from APP_GUARD
+    // This ensures logged-in users are NEVER rate limited globally.
   ],
 })
 export class AppModule {}

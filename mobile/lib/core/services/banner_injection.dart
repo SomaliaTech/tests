@@ -13,6 +13,7 @@ import '../../features/product/domain/usecases/banner/create_banner.dart';
 import '../../features/product/domain/usecases/banner/update_banner.dart';
 import '../../features/product/domain/usecases/banner/delete_banner.dart';
 import '../../features/product/domain/usecases/banner/toggle_banner_status.dart';
+import 'connectivity_service.dart'; // ✅ ADD THIS IMPORT
 
 void registerBannerDependencies(GetIt sl) {
   print('📦 Registering Banner Dependencies...');
@@ -23,7 +24,6 @@ void registerBannerDependencies(GetIt sl) {
   );
   print('✅ BannerRemoteDataSource registered');
 
-  // ✅ Local Data Source (Hive-based for offline)
   sl.registerLazySingleton<BannerLocalDataSource>(
     () => BannerLocalDataSourceImpl(),
   );
@@ -48,8 +48,14 @@ void registerBannerDependencies(GetIt sl) {
   sl.registerLazySingleton(() => ToggleBannerStatus(sl()));
   print('✅ Banner Use Cases registered');
 
-  // BLoCs
-  sl.registerFactory(() => BannerBloc(getActiveBanners: sl()));
+  // BLoCs - ✅ Get ConnectivityService from GetIt
+  sl.registerFactory(
+    () => BannerBloc(
+      getActiveBanners: sl(),
+      connectivityService:
+          sl<ConnectivityService>(), // ✅ Explicitly get from GetIt
+    ),
+  );
   sl.registerFactory(
     () => AdminBannerBloc(
       getAllBanners: sl(),

@@ -16,42 +16,59 @@ class LatestProductsSection extends StatefulWidget {
   State<LatestProductsSection> createState() => _LatestProductsSectionState();
 }
 
-// ✅ ADDED: AutomaticKeepAliveClientMixin
 class _LatestProductsSectionState extends State<LatestProductsSection>
     with AutomaticKeepAliveClientMixin {
-  // ✅ REQUIRED: Keep widget alive when scrolled off-screen
   @override
   bool get wantKeepAlive => true;
 
   bool _wasOffline = false;
   bool _hasLoadedOnce = false;
+  ConnectivityService? _connectivityService;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadProducts();
+
+      _connectivityService = context.read<ConnectivityService>();
+      _wasOffline = _connectivityService!.status != ConnectionStatus.online;
+      _connectivityService!.addListener(_onConnectivityChanged);
     });
   }
 
-  void _loadProducts() {
+  void _onConnectivityChanged() {
+    if (!mounted) return;
+    final isOnline = _connectivityService!.status == ConnectionStatus.online;
+
+    if (isOnline && _wasOffline && _hasLoadedOnce) {
+      _loadProducts(forceRefresh: true);
+    }
+    _wasOffline = !isOnline;
+  }
+
+  void _loadProducts({bool forceRefresh = false}) {
     if (!mounted) return;
 
     final bloc = context.read<ProductBloc>();
 
-    // ✅ If data is already loaded in BLoC, do NOT reload
-    if (bloc.state is LatestProductsLoaded) {
+    if (!forceRefresh && bloc.state is LatestProductsLoaded) {
       _hasLoadedOnce = true;
       return;
     }
 
-    bloc.add(const GetLatestProductsEvent());
+    bloc.add(GetLatestProductsEvent(forceRefresh: forceRefresh));
     _hasLoadedOnce = true;
   }
 
   @override
+  void dispose() {
+    _connectivityService?.removeListener(_onConnectivityChanged);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // ✅ REQUIRED: Must call super.build when using AutomaticKeepAliveClientMixin
     super.build(context);
 
     return Padding(
@@ -73,106 +90,90 @@ class _LatestProductsSectionState extends State<LatestProductsSection>
             ],
           ),
           const SizedBox(height: 15),
-          Consumer<ConnectivityService>(
-            builder: (context, connectivity, _) {
-              final isOnline = connectivity.status == ConnectionStatus.online;
-
-              if (isOnline && _wasOffline && _hasLoadedOnce) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _loadProducts();
-                });
+          BlocBuilder<ProductBloc, ProductState>(
+            buildWhen: (previous, current) =>
+                current is LatestProductsLoaded ||
+                current is LatestProductsLoading ||
+                current is LatestProductsError,
+            builder: (context, state) {
+              if (state is LatestProductsLoading) {
+                return const ProductsGridSkeleton();
               }
-              _wasOffline = !isOnline;
 
-              return BlocBuilder<ProductBloc, ProductState>(
-                buildWhen: (previous, current) =>
-                    current is LatestProductsLoaded ||
-                    current is LatestProductsLoading ||
-                    current is LatestProductsError,
-                builder: (context, state) {
-                  if (state is LatestProductsLoading) {
-                    return const ProductsGridSkeleton();
-                  }
+              if (state is LatestProductsLoaded) {
+                if (state.products.isEmpty) {
+                  return const EmptyStateWidget(
+                    title: 'No New Arrivals',
+                    message: 'Check back later for the latest products!',
+                    icon: Icons.new_releases,
+                  );
+                }
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 15,
+                    mainAxisExtent: 250,
+                  ),
+                  itemCount: state.products.length,
+                  itemBuilder: (context, index) {
+                    return ProductCard(product: state.products[index]);
+                  },
+                );
+              }
 
-                  if (state is LatestProductsLoaded) {
-                    if (state.products.isEmpty) {
-                      return const EmptyStateWidget(
-                        title: 'No New Arrivals',
-                        message: 'Check back later for the latest products!',
-                        icon: Icons.new_releases,
-                      );
-                    }
-                    return GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: EdgeInsets.zero,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 15,
-                            mainAxisExtent: 250,
-                          ),
-                      itemCount: state.products.length,
-                      itemBuilder: (context, index) {
-                        return ProductCard(product: state.products[index]);
-                      },
-                    );
-                  }
+              if (state is LatestProductsError) {
+                final isOfflineError =
+                    state.message.toLowerCase().contains('internet') ||
+                    state.message.toLowerCase().contains('network') ||
+                    state.message.toLowerCase().contains('connection');
 
-                  if (state is LatestProductsError) {
-                    final isOfflineError =
-                        state.message.toLowerCase().contains('internet') ||
-                        state.message.toLowerCase().contains('network') ||
-                        state.message.toLowerCase().contains('connection');
-
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              isOfflineError
-                                  ? Icons.wifi_off_rounded
-                                  : Icons.error_outline,
-                              size: 48,
-                              color: isOfflineError
-                                  ? Colors.orange
-                                  : Colors.red,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              state.message,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _loadProducts,
-                              icon: const Icon(Icons.refresh, size: 16),
-                              label: const Text('Retry'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2ED573),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                              ),
-                            ),
-                          ],
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          isOfflineError
+                              ? Icons.wifi_off_rounded
+                              : Icons.error_outline,
+                          size: 48,
+                          color: isOfflineError ? Colors.orange : Colors.red,
                         ),
-                      ),
-                    );
-                  }
+                        const SizedBox(height: 12),
+                        Text(
+                          state.message,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: () => _loadProducts(forceRefresh: true),
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2ED573),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
 
-                  return const SizedBox.shrink();
-                },
-              );
+              return const SizedBox.shrink();
             },
           ),
         ],

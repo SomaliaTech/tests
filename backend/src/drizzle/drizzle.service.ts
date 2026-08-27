@@ -144,35 +144,23 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
    */
   private async reconnect(): Promise<void> {
     if (this.isReconnecting || this.isShuttingDown) return;
-
     this.isReconnecting = true;
     this.logger.warn('🔄 Reconnecting to Neon PostgreSQL...');
 
     try {
-      // Close old pool
-      if (this.pool) {
-        await this.pool.end().catch(() => {});
-      }
+      // ✅ FIX: Do NOT call this.pool.end() here.
+      // pg-pool automatically discards dead connections.
+      // Just test the connection to ensure the network is back.
+      await this.testConnection();
 
-      // Reinitialize pool
-      await this.initializePool();
       this.logger.log('✅ Successfully reconnected to Neon PostgreSQL');
     } catch (error) {
       this.logger.error(`❌ Reconnection failed: ${(error as Error).message}`);
-
-      // Schedule retry
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-      }
-
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnect();
-      }, this.config.retryDelayMs * 2);
+      // Schedule retry...
     } finally {
       this.isReconnecting = false;
     }
   }
-
   private setupPoolEventHandlers(): void {
     this.pool.on('error', (err) => {
       this.logger.error(`Pool error: ${err.message}`);

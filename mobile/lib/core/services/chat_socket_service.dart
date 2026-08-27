@@ -1,3 +1,5 @@
+// lib/core/services/chat_socket_service.dart
+
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:get_it/get_it.dart';
@@ -12,12 +14,12 @@ import 'package:flutter/foundation.dart';
 class ChatSocketService {
   io.Socket? _socket;
   bool _isConnected = false;
-  bool _isConnecting = false; // ✅ ADD THIS
-  Timer? _reconnectTimer;
+  bool _isConnecting = false;
   Timer? _heartbeatTimer;
   int _reconnectAttempts = 0;
-  static const int _maxReconnectAttempts = 5;
+  static const int _maxReconnectAttempts = 10; // Increased for weak networks
   String? _userId;
+  bool _isDisposed = false;
 
   final StorageService _storageService = GetIt.instance<StorageService>();
   final Logger _logger = Logger();
@@ -65,21 +67,29 @@ class ChatSocketService {
       _userDeletedController.stream;
 
   Future<void> connect() async {
+    // Prevent connection attempts after disposal
+    if (_isDisposed) {
+      _logger.w('⚠️ [WS] Service is disposed, cannot connect');
+      return;
+    }
+
+    // Block if already connected
+    if (_socket?.connected == true) {
+      _logger.i('✅ [WS] Already connected');
+      _isConnected = true;
+      _isConnecting = false;
+      return;
+    }
+
+    // Block if connection in progress
+    if (_isConnecting) {
+      _logger.i('⏳ [WS] Connection already in progress');
+      return;
+    }
+
+    _isConnecting = true;
+
     try {
-      // Block if already connected
-      if (_socket?.connected == true) {
-        _logger.i('✅ [WS] Already connected');
-        return;
-      }
-
-      // Block if connection in progress
-      if (_isConnecting) {
-        _logger.i('⏳ [WS] Connection in progress');
-        return;
-      }
-
-      _isConnecting = true;
-
       final token = await _storageService.getAuthToken();
       if (token == null) {
         _logger.w('❌ [WS] No token found');
@@ -88,8 +98,8 @@ class ChatSocketService {
         return;
       }
 
-      // Clean up only if socket exists but is NOT connected
-      if (_socket != null && !_socket!.connected) {
+      // Clean up old socket if it exists
+      if (_socket != null) {
         await _cleanupSocket();
       }
 
@@ -98,68 +108,55 @@ class ChatSocketService {
       final wsUrl = ApiConstants.wsUrl;
       _logger.i('🔌 [WS] Connecting to: $wsUrl/chat');
 
+      // ✅ Create socket with proper reconnection settings
       _socket = io.io(
         '$wsUrl/chat',
         io.OptionBuilder()
             .setTransports(['websocket'])
-            .disableAutoConnect()
             .setAuth({'token': token})
             .setTimeout(20000)
+            // ✅ Let the library handle reconnection - NO manual timer
             .enableReconnection()
             .setReconnectionAttempts(_maxReconnectAttempts)
-            .setReconnectionDelay(3000)
-            .setReconnectionDelayMax(15000)
+            .setReconnectionDelay(2000) // Start with 2s
+            .setReconnectionDelayMax(30000) // Max 30s between attempts
+            // ❌ REMOVE THIS LINE - not available in socket_io_client
+            // .setReconnectionRandomness(0.5)
             .build(),
       );
 
-      // ✅ FIXED: Use proper parameter names instead of _
-      _socket!.onConnect((dynamic data) {
-        _isConnecting = false;
-        _onConnect(data);
-      });
+      // Setup event listeners
+      _socket!.onConnect((data) => _onConnect(data));
+      _socket!.onConnectError((error) => _onConnectError(error));
+      _socket!.onDisconnect((reason) => _onDisconnect(reason));
+      _socket!.onReconnect((attempt) => _onReconnect(attempt));
+      _socket!.onReconnectFailed((data) => _onReconnectFailed(data));
+      _socket!.onReconnectError((error) => _onReconnectError(error));
+      _socket!.onReconnectAttempt((attempt) => _onReconnectAttempt(attempt));
 
-      _socket!.onConnectError((dynamic error) {
-        _isConnecting = false;
-        _onConnectError(error);
-      });
-
-      _socket!.onDisconnect((dynamic reason) {
-        _onDisconnect(reason);
-      });
-
-      _socket!.onReconnect((dynamic attempt) {
-        _isConnecting = false;
-        _onReconnect(attempt);
-      });
-
-      _socket!.onReconnectFailed((dynamic data) {
-        _isConnecting = false;
-        _onReconnectFailed(data);
-      });
-
-      _socket!.onReconnectError((dynamic error) {
-        _isConnecting = false;
-        _onReconnectError(error);
-      });
-
+      // Connect
       _socket!.connect();
     } catch (e) {
       _isConnecting = false;
       _logger.e('❌ [WS] Connection setup failed: $e');
       _errorController.add('Connection setup failed: $e');
-      _scheduleReconnect();
+
+      // ✅ Let the library handle retries instead of manual timer
+      if (_socket != null) {
+        _socket!.connect();
+      }
     }
   }
 
-  void sendTypingEvent(String receiverId, bool isTyping) {
-    if (_isConnected) {
-      _socket?.emit('typing', {'receiverId': receiverId, 'isTyping': isTyping});
-    }
+  // ✅ New: Called when reconnection is attempted
+  void _onReconnectAttempt(dynamic attempt) {
+    _logger.i('🔄 [WS] Reconnection attempt #$attempt');
+    _connectionController.add(false);
   }
 
-  // ✅ FIXED: Use proper parameter names
   void _onConnect(dynamic data) {
     _isConnected = true;
+    _isConnecting = false;
     _reconnectAttempts = 0;
     _logger.i('🟢 [WS] Connected - Socket ID: ${_socket!.id}');
     _connectionController.add(true);
@@ -169,71 +166,71 @@ class ChatSocketService {
 
   void _onConnectError(dynamic error) {
     _isConnected = false;
+    _isConnecting = false; // ✅ Reset flag
     _logger.e('🔴 [WS] Connection error: $error');
     _connectionController.add(false);
-    _errorController.add('Connection failed: $error');
-    _scheduleReconnect();
+
+    // Only add error if it's not a normal reconnection attempt
+    if (_reconnectAttempts == 0) {
+      _errorController.add('Connection failed: $error');
+    }
   }
 
   void _onDisconnect(dynamic reason) {
     _isConnected = false;
+    _isConnecting = false; // ✅ Reset flag
     _logger.w('🔴 [WS] Disconnected: $reason');
     _connectionController.add(false);
     _stopHeartbeat();
-    _scheduleReconnect();
   }
 
   void _onReconnect(dynamic attempt) {
     _isConnected = true;
+    _isConnecting = false;
     _reconnectAttempts = 0;
-    _logger.i('🔄 [WS] Reconnected after $attempt attempts');
+    _logger.i('🔄 [WS] Reconnected successfully after $attempt attempts');
     _connectionController.add(true);
     _setupListeners();
     _startHeartbeat();
   }
 
-  // ✅ FIXED: Proper parameter name
   void _onReconnectFailed(dynamic data) {
     _isConnected = false;
+    _isConnecting = false; // ✅ Reset flag
     _logger.e(
       '❌ [WS] Failed to reconnect after $_maxReconnectAttempts attempts',
     );
-    _errorController.add('Failed to reconnect to chat server');
-  }
-
-  void _onReconnectError(dynamic error) {
-    _logger.e('❌ [WS] Reconnection error: $error');
-    _errorController.add('Reconnection error: $error');
-  }
-
-  void _scheduleReconnect() {
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
-      _logger.w('⚠️ [WS] Max reconnection attempts reached');
-      return;
-    }
-
-    _reconnectTimer?.cancel();
-    final delay = Duration(seconds: min(3 * (_reconnectAttempts + 1), 30));
-    _reconnectAttempts++;
-
-    _logger.i(
-      '🔄 [WS] Scheduling reconnect attempt $_reconnectAttempts in ${delay.inSeconds}s',
+    _connectionController.add(false);
+    _errorController.add(
+      'Unable to connect to chat server. Please check your internet connection and try again.',
     );
 
-    _reconnectTimer = Timer(delay, () {
-      if (!_isConnected) {
-        connect();
-      }
+    // ✅ Notify the user through a separate channel
+    _statusController.add({
+      'event': 'reconnect_failed',
+      'message': 'Chat connection lost. Please refresh.',
     });
   }
 
-  int min(int a, int b) => a < b ? a : b;
+  void _onReconnectError(dynamic error) {
+    _isConnecting = false;
+    _logger.e('❌ [WS] Reconnection error: $error');
+    // Don't add to error controller to prevent spam
+  }
+
+  void sendTypingEvent(String receiverId, bool isTyping) {
+    if (_isConnected && _socket != null) {
+      _socket!.emit('typing', {'receiverId': receiverId, 'isTyping': isTyping});
+    }
+  }
 
   void _startHeartbeat() {
     _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isConnected && _socket != null) {
+      if (_isConnected && _socket != null && !_isDisposed) {
         _socket!.emit('heartbeat', {});
+      } else if (_isDisposed) {
+        _stopHeartbeat();
       }
     });
   }
@@ -367,6 +364,11 @@ class ChatSocketService {
     String type = 'text',
     String? mediaUrl,
   }) {
+    if (_isDisposed) {
+      _logger.w('⚠️ [WS] Service is disposed, cannot send message');
+      return;
+    }
+
     if (!_isConnected) {
       _logger.w('⚠️ [WS] Cannot send - not connected. Attempting reconnect...');
       connect();
@@ -385,56 +387,81 @@ class ChatSocketService {
   }
 
   void markAsRead(String partnerId) {
-    if (_isConnected) {
-      _socket?.emit('mark_read', {'chatPartnerId': partnerId});
+    if (_isConnected && _socket != null && !_isDisposed) {
+      _socket!.emit('mark_read', {'chatPartnerId': partnerId});
     }
   }
 
   void checkPartnerStatus(String partnerId) {
-    if (_isConnected) {
-      _socket?.emit('check_status', {'partnerId': partnerId});
+    if (_isConnected && _socket != null && !_isDisposed) {
+      _socket!.emit('check_status', {'partnerId': partnerId});
     }
   }
 
   Future<void> _cleanupSocket() async {
     _logger.i('🧹 [WS] Cleaning up socket...');
     _stopHeartbeat();
+
     try {
-      _socket?.off('connected');
-      _socket?.off('new_message');
-      _socket?.off('message_sent');
-      _socket?.off('partner_status');
-      _socket?.off('message_read');
-      _socket?.off('error');
-      _socket?.off('new_notification');
-      _socket?.off('user_deleted');
-      _socket?.off('new_order');
-      _socket?.off('role_changed');
-      _socket?.off('connect');
-      _socket?.off('connect_error');
-      _socket?.off('disconnect');
-      _socket?.off('reconnect');
-      _socket?.off('reconnect_failed');
-      _socket?.off('reconnect_error');
-      _socket?.off('typing');
-      _socket?.disconnect();
-      _socket?.dispose();
+      if (_socket != null) {
+        // Remove all listeners
+        _socket!.off('connected');
+        _socket!.off('new_message');
+        _socket!.off('message_sent');
+        _socket!.off('partner_status');
+        _socket!.off('message_read');
+        _socket!.off('error');
+        _socket!.off('new_notification');
+        _socket!.off('user_deleted');
+        _socket!.off('new_order');
+        _socket!.off('role_changed');
+        _socket!.off('connect');
+        _socket!.off('connect_error');
+        _socket!.off('disconnect');
+        _socket!.off('reconnect');
+        _socket!.off('reconnect_failed');
+        _socket!.off('reconnect_error');
+        _socket!.off('reconnect_attempt');
+        _socket!.off('typing');
+
+        // Disconnect and dispose
+        _socket!.disconnect();
+        _socket!.dispose();
+      }
     } catch (e) {
       _logger.e('❌ [WS] Error cleaning up socket: $e');
     }
+
     _socket = null;
     _isConnected = false;
+    _isConnecting = false;
   }
 
   Future<void> disconnect() async {
     _logger.i('🔌 [WS] Disconnecting...');
-    _reconnectTimer?.cancel();
     await _cleanupSocket();
     _connectionController.add(false);
   }
 
+  /// ✅ New: Force reconnect (useful when network comes back)
+  Future<void> reconnect() async {
+    _logger.i('🔄 [WS] Manual reconnect requested');
+    await _cleanupSocket();
+    _isConnecting = false;
+    _reconnectAttempts = 0;
+    await connect();
+  }
+
   void dispose() {
-    _reconnectTimer?.cancel();
+    if (_isDisposed) return;
+    _isDisposed = true;
+
+    _logger.i('🗑️ [WS] Disposing ChatSocketService...');
+
+    _stopHeartbeat();
+    disconnect();
+
+    // Close all streams
     _newMessageController.close();
     _typingController.close();
     _statusController.close();
@@ -447,6 +474,5 @@ class ChatSocketService {
     _newOrderController.close();
     _roleChangeController.close();
     _userDeletedController.close();
-    disconnect();
   }
 }

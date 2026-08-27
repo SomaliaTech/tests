@@ -1,4 +1,6 @@
-// lib/main.dart - Improved version
+// lib/main.dart - Complete version with ChatSocketService integration
+
+import 'dart:async';
 import 'dart:io';
 import 'package:hive_flutter/adapters.dart';
 import 'package:iconsax/iconsax.dart';
@@ -85,15 +87,56 @@ void main() async {
     Hive.openBox<String>('notifications_cache'),
   ]);
 
-  // ✅ Initialize dependencies AFTER boxes are open
+  // ✅ Initialize dependencies (includes ConnectivityService registration)
   await initDependencies();
 
   // Clear corrupted image cache on app start
   await clearImageCache();
 
-  // Initialize connectivity service
-  final connectivityService = ConnectivityService();
+  // ✅ Get ConnectivityService from GetIt
+  final connectivityService = sl<ConnectivityService>();
   connectivityService.initialize();
+
+  // ✅ Initialize ChatSocketService
+  final socketService = sl<ChatSocketService>();
+
+  // ✅ Connect when app starts (if user is authenticated)
+  final storageService = sl<StorageService>();
+  final isAuthenticated = await storageService.isAuthenticated();
+  final token = await storageService.getAuthToken();
+  final hasValidToken = isAuthenticated && token != null && token.isNotEmpty;
+
+  if (hasValidToken) {
+    // Connect socket in background
+    socketService.connect().catchError((e) {
+      debugPrint('⚠️ Chat socket connection error: $e');
+    });
+  }
+
+  // ✅ Listen for connection status
+  socketService.onConnectionChange.listen((isConnected) {
+    if (isConnected) {
+      debugPrint('🟢 Chat socket connected');
+    } else {
+      debugPrint('🔴 Chat socket disconnected - auto-reconnect active');
+    }
+  });
+
+  // ✅ Listen for critical errors
+  socketService.onError.listen((error) {
+    // Show to user only if critical
+    if (error.contains('failed to reconnect') ||
+        error.contains('Unable to connect to chat server')) {
+      // You can show a snackbar or banner here
+      debugPrint('⚠️ Critical chat error: $error');
+
+      // Optionally show a snackbar using a global key or event
+      // NavigationService.showSnackBar(
+      //   message: 'Chat connection lost. Please check your internet.',
+      //   isError: true,
+      // );
+    }
+  });
 
   // Initialize push notifications in background
   PushNotificationService().init().catchError((e) {
@@ -105,16 +148,16 @@ void main() async {
     debugPrint('⚠️ Sound manager init failed: $e');
   });
 
-  // 🚀 Check if user is already authenticated BEFORE building the app
-  final storageService = sl<StorageService>();
-  final isAuthenticated = await storageService.isAuthenticated();
-  final token = await storageService.getAuthToken();
+  // 🚀 Check authentication status
+  final isAuth = await storageService.isAuthenticated();
+  final authToken = await storageService.getAuthToken();
 
   runApp(
     MyApp(
       connectivityService: connectivityService,
+      socketService: socketService,
       isInitiallyAuthenticated:
-          isAuthenticated && token != null && token.isNotEmpty,
+          isAuth && authToken != null && authToken.isNotEmpty,
     ),
   );
 }
@@ -126,12 +169,8 @@ Future<void> clearImageCache() async {
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
 
-    // 2. Clear CachedNetworkImage disk cache (if you use the package)
+    // 2. Clear CachedNetworkImage disk cache
     try {
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-
-      // 2. Clear CachedNetworkImage disk cache completely
       await DefaultCacheManager().emptyCache();
     } catch (_) {}
 
@@ -156,11 +195,13 @@ Future<void> clearImageCache() async {
 
 class MyApp extends StatefulWidget {
   final ConnectivityService connectivityService;
+  final ChatSocketService socketService;
   final bool isInitiallyAuthenticated;
 
   const MyApp({
     super.key,
     required this.connectivityService,
+    required this.socketService,
     required this.isInitiallyAuthenticated,
   });
 
@@ -170,37 +211,116 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   bool _socketConnected = false;
+  StreamSubscription? _connectivitySubscription;
+  StreamSubscription? _socketConnectionSubscription;
+  StreamSubscription? _socketErrorSubscription;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // ✅ Listen to socket connection status
+    _socketConnectionSubscription = widget.socketService.onConnectionChange
+        .listen((isConnected) {
+          setState(() {
+            _socketConnected = isConnected;
+          });
+        });
+
+    // ✅ Listen to socket errors
+    _socketErrorSubscription = widget.socketService.onError.listen((error) {
+      // Only show critical errors to user
+      if (error.contains('failed to reconnect') ||
+          error.contains('Unable to connect')) {
+        _showChatErrorSnackBar(error);
+      }
+    });
+
+    // ✅ Listen to connectivity changes using the stream
+    _connectivitySubscription = widget.connectivityService.onConnectivityChange
+        .listen((status) {
+          _onConnectivityChanged(status);
+        });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _connectivitySubscription?.cancel();
+    _socketConnectionSubscription?.cancel();
+    _socketErrorSubscription?.cancel();
     super.dispose();
+  }
+
+  void _onConnectivityChanged(ConnectionStatus status) {
+    // ✅ When network comes back online, try to reconnect socket
+    if (status == ConnectionStatus.online) {
+      debugPrint('🌐 Network online - checking chat socket...');
+
+      // Only reconnect if user is authenticated
+      final storageService = sl<StorageService>();
+      storageService.isAuthenticated().then((isAuth) {
+        if (isAuth && !_socketConnected) {
+          debugPrint('🔄 Attempting to reconnect chat socket...');
+          widget.socketService.reconnect().catchError((e) {
+            debugPrint('⚠️ Socket reconnect error: $e');
+          });
+        }
+      });
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final authState = sl<AuthBloc>().state;
-      if (authState is Authenticated ||
-          authState is OtpVerified ||
-          authState is ProfileCompleted) {
-        if (widget.connectivityService.status != ConnectionStatus.offline) {
-          // ✅ Only connect if not already connected
-          final socketService = sl<ChatSocketService>();
-          if (!socketService.isConnected && !_socketConnected) {
-            _socketConnected = true;
-            socketService.connect().then((_) {
-              _socketConnected = false;
+      final storageService = sl<StorageService>();
+      storageService.isAuthenticated().then((isAuth) {
+        if (isAuth && !_socketConnected) {
+          final status = widget.connectivityService.status;
+          if (status != ConnectionStatus.offline) {
+            debugPrint('🔄 App resumed - reconnecting chat socket...');
+            widget.socketService.reconnect().catchError((e) {
+              debugPrint('⚠️ Socket reconnect on resume error: $e');
             });
           }
         }
-      }
+      });
+    }
+  }
+
+  void _showChatErrorSnackBar(String error) {
+    // ✅ Show a snackbar or banner to the user
+    // Using a global key or NavigationService
+    final context = NavigationService.navigatorKey.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Iconsax.warning_2, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Chat connection lost. Tap to reconnect.',
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Retry',
+            textColor: Colors.white,
+            onPressed: () {
+              widget.socketService.reconnect().catchError((e) {
+                debugPrint('⚠️ Manual reconnect failed: $e');
+              });
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -210,6 +330,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: widget.connectivityService),
+          // ✅ Provide socket service to the widget tree
+          Provider<ChatSocketService>.value(value: widget.socketService),
           BlocProvider(
             create: (context) =>
                 sl<AuthBloc>()..add(const CheckAuthStatusEvent()),
@@ -289,7 +411,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             }
 
-            // Fallback for any other undefined routes
             return null;
           },
           routes: {'/home': (context) => const MainNavigationScreen()},
@@ -323,7 +444,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           builder: (context, state) {
             // ✅ Don't rebuild on AuthLoading to prevent flicker
             if (state is AuthLoading) {
-              // Return the current widget without rebuilding
               return const SizedBox.shrink();
             }
 
@@ -334,7 +454,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             } else if (state is Unauthenticated) {
               return const WelcomeScreen();
             } else if (state is OtpVerified) {
-              // ✅ Handle OtpVerified state here too
               if (state.isGoogleSignIn) {
                 return CompleteProfileScreen(
                   token: state.token,
@@ -355,11 +474,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             } else if (state is ProfileCompleted) {
               return const MainNavigationScreen();
             } else if (state is AuthError) {
-              // ✅ Show error and return to WelcomeScreen after a delay
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
-                  // The error toast is already shown in the screens
-                  // Just return to WelcomeScreen
                   context.read<AuthBloc>().add(const CheckAuthStatusEvent());
                 }
               });

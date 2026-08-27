@@ -10,14 +10,20 @@ class ConnectivityService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
   ConnectionStatus _status = ConnectionStatus.checking;
   bool _isInitialCheck = true;
-  StreamSubscription? _subscription;
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _periodicTimer;
+
+  // ✅ Add a stream controller for connectivity changes
+  final _connectivityStreamController =
+      StreamController<ConnectionStatus>.broadcast();
+  Stream<ConnectionStatus> get onConnectivityChange =>
+      _connectivityStreamController.stream;
 
   ConnectionStatus get status => _status;
   bool get isInitialCheck => _isInitialCheck;
 
   void initialize() {
-    // Listen to connectivity changes - REACTS IMMEDIATELY
+    // Listen to connectivity changes
     _subscription = _connectivity.onConnectivityChanged.listen((results) {
       _checkConnection();
     });
@@ -67,10 +73,15 @@ class ConnectivityService extends ChangeNotifier {
 
   void _updateStatus(ConnectionStatus newStatus) {
     if (_status != newStatus || _isInitialCheck) {
+      final oldStatus = _status;
       _status = newStatus;
       _isInitialCheck = false;
+
+      // ✅ Notify both listeners and stream
       notifyListeners();
-      debugPrint('🔌 Connectivity status changed: $newStatus');
+      _connectivityStreamController.add(newStatus);
+
+      debugPrint('🔌 Connectivity status changed: $oldStatus -> $newStatus');
     }
   }
 
@@ -88,6 +99,7 @@ class ConnectivityService extends ChangeNotifier {
   void dispose() {
     _subscription?.cancel();
     _periodicTimer?.cancel();
+    _connectivityStreamController.close();
     super.dispose();
   }
 }
