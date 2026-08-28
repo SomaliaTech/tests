@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">hingaad</string>
+    <string name="app_name">farxada</string>
     
     <!-- Your App ID -->
-    <string name="facebook_app_id">476493349999779</string>
+    <string name="facebook_app_id">869167092793903</string>
     
     <!-- MUST be "fb" + App ID -->
-    <string name="fb_login_protocol_scheme">fb476493349999779</string>
+    <string name="fb_login_protocol_scheme">fb869167092793903</string>
     
     <!-- Your Client Token -->
-    <string name="facebook_client_token">8c49f38b5ccf7ca3c9405f2e6fd070f7</string>
+    <string name="facebook_client_token">417cad25aacd2d0615bda33621a37e68</string>
 </resources>

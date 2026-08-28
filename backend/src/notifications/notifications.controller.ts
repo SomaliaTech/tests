@@ -1,3 +1,5 @@
+// notifications.controller.ts
+
 import {
   Controller,
   Get,
@@ -13,6 +15,8 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
   BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard, SkipThrottle } from '@nestjs/throttler';
 import {
@@ -23,33 +27,72 @@ import {
   ApiQuery,
   ApiParam,
   ApiBody,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import {
+  BroadcastNotificationDto,
   CreateNotificationDto,
   UpdateNotificationDto,
 } from './dto/notification.dto';
 import { NotificationType } from './notification.entity';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @ApiTags('notifications')
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly supabaseService: SupabaseService, // ✅ Inject SupabaseService
+  ) {}
 
   @Post('broadcast')
   @UseGuards(AdminGuard)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: 'Broadcast notification to all users (Admin only)' })
-  async broadcastNotification(@Request() req, @Body() body: any) {
-    return this.notificationsService.broadcastToAllUsers(body);
+  @UseInterceptors(FileInterceptor('image'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Broadcast notification to all users (Admin)' })
+  async broadcast(
+    @Body() dto: BroadcastNotificationDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!dto || !dto.title) {
+      throw new BadRequestException(
+        'Invalid notification payload. Title is missing.',
+      );
+    }
+
+    let imageUrl: string | undefined;
+
+    // ✅ FIX: Upload image to Supabase instead of using placeholder
+    if (file) {
+      try {
+        const uploadResult = await this.supabaseService.uploadFile(
+          file,
+          'notifications',
+        );
+        imageUrl = uploadResult.secure_url;
+        console.log(`✅ Image uploaded to Supabase: ${imageUrl}`);
+      } catch (error) {
+        console.error('❌ Image upload failed:', error.message);
+        // Continue without image - don't fail the entire broadcast
+        imageUrl = undefined;
+      }
+    }
+
+    // ✅ Pass the uploaded image URL to the service
+    return this.notificationsService.broadcastToAllUsers({
+      ...dto,
+      imageUrl,
+    });
   }
 
   @Get()
-  @SkipThrottle() // ✅ Skip rate limiting for GET notifications
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get user notifications' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -78,7 +121,7 @@ export class NotificationsController {
   }
 
   @Get('unread/count')
-  @SkipThrottle() // ✅ Skip rate limiting
+  @SkipThrottle()
   @ApiOperation({ summary: 'Get unread notification count' })
   @ApiResponse({ status: 200, description: 'Unread count retrieved' })
   async getUnreadCount(@Request() req) {
@@ -86,7 +129,7 @@ export class NotificationsController {
   }
 
   @Put(':id/read')
-  @SkipThrottle() // ✅ Skip rate limiting for marking as read
+  @SkipThrottle()
   @ApiOperation({ summary: 'Mark notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
@@ -95,7 +138,7 @@ export class NotificationsController {
   }
 
   @Put('read-all')
-  @SkipThrottle() // ✅ Skip rate limiting
+  @SkipThrottle()
   @ApiOperation({ summary: 'Mark all as read' })
   @ApiResponse({ status: 200, description: 'All notifications marked as read' })
   async markAllAsRead(@Request() req) {
@@ -103,7 +146,7 @@ export class NotificationsController {
   }
 
   @Delete(':id')
-  @SkipThrottle() // ✅ Skip rate limiting
+  @SkipThrottle()
   @ApiOperation({ summary: 'Delete notification' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({
@@ -118,7 +161,7 @@ export class NotificationsController {
   }
 
   @Delete()
-  @SkipThrottle() // ✅ Skip rate limiting
+  @SkipThrottle()
   @ApiOperation({ summary: 'Clear all notifications' })
   @ApiResponse({ status: 200, description: 'All notifications cleared' })
   async clearAllNotifications(@Request() req) {

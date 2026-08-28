@@ -195,11 +195,17 @@ class NotificationCard extends StatelessWidget {
         color = const Color(0xFF2ED573);
         bgColor = const Color(0xFFE8F5E9);
         break;
-      // ✅ ADDED: Handle the new message type
       case NotificationType.message:
         icon = Iconsax.message;
         color = const Color(0xFF1877F2);
         bgColor = const Color(0xFFE3F2FD);
+        break;
+      default:
+        // ✅ FIXED: Added default fallback to prevent compile-time errors
+        // if new NotificationTypes are added to the enum in the future
+        icon = Iconsax.notification;
+        color = const Color(0xFF666666);
+        bgColor = const Color(0xFFF5F5F5);
         break;
     }
 

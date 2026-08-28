@@ -19,6 +19,10 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
   @override
   Future<List<NotificationEntity>> getCachedNotifications() async {
     try {
+      if (!Hive.isBoxOpen(_boxName)) {
+        await Hive.openBox<String>(_boxName);
+      }
+
       final jsonString = _box.get(_notificationsKey);
       if (jsonString != null) {
         final List<dynamic> jsonList = json.decode(jsonString);
@@ -40,6 +44,10 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
     List<NotificationEntity> notifications,
   ) async {
     try {
+      if (!Hive.isBoxOpen(_boxName)) {
+        await Hive.openBox<String>(_boxName);
+      }
+
       final jsonList = notifications
           .map((n) => _notificationToJson(n))
           .toList();
@@ -51,14 +59,22 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
 
   @override
   Future<void> clearCache() async {
-    await _box.clear();
-    debugPrint('🗑️ Notifications cache cleared');
+    try {
+      if (!Hive.isBoxOpen(_boxName)) {
+        await Hive.openBox<String>(_boxName);
+      }
+      await _box.clear();
+      debugPrint('🗑️ Notifications cache cleared');
+    } catch (e) {
+      debugPrint('❌ Error clearing cache: $e');
+    }
   }
 
   Map<String, dynamic> _notificationToJson(NotificationEntity notification) {
     return {
       'id': notification.id,
-      'type': notification.type.displayName,
+      // ✅ FIXED: Use .name instead of .displayName for proper enum deserialization later
+      'type': notification.type.name,
       'title': notification.title,
       'message': notification.message,
       'createdAt': notification.date.toIso8601String(),

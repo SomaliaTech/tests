@@ -1,3 +1,5 @@
+// notifications.service.ts
+
 import {
   Injectable,
   NotFoundException,
@@ -17,6 +19,7 @@ import {
 import { NotificationType } from './notification.entity';
 import { ChatGateway } from '../chat/chat.gateway';
 import { FirebaseService } from '../firebase/firebase.service';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class NotificationsService {
@@ -27,15 +30,13 @@ export class NotificationsService {
     @Inject(forwardRef(() => ChatGateway))
     private chatGateway: ChatGateway,
     private firebaseService: FirebaseService,
+    private supabaseService: SupabaseService,
   ) {}
 
   // ==========================================
   // CREATE NOTIFICATION
   // ==========================================
 
-  /**
-   * ✅ Create notification - sends to DB, WebSocket, AND Firebase push
-   */
   async create(createNotificationDto: CreateNotificationDto) {
     this.logger.log(
       `Creating notification for user: ${createNotificationDto.userId}`,
@@ -64,6 +65,7 @@ export class NotificationsService {
         isRead: false,
         actionText: createNotificationDto.actionText?.trim(),
         actionLink: createNotificationDto.actionLink?.trim(),
+        imageUrl: createNotificationDto.imageUrl || null,
         createdAt: new Date(),
       })
       .returning();
@@ -78,6 +80,11 @@ export class NotificationsService {
 
     return notification;
   }
+
+  // ==========================================
+  // NOTIFY ALL USERS OF NEW BANNER
+  // ==========================================
+
   async notifyAllUsersOfNewBanner(banner: any) {
     this.logger.log(`📢 Sending new banner notification to all users...`);
 
@@ -97,6 +104,7 @@ export class NotificationsService {
       banner.subtitle || 'Check out our latest promotion!';
     const actionText = banner.buttonText || 'View Now';
     const actionLink = banner.actionLink || null;
+    const imageUrl = banner.imageUrl || null;
 
     // 2. Bulk insert notifications into DB (chunked to avoid SQL query limits)
     const dbChunkSize = 100;
@@ -111,6 +119,7 @@ export class NotificationsService {
         isRead: false,
         actionText,
         actionLink,
+        imageUrl,
         createdAt: new Date(),
       }));
 
@@ -135,6 +144,9 @@ export class NotificationsService {
       };
       if (actionLink) {
         data.actionLink = actionLink;
+      }
+      if (imageUrl) {
+        data.imageUrl = imageUrl;
       }
 
       // Firebase multicast limit is 500 tokens per request
@@ -169,6 +181,7 @@ export class NotificationsService {
         message: notificationMessage,
         actionText,
         actionLink,
+        imageUrl,
         bannerId: banner.id,
         createdAt: new Date().toISOString(),
         isRead: false,
@@ -177,6 +190,11 @@ export class NotificationsService {
       this.logger.warn(`WebSocket broadcast failed: ${error}`);
     }
   }
+
+  // ==========================================
+  // BROADCAST TO ALL USERS
+  // ==========================================
+
   async broadcastToAllUsers(dto: {
     title: string;
     message: string;
@@ -185,11 +203,17 @@ export class NotificationsService {
     imageUrl?: string;
     targetAudience?: string;
     sendPush?: boolean;
-    scheduledAt?: Date;
+    scheduledAt?: Date | string;
   }) {
+    if (!dto || !dto.title) {
+      throw new BadRequestException(
+        'Notification payload is invalid. Title is required.',
+      );
+    }
+
     this.logger.log(`📢 Broadcasting custom notification to all users...`);
 
-    // 1. Get all users (You can add filtering logic here later based on targetAudience)
+    // 1. Get all users
     const allUsers = await this.drizzle.db.select({ id: users.id }).from(users);
     const userIds = allUsers.map((u) => u.id);
 
@@ -197,7 +221,7 @@ export class NotificationsService {
       return { message: 'No users to notify', recipientsCount: 0 };
     }
 
-    // 2. Save to DB (Chunked to avoid SQL query size limits)
+    // 2. Save to DB (Chunked)
     const dbChunkSize = 100;
     for (let i = 0; i < userIds.length; i += dbChunkSize) {
       const chunk = userIds.slice(i, i + dbChunkSize);
@@ -205,19 +229,21 @@ export class NotificationsService {
         id: uuidv4(),
         userId,
         type: NotificationType.PROMOTION,
-        title: dto.title,
-        message: dto.message,
+        title: dto.title.trim(),
+        message: dto.message.trim(),
         isRead: false,
-        actionText: dto.actionText || 'View',
-        actionLink: dto.actionLink || null,
-        imageUrl: dto.imageUrl || null, // ✅ Save image URL to DB
-        createdAt: dto.scheduledAt || new Date(),
+        actionText: dto.actionText?.trim() || 'View',
+        actionLink: dto.actionLink?.trim() || null,
+        imageUrl: dto.imageUrl || null,
+        createdAt: dto.scheduledAt
+          ? new Date(dto.scheduledAt as string)
+          : new Date(),
       }));
       await this.drizzle.db.insert(notifications).values(values);
     }
     this.logger.log(`✅ Saved ${userIds.length} notifications to DB.`);
 
-    // 3. Send FCM Push Notifications (Chunked for Firebase limits)
+    // 3. Send FCM Push Notifications
     if (dto.sendPush && !dto.scheduledAt) {
       const tokensResult = await this.drizzle.db
         .select({ token: deviceTokens.token })
@@ -227,7 +253,6 @@ export class NotificationsService {
       const allTokens = tokensResult.map((t) => t.token).filter(Boolean);
 
       if (allTokens.length > 0) {
-        // ✅ Include imageUrl in the data payload for foreground handling in Flutter
         const dataPayload: Record<string, string> = {
           type: 'promotion',
           actionLink: dto.actionLink || '',
@@ -236,7 +261,7 @@ export class NotificationsService {
           dataPayload.imageUrl = dto.imageUrl;
         }
 
-        const pushChunkSize = 500; // Firebase limit per request
+        const pushChunkSize = 500;
         let successCount = 0;
         let failureCount = 0;
 
@@ -265,7 +290,7 @@ export class NotificationsService {
       }
     }
 
-    // 4. WebSocket Broadcast (for currently connected users)
+    // 4. WebSocket Broadcast
     if (!dto.scheduledAt) {
       try {
         this.chatGateway.server.emit('new_notification', {
@@ -274,7 +299,7 @@ export class NotificationsService {
           message: dto.message,
           actionText: dto.actionText || 'View',
           actionLink: dto.actionLink || null,
-          imageUrl: dto.imageUrl || null, // ✅ Include in WS payload
+          imageUrl: dto.imageUrl || null,
           createdAt: new Date().toISOString(),
           isRead: false,
         });
@@ -289,9 +314,11 @@ export class NotificationsService {
       recipientsCount: userIds.length,
     };
   }
-  /**
-   * ✅ Bulk create notifications
-   */
+
+  // ==========================================
+  // BULK CREATE NOTIFICATIONS
+  // ==========================================
+
   async bulkCreateNotifications(body: {
     userIds: string[];
     type: NotificationType;
@@ -299,6 +326,7 @@ export class NotificationsService {
     message: string;
     actionText?: string;
     actionLink?: string;
+    imageUrl?: string;
   }) {
     if (body.userIds.length > 50) {
       throw new BadRequestException(
@@ -306,7 +334,7 @@ export class NotificationsService {
       );
     }
 
-    const results: any[] = []; // ✅ Add explicit type
+    const results: any[] = [];
     for (const userId of body.userIds) {
       try {
         const result = await this.create({
@@ -316,6 +344,7 @@ export class NotificationsService {
           message: body.message,
           actionText: body.actionText,
           actionLink: body.actionLink,
+          imageUrl: body.imageUrl,
         });
         results.push(result);
       } catch (error) {
@@ -330,6 +359,23 @@ export class NotificationsService {
       message: `${results.length} notifications created successfully`,
       notifications: results,
     };
+  }
+
+  // ==========================================
+  // ✅ UPLOAD NOTIFICATION IMAGE
+  // ==========================================
+
+  async uploadNotificationImage(file: Express.Multer.File): Promise<string> {
+    try {
+      const result = await this.supabaseService.uploadFile(
+        file,
+        'notifications',
+      );
+      return result.secure_url;
+    } catch (error: any) {
+      this.logger.error(`Image upload failed: ${error.message}`);
+      throw new BadRequestException(`Failed to upload image: ${error.message}`);
+    }
   }
 
   // ==========================================
@@ -349,6 +395,7 @@ export class NotificationsService {
             message: notification.message,
             actionText: notification.actionText,
             actionLink: notification.actionLink,
+            imageUrl: notification.imageUrl,
             createdAt: notification.createdAt.toISOString(),
             isRead: false,
           });
@@ -356,7 +403,7 @@ export class NotificationsService {
         resolve();
       } catch (error) {
         this.logger.warn(`WebSocket emit failed: ${error}`);
-        resolve(); // Still resolve so it doesn't block
+        resolve();
       }
     });
   }
@@ -386,6 +433,10 @@ export class NotificationsService {
         type: notification.type,
         notificationId: notification.id,
       };
+
+      if (notification.imageUrl) {
+        data.imageUrl = notification.imageUrl;
+      }
 
       if (notification.actionLink) {
         if (notification.actionLink.includes('/orders/')) {
@@ -621,6 +672,10 @@ export class NotificationsService {
       updateData.actionLink = updateNotificationDto.actionLink?.trim();
     }
 
+    if (updateNotificationDto.imageUrl !== undefined) {
+      updateData.imageUrl = updateNotificationDto.imageUrl;
+    }
+
     const [notification] = await this.drizzle.db
       .update(notifications)
       .set(updateData)
@@ -689,6 +744,7 @@ export class NotificationsService {
     message: string,
     actionText?: string,
     actionLink?: string,
+    imageUrl?: string,
   ) {
     return this.create({
       userId,
@@ -697,6 +753,7 @@ export class NotificationsService {
       message,
       actionText,
       actionLink,
+      imageUrl,
     });
   }
 
@@ -704,12 +761,14 @@ export class NotificationsService {
     userId: string,
     title: string,
     message: string,
+    imageUrl?: string,
   ) {
     return this.create({
       userId,
       type: NotificationType.SYSTEM,
       title,
       message,
+      imageUrl,
     });
   }
 
@@ -719,6 +778,7 @@ export class NotificationsService {
     message: string,
     actionText?: string,
     actionLink?: string,
+    imageUrl?: string,
   ) {
     return this.create({
       userId,
@@ -727,6 +787,7 @@ export class NotificationsService {
       message,
       actionText,
       actionLink,
+      imageUrl,
     });
   }
 }
