@@ -9,7 +9,7 @@ class CheckoutPaymentSection extends StatelessWidget {
   final ValueChanged<String?> onPaymentMethodChanged;
   final List<PaymentMethod> paymentMethods;
   final TextEditingController phoneController;
-  final Function(String) onPhoneChanged; // ✅ Add this
+  final Function(String) onPhoneChanged;
 
   const CheckoutPaymentSection({
     super.key,
@@ -17,7 +17,7 @@ class CheckoutPaymentSection extends StatelessWidget {
     required this.onPaymentMethodChanged,
     required this.paymentMethods,
     required this.phoneController,
-    required this.onPhoneChanged, // ✅ Add this
+    required this.onPhoneChanged,
   });
 
   @override
@@ -31,28 +31,50 @@ class CheckoutPaymentSection extends StatelessWidget {
         ...paymentMethods.map((method) {
           final isSelected = selectedPaymentMethod == method.id;
           final phone = PhoneUtils.cleanPhoneNumber(phoneController.text);
-          final matchesProvider = phone.startsWith(method.prefix);
+          final isInternational =
+              !PhoneUtils.isSomaliNumber(phoneController.text) &&
+              phoneController.text.isNotEmpty;
+          final matchesProvider =
+              !isInternational && phone.startsWith(method.prefix);
 
           return GestureDetector(
             onTap: () {
-              // ✅ When a payment method is selected, update the phone number
               final currentPhone = phoneController.text;
-              final cleanPhone = PhoneUtils.cleanPhoneNumber(currentPhone);
+              final isCurrentInternational =
+                  !PhoneUtils.isSomaliNumber(currentPhone) &&
+                  currentPhone.isNotEmpty;
 
-              // If phone is empty or doesn't match the new provider
-              if (cleanPhone.isEmpty || !cleanPhone.startsWith(method.prefix)) {
-                // Format the phone with the new provider's prefix
-                String newPhone = method.prefix;
-                if (cleanPhone.isNotEmpty && cleanPhone.length > 2) {
-                  // Keep the rest of the number but change the prefix
-                  newPhone = method.prefix + cleanPhone.substring(2);
-                }
-                // Format and update the phone
+              // If current phone is international, clear it and set the prefix
+              if (isCurrentInternational) {
+                // Clear the phone and set just the prefix
                 final formattedPhone = PhoneUtils.formatPhoneForDisplay(
-                  newPhone,
+                  method.prefix,
                 );
                 phoneController.text = formattedPhone;
                 onPhoneChanged(formattedPhone);
+              } else {
+                // For Somali numbers, change the prefix
+                final cleanPhone = PhoneUtils.cleanPhoneNumber(currentPhone);
+
+                if (cleanPhone.isEmpty) {
+                  // If empty, just set the prefix
+                  final formattedPhone = PhoneUtils.formatPhoneForDisplay(
+                    method.prefix,
+                  );
+                  phoneController.text = formattedPhone;
+                  onPhoneChanged(formattedPhone);
+                } else if (!cleanPhone.startsWith(method.prefix)) {
+                  // Change the prefix
+                  String newPhone = method.prefix;
+                  if (cleanPhone.length > 2) {
+                    newPhone = method.prefix + cleanPhone.substring(2);
+                  }
+                  final formattedPhone = PhoneUtils.formatPhoneForDisplay(
+                    newPhone,
+                  );
+                  phoneController.text = formattedPhone;
+                  onPhoneChanged(formattedPhone);
+                }
               }
 
               // Change the selected payment method
@@ -105,9 +127,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                                     : const Color(0xFF1F2937),
                               ),
                             ),
-                            if (isSelected &&
-                                phone.isNotEmpty &&
-                                matchesProvider)
+                            if (isSelected && matchesProvider)
                               Container(
                                 margin: const EdgeInsets.only(left: 8),
                                 padding: const EdgeInsets.symmetric(
@@ -138,11 +158,19 @@ class CheckoutPaymentSection extends StatelessWidget {
                                 : const Color(0xFF6B7280),
                           ),
                         ),
-                        // ✅ Show phone status for the selected method
                         if (isSelected) ...[
-                          if (phone.isNotEmpty && matchesProvider)
+                          if (isInternational)
                             Text(
-                              '✓ Lambar sax ah', // Valid number
+                              '⚠️ Lambar caalami ah lama aqbalo',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red[400],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          else if (phone.isNotEmpty && matchesProvider)
+                            Text(
+                              '✓ Lambar sax ah',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: const Color(0xFF2ED573),
@@ -151,7 +179,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                             )
                           else if (phone.isNotEmpty && !matchesProvider)
                             Text(
-                              '⚠️ Waa inuu ku bilaabmaa ${method.prefix}', // Must start with
+                              '⚠️ Waa inuu ku bilaabmaa ${method.prefix}',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.red[400],
@@ -160,7 +188,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                             )
                           else
                             Text(
-                              'Fadlan geli lambarka', // Please enter number
+                              'Fadlan geli lambarka',
                               style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.orange[600],

@@ -1,10 +1,12 @@
+// src/orders/dto/address.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
   IsBoolean,
-  IsPhoneNumber,
+  Matches,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 
 export class AddressDto {
@@ -23,15 +25,39 @@ export class AddressDto {
     maxLength: 500,
   })
   @IsString()
+  @MinLength(3)
   @MaxLength(500)
   fullAddress: string;
 
   @ApiProperty({
-    description: 'Phone number in international format',
-    example: '+252612345678',
+    description: 'Phone number (accepts both Somali and international formats)',
+    example: '+15551234567',
+    examples: {
+      somali: {
+        value: '+252612345678',
+        description: 'Somali number with +252 prefix',
+      },
+      international: {
+        value: '+15551234567',
+        description: 'International number with +1 prefix',
+      },
+      noPlus: {
+        value: '15551234567',
+        description: 'International number without + prefix',
+      },
+      withSpaces: {
+        value: '+1 555 123 4567',
+        description: 'International number with spaces',
+      },
+    },
   })
   @IsString()
-  @IsPhoneNumber()
+  @MinLength(7, { message: 'Phone number must be at least 7 characters' })
+  @MaxLength(20, { message: 'Phone number must be at most 20 characters' })
+  @Matches(/^\+?[0-9\s-]{7,20}$/, {
+    message:
+      'Phone number must be a valid phone number (7-20 digits, can include +, spaces, or dashes)',
+  })
   phoneNumber: string;
 
   @ApiProperty({
@@ -63,17 +89,22 @@ export class UpdateAddressDto {
     required: false,
   })
   @IsString()
+  @MinLength(3)
   @MaxLength(500)
   @IsOptional()
   fullAddress?: string;
 
   @ApiProperty({
-    description: 'Phone number in international format',
+    description: 'Phone number (accepts both Somali and international formats)',
     example: '+252612345678',
     required: false,
   })
   @IsString()
-  @IsPhoneNumber()
+  @MinLength(7)
+  @MaxLength(20)
+  @Matches(/^\+?[0-9\s-]{7,20}$/, {
+    message: 'Phone number must be a valid phone number',
+  })
   @IsOptional()
   phoneNumber?: string;
 

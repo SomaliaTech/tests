@@ -49,8 +49,6 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
 
   @override
   void dispose() {
-    // Only close if registered as factory in your DI container.
-    // If it's a singleton/lazySingleton, remove this line.
     try {
       _addressBloc.close();
     } catch (_) {}
@@ -93,9 +91,13 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
       );
     }
 
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => checkoutScreen));
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => checkoutScreen));
+      }
+    });
   }
 
   @override
@@ -143,7 +145,6 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
 
   Widget _buildAddressList() {
     return BlocBuilder<AddressBloc, AddressState>(
-      // ✅ CRITICAL FIX: Ignore AddressAdded so the list doesn't flash blank/disappear
       buildWhen: (previous, current) => current is! AddressAdded,
       builder: (context, state) {
         if (state is AddressLoading) {
@@ -341,6 +342,11 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   }
 
   void _showAddAddressForm() {
+    print('📝 Opening AddAddressForm');
+    print('📍 Markets available: ${widget.availableMarkets?.length}');
+    print('🛒 Product: ${widget.product?.id}');
+    print('🛍️ Cart Items: ${widget.cartItems?.length}');
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -349,7 +355,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: AddAddressForm(
-          // ✅ FIX 3: Force true if we have markets
+          // ✅ CRITICAL FIX: Set navigateToCheckout to true when we have markets
           navigateToCheckout:
               widget.availableMarkets != null &&
               widget.availableMarkets!.isNotEmpty,
@@ -360,7 +366,9 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           selectedSize: widget.selectedSize,
           quantity: widget.quantity,
           cartItems: widget.cartItems,
-          onAddressAdded: (address) {},
+          onAddressAdded: (address) {
+            print('✅ Address added callback: ${address.fullAddress}');
+          },
         ),
       ),
     );

@@ -110,59 +110,9 @@ class _AddAddressFormState extends State<AddAddressForm> {
         _isDefault = false;
       });
 
-      // Call the callback if provided
-      if (widget.onAddressAdded != null) {
-        widget.onAddressAdded!(newAddress);
-      }
-
-      // Dispatch to AddressBloc - navigation will happen in BlocListener
+      // Dispatch to AddressBloc
       context.read<AddressBloc>().add(AddAddressEvent(newAddress));
     }
-  }
-
-  void _navigateToCheckout(Address address) {
-    if (!widget.navigateToCheckout ||
-        widget.availableMarkets == null ||
-        widget.availableMarkets!.isEmpty) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    Widget checkoutScreen;
-
-    if (widget.cartItems != null && widget.cartItems!.isNotEmpty) {
-      checkoutScreen = CheckoutScreen.fromCart(
-        cartItems: widget.cartItems!,
-        availableMarkets: widget.availableMarkets!,
-        userMarketId: widget.userMarketId,
-        savedAddress: address,
-      );
-    } else if (widget.product != null) {
-      checkoutScreen = CheckoutScreen(
-        product: widget.product,
-        selectedColor: widget.selectedColor,
-        selectedSize: widget.selectedSize,
-        quantity: widget.quantity,
-        availableMarkets: widget.availableMarkets!,
-        userMarketId: widget.userMarketId,
-        savedAddress: address,
-      );
-    } else {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    // ✅ INSTANT NAVIGATION: Use Root Navigator to pop BOTH modals and push Checkout
-    final rootNav = Navigator.of(context, rootNavigator: true);
-
-    // 1. Pop AddAddressForm instantly
-    rootNav.pop();
-
-    // 2. In the very next microsecond, pop AddressSelectionModal and push Checkout
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      rootNav.pop(); // Pops AddressSelectionModal
-      rootNav.push(MaterialPageRoute(builder: (context) => checkoutScreen));
-    });
   }
 
   @override
@@ -171,6 +121,10 @@ class _AddAddressFormState extends State<AddAddressForm> {
       listener: (context, state) {
         if (state is AddressAdded) {
           print('🎯 [AddAddressForm] AddressAdded received');
+          print('🎯 navigateToCheckout: ${widget.navigateToCheckout}');
+          print('🎯 availableMarkets: ${widget.availableMarkets?.length}');
+          print('🎯 product: ${widget.product?.id}');
+          print('🎯 cartItems: ${widget.cartItems?.length}');
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -181,12 +135,14 @@ class _AddAddressFormState extends State<AddAddressForm> {
           );
 
           if (widget.navigateToCheckout) {
-            _navigateToCheckout(state.address);
+            _navigateToCheckoutAfterAddressAdded(state.address);
           } else {
-            // ✅ CRITICAL FIX: Safety check to prevent crashes on disposal
-            if (!mounted) return;
-            setState(() => _isSubmitting = false);
-            Navigator.pop(context);
+            if (widget.onAddressAdded != null) {
+              widget.onAddressAdded!(state.address);
+            }
+            if (mounted) {
+              Navigator.pop(context, state.address);
+            }
           }
         } else if (state is AddressError) {
           if (!mounted) return;
@@ -208,7 +164,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
         ),
         child: Column(
           children: [
-            // Drag handle
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width: 40,
@@ -218,8 +173,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-
-            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
@@ -275,14 +228,57 @@ class _AddAddressFormState extends State<AddAddressForm> {
                 ],
               ),
             ),
-
             const Divider(height: 1, color: Color(0xFFF3F4F6)),
-
-            // Form
             Expanded(child: _buildForm()),
           ],
         ),
       ),
+    );
+  }
+
+  void _navigateToCheckoutAfterAddressAdded(Address address) {
+    print('🚀 [AddAddressForm] Starting navigation to checkout...');
+
+    Widget? checkoutScreen;
+
+    if (widget.cartItems != null && widget.cartItems!.isNotEmpty) {
+      print('🛒 Creating CheckoutScreen.fromCart');
+      checkoutScreen = CheckoutScreen.fromCart(
+        cartItems: widget.cartItems!,
+        availableMarkets: widget.availableMarkets!,
+        userMarketId: widget.userMarketId,
+        savedAddress: address,
+      );
+    } else if (widget.product != null) {
+      print('📦 Creating CheckoutScreen for product');
+      checkoutScreen = CheckoutScreen(
+        product: widget.product,
+        selectedColor: widget.selectedColor,
+        selectedSize: widget.selectedSize,
+        quantity: widget.quantity,
+        availableMarkets: widget.availableMarkets!,
+        userMarketId: widget.userMarketId,
+        savedAddress: address,
+      );
+    }
+
+    if (checkoutScreen == null) {
+      print('❌ Could not create checkout screen');
+      if (widget.onAddressAdded != null) {
+        widget.onAddressAdded!(address);
+      }
+      if (mounted) {
+        Navigator.pop(context, address);
+      }
+      return;
+    }
+
+    print('✅ Checkout screen created, navigating...');
+
+    // Use pushAndRemoveUntil to clear all modals and navigate to checkout
+    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => checkoutScreen!),
+      (route) => route.isFirst,
     );
   }
 
@@ -311,7 +307,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Address Label
               const Text(
                 'Address Label',
                 style: TextStyle(
@@ -378,8 +373,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
                 }).toList(),
               ),
               const SizedBox(height: 20),
-
-              // Full Address
               _buildInputField(
                 controller: _fullAddressController,
                 label: 'Full Address',
@@ -393,12 +386,8 @@ class _AddAddressFormState extends State<AddAddressForm> {
                     : null,
               ),
               const SizedBox(height: 20),
-
-              // Phone Number
               _buildPhoneField(),
               const SizedBox(height: 20),
-
-              // Set as Default
               GestureDetector(
                 onTap: _isSubmitting
                     ? null
@@ -471,8 +460,6 @@ class _AddAddressFormState extends State<AddAddressForm> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 54,

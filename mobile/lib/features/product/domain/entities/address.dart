@@ -1,3 +1,4 @@
+// lib/features/product/domain/entities/address.dart
 import 'package:equatable/equatable.dart';
 
 class Address extends Equatable {

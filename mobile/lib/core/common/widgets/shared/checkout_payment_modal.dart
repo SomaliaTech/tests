@@ -104,13 +104,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void _initializeData() {
     if (widget.savedAddress != null) {
       _addressController.text = widget.savedAddress!.fullAddress;
-      _phoneController.text = PhoneUtils.getDisplayPhone(
-        widget.savedAddress!.phoneNumber,
-      );
+
+      // Check if it's an international number
+      final phone = widget.savedAddress!.phoneNumber;
+      if (!PhoneUtils.isSomaliNumber(phone)) {
+        // International number - keep as is
+        _phoneController.text = phone;
+        // Don't auto-select Somali payment method
+        _selectedPaymentMethod = null;
+      } else {
+        // Somali number - format normally
+        _phoneController.text = PhoneUtils.getDisplayPhone(phone);
+        _autoDetectProvider();
+      }
+
       _selectedLabel = widget.savedAddress!.label;
     } else {
       _selectedLabel = 'Work';
     }
+
     if (widget.availableMarkets.isNotEmpty) {
       if (widget.userMarketId != null) {
         _selectedMarket = widget.availableMarkets.firstWhere(
@@ -121,14 +133,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _selectedMarket = widget.availableMarkets.first;
       }
     }
-
-    // Auto-detect provider from phone
-    _autoDetectProvider();
   }
 
   void _autoDetectProvider() {
     final phone = _phoneController.text;
-    if (phone.isNotEmpty) {
+    if (phone.isNotEmpty && PhoneUtils.isSomaliNumber(phone)) {
       final detectedId = PhoneUtils.detectProvider(phone, _paymentMethods);
       if (detectedId != null) {
         setState(() {
@@ -237,7 +246,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
-  // In checkout_screen.dart - Update _processPayment method
   void _processPayment() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -248,44 +256,59 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
-    // ✅ Validate phone number
     final phone = _phoneController.text.trim();
-    final cleanPhone = PhoneUtils.cleanPhoneNumber(phone);
 
-    if (phone.isEmpty || cleanPhone.length < 7) {
-      final errorMessage = phone.isEmpty
-          ? 'Fadlan geli lambarka taleefanka'
-          : 'Lambarka taleefanka waa inuu ka kooban yahay ugu yaraan 7 lambar';
-      _addressSectionKey.currentState?.showError(errorMessage);
-      _scrollToAddressSection();
-      return;
-    }
+    // Check if it's an international number
+    final isInternational = !PhoneUtils.isSomaliNumber(phone);
 
-    // ✅ Check if phone matches the selected provider
-    if (_selectedPaymentMethod != null) {
-      try {
-        final method = _paymentMethods.firstWhere(
-          (m) => m.id == _selectedPaymentMethod,
-        );
-        if (method.prefix.isNotEmpty) {
-          final isValid = PhoneUtils.matchesProvider(
-            _phoneController.text,
-            method.prefix,
-          );
-          if (!isValid) {
-            final errorMessage = 'Waa inuu ku bilaabmaa +252 ${method.prefix}';
-            _addressSectionKey.currentState?.showError(errorMessage);
-            _scrollToAddressSection();
-            return;
-          }
-        }
-      } catch (e) {
-        // Method not found, proceed
+    if (isInternational) {
+      // For international numbers, skip Somali provider validation
+      final cleanPhone = phone.replaceAll(RegExp(r'[^\d+]'), '');
+      if (cleanPhone.length < 7) {
+        _addressSectionKey.currentState?.showError('Invalid phone number');
+        _scrollToAddressSection();
+        return;
       }
-    }
+      // Clear any errors
+      _addressSectionKey.currentState?.clearError();
+    } else {
+      // For Somali numbers, validate against provider
+      final cleanPhone = PhoneUtils.cleanPhoneNumber(phone);
 
-    // Clear any existing errors
-    _addressSectionKey.currentState?.clearError();
+      if (phone.isEmpty || cleanPhone.length < 7) {
+        final errorMessage = phone.isEmpty
+            ? 'Fadlan geli lambarka taleefanka'
+            : 'Lambarka taleefanka waa inuu ka kooban yahay ugu yaraan 7 lambar';
+        _addressSectionKey.currentState?.showError(errorMessage);
+        _scrollToAddressSection();
+        return;
+      }
+
+      if (_selectedPaymentMethod != null) {
+        try {
+          final method = _paymentMethods.firstWhere(
+            (m) => m.id == _selectedPaymentMethod,
+          );
+          if (method.prefix.isNotEmpty) {
+            final isValid = PhoneUtils.matchesProvider(
+              _phoneController.text,
+              method.prefix,
+            );
+            if (!isValid) {
+              final errorMessage =
+                  'Waa inuu ku bilaabmaa +252 ${method.prefix}';
+              _addressSectionKey.currentState?.showError(errorMessage);
+              _scrollToAddressSection();
+              return;
+            }
+          }
+        } catch (e) {
+          // Method not found, proceed
+        }
+      }
+
+      _addressSectionKey.currentState?.clearError();
+    }
 
     // Check for stock issues
     if (widget.isCartCheckout) {
@@ -342,7 +365,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final formattedPhone = PhoneUtils.formatPhoneForApi(_phoneController.text);
 
-    // ✅ Single order data with payment info included
+    // For international numbers, don't require Somali payment method
+    final paymentMethod = PhoneUtils.isSomaliNumber(_phoneController.text)
+        ? (_selectedPaymentMethod ?? 'evc_plus')
+        : 'cash_on_delivery'; // or any default for international
+
     final orderData = {
       'items': _orderItems,
       'shippingAddress': {
@@ -350,12 +377,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'fullAddress': _addressController.text,
         'phoneNumber': formattedPhone,
       },
-      'paymentMethod': _selectedPaymentMethod ?? 'evc_plus',
-      'phoneNumber': formattedPhone, // ✅ For WaafiPay payment
+      'paymentMethod': paymentMethod,
+      'phoneNumber': formattedPhone,
       'deliveryFee': _deliveryFee,
     };
 
-    // ✅ Single event - backend handles order creation + payment
     context.read<OrderBloc>().add(CreateOrderEvent(orderData));
   }
 
