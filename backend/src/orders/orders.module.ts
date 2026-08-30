@@ -5,6 +5,7 @@ import { DrizzleModule } from '../drizzle/drizzle.module';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WaafiPayService } from 'src/payment/waafipay.service';
+import { OwnershipGuard } from './guards/ownership.guard';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { WaafiPayService } from 'src/payment/waafipay.service';
     forwardRef(() => NotificationsModule),
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, WaafiPayService],
+  providers: [OrdersService, WaafiPayService, OwnershipGuard],
   exports: [OrdersService],
 })
 export class OrdersModule {}

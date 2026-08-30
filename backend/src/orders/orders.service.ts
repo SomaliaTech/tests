@@ -5,6 +5,7 @@ import {
   Inject,
   forwardRef,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import {
@@ -90,6 +91,12 @@ export class OrdersService {
   }
 
   async setDefaultAddress(userId: string, addressId: string) {
+    const hasOwnership = await this.validateAddressOwnership(addressId, userId);
+    if (!hasOwnership) {
+      throw new ForbiddenException(
+        'You do not have permission to modify this address',
+      );
+    }
     await this.drizzle.db
       .update(addresses)
       .set({ isDefault: false })
@@ -106,6 +113,12 @@ export class OrdersService {
   }
 
   async deleteAddress(userId: string, addressId: string) {
+    const hasOwnership = await this.validateAddressOwnership(addressId, userId);
+    if (!hasOwnership) {
+      throw new ForbiddenException(
+        'You do not have permission to delete this address',
+      );
+    }
     const [deleted] = await this.drizzle.db
       .delete(addresses)
       .where(and(eq(addresses.id, addressId), eq(addresses.userId, userId)))
@@ -250,6 +263,10 @@ export class OrdersService {
   }
 
   async updateCartItem(userId: string, itemId: string, quantity: number) {
+    const hasOwnership = await this.validateCartItemOwnership(itemId, userId);
+    if (!hasOwnership) {
+      throw new ForbiddenException('You do not have permission...');
+    }
     if (quantity < 1) {
       throw new BadRequestException('Quantity must be at least 1');
     }
@@ -295,6 +312,12 @@ export class OrdersService {
   }
 
   async removeCartItem(userId: string, itemId: string) {
+    const hasOwnership = await this.validateCartItemOwnership(itemId, userId);
+    if (!hasOwnership) {
+      throw new ForbiddenException(
+        'You do not have permission to remove this cart item',
+      );
+    }
     const [deleted] = await this.drizzle.db
       .delete(cartItems)
       .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
@@ -661,9 +684,19 @@ export class OrdersService {
   }
 
   async getOrderById(orderId: string, userId: string) {
-    this.logger.log(`🔍 getOrderById - Order: ${orderId}, User: ${userId}`);
+    // ✅ MORE EXPLICIT OWNERSHIP CHECK
+    const order = await this.drizzle.db.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+      with: {
+        /* ... */
+      },
+    });
 
-    // ✅ Check if user is admin/super admin
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Check if user is admin
     const [user] = await this.drizzle.db
       .select({
         isAdmin: users.isAdmin,
@@ -675,43 +708,11 @@ export class OrdersService {
 
     const isAdmin = user?.isAdmin || user?.isSuperAdmin;
 
-    // ✅ Build where conditions based on role
-    const conditions = [eq(orders.id, orderId)];
-
-    if (!isAdmin) {
-      // Regular users can only view their own orders
-      conditions.push(eq(orders.userId, userId));
-    }
-    // Admins can view any order
-
-    const order = await this.drizzle.db.query.orders.findFirst({
-      where: and(...conditions),
-      with: {
-        items: {
-          with: {
-            variant: {
-              with: {
-                product: { with: { images: true } },
-                color: true,
-                size: true,
-              },
-            },
-          },
-        },
-        // ✅ Include user info for admins
-        user: {
-          columns: {
-            id: true,
-            name: true,
-            phoneNumber: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
+    // ✅ EXPLICIT OWNERSHIP CHECK
+    if (!isAdmin && order.userId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to view this order',
+      );
     }
 
     return order;
@@ -838,5 +839,63 @@ export class OrdersService {
     } catch (error) {
       this.logger.warn('Failed to notify admins of status change:', error);
     }
+  }
+
+  async validateOrderOwnership(
+    orderId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const [order] = await this.drizzle.db
+      .select({ userId: orders.userId })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .limit(1);
+
+    if (!order) {
+      this.logger.warn(`❌ Order not found: ${orderId}`);
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.userId !== userId) {
+      this.logger.warn(
+        `🚨 UNAUTHORIZED ACCESS ATTEMPT: User ${userId} tried to access order ${orderId} owned by ${order.userId}`,
+      );
+      return false;
+    }
+
+    return true;
+  }
+  private async validateCartItemOwnership(
+    itemId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const [item] = await this.drizzle.db
+      .select({ userId: cartItems.userId })
+      .from(cartItems)
+      .where(eq(cartItems.id, itemId))
+      .limit(1);
+
+    if (!item) {
+      throw new NotFoundException('Cart item not found');
+    }
+
+    return item.userId === userId;
+  }
+
+  private async validateAddressOwnership(
+    addressId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const [address] = await this.drizzle.db
+      .select({ userId: addresses.userId })
+      .from(addresses)
+      .where(eq(addresses.id, addressId))
+      .limit(1);
+
+    if (!address) {
+      throw new NotFoundException('Address not found');
+    }
+
+    return address.userId === userId;
   }
 }
