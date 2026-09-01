@@ -1,3 +1,4 @@
+// src/products/products.service.ts
 import {
   Injectable,
   NotFoundException,
@@ -6,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from 'src/cloudfare/cloudflare.service';
-import { inArray } from 'drizzle-orm';
+import { inArray, eq, and, desc, sql, SQL, or, like } from 'drizzle-orm';
 import {
   CreateProductDto,
   CreateProductVariantDto,
@@ -23,27 +24,18 @@ import {
   cartItems,
   reviews,
 } from '../drizzle/schema';
-import { eq, and, desc, sql, SQL } from 'drizzle-orm';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { v4 as uuidv4 } from 'uuid';
 import { AddToCartDto } from './dto/cart.dto';
 import DataLoader from 'dataloader';
-
-interface ProductUpdateShape {
-  name?: string;
-  slug?: string;
-  description?: string;
-  price?: number;
-  stock?: number;
-  isActive?: boolean;
-  categoryId?: string;
-}
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 @Injectable()
 export class ProductsService {
   private readonly logger = new Logger(ProductsService.name);
+  private readonly isProduction: boolean;
 
-  // ✅ DataLoaders for batch loading
+  // DataLoaders for batch loading
   private categoryLoader: DataLoader<string, any>;
   private imagesLoader: DataLoader<string, any[]>;
   private variantsLoader: DataLoader<string, any[]>;
@@ -53,7 +45,11 @@ export class ProductsService {
     private cloudflareService: CloudflareService,
     private supabaseService: SupabaseService,
   ) {
-    // ✅ Initialize DataLoaders
+    this.isProduction = process.env.NODE_ENV === 'production';
+    this.initializeDataLoaders();
+  }
+
+  private initializeDataLoaders(): void {
     this.categoryLoader = new DataLoader(
       async (categoryIds: readonly string[]) => {
         const uniqueIds = [...new Set(categoryIds)].filter(Boolean);
@@ -65,9 +61,7 @@ export class ProductsService {
           .where(inArray(categories.id, uniqueIds));
 
         const categoryMap = new Map();
-        results.forEach((category) => {
-          categoryMap.set(category.id, category);
-        });
+        results.forEach((category) => categoryMap.set(category.id, category));
 
         return categoryIds.map((id) => categoryMap.get(id) || null);
       },
@@ -86,12 +80,9 @@ export class ProductsService {
 
         const imageMap = new Map<string, any[]>();
         results.forEach((image) => {
-          // ✅ FIX: Handle null productId
           const productId = image.productId;
           if (productId) {
-            if (!imageMap.has(productId)) {
-              imageMap.set(productId, []);
-            }
+            if (!imageMap.has(productId)) imageMap.set(productId, []);
             imageMap.get(productId)!.push(image);
           }
         });
@@ -105,7 +96,6 @@ export class ProductsService {
         const uniqueIds = [...new Set(productIds)].filter(Boolean);
         if (uniqueIds.length === 0) return [];
 
-        // ✅ FIX: Remove duplicate property names
         const results = await this.drizzle.db
           .select({
             id: productVariants.id,
@@ -117,10 +107,8 @@ export class ProductsService {
             price: productVariants.price,
             createdAt: productVariants.createdAt,
             updatedAt: productVariants.updatedAt,
-            // ✅ Color fields (renamed to avoid conflicts)
             colorName: colors.name,
             colorCode: colors.code,
-            // ✅ Size fields (renamed to avoid conflicts)
             sizeName: sizes.name,
             sizeValue: sizes.value,
           })
@@ -133,9 +121,7 @@ export class ProductsService {
         results.forEach((variant) => {
           const productId = variant.productId;
           if (productId) {
-            if (!variantMap.has(productId)) {
-              variantMap.set(productId, []);
-            }
+            if (!variantMap.has(productId)) variantMap.set(productId, []);
             const variantWithRelations = {
               ...variant,
               color:
@@ -206,7 +192,7 @@ export class ProductsService {
       .values(insertData)
       .returning();
 
-    this.logger.log(`Product created: ${product.id} (${product.name})`);
+    this.logInfo(`Product created: ${product.id}`);
 
     if (imageUrls && imageUrls.length > 0) {
       await this.uploadImagesFromUrls(product.id, imageUrls);
@@ -251,7 +237,7 @@ export class ProductsService {
       .values(imagesToInsert)
       .returning();
 
-    this.logger.log(
+    this.logInfo(
       `Uploaded ${insertedImages.length} images for product ${productId}`,
     );
     return insertedImages;
@@ -274,13 +260,14 @@ export class ProductsService {
       })
       .returning();
 
-    this.logger.log(`Uploaded base64 image for product ${productId}`);
+    this.logInfo(`Uploaded base64 image for product ${productId}`);
     return image;
   }
+
   async getLatestProducts(limit: number = 10) {
     const productsList = await this.drizzle.db.query.products.findMany({
       where: eq(products.isActive, true),
-      orderBy: [desc(products.createdAt), desc(products.id)], // ✅ Sort by newest
+      orderBy: [desc(products.createdAt), desc(products.id)],
       limit: Math.min(limit, 50),
       with: {
         category: true,
@@ -288,14 +275,11 @@ export class ProductsService {
           orderBy: [desc(mediaAssets.isMain), desc(mediaAssets.order)],
         },
       },
-      extras: this._reviewStatsExtras,
     });
 
-    // Batch load variants just like in getFeaturedProducts
     const productIds = productsList.map((p) => p.id);
     if (productIds.length > 0) {
       const variantsMap = await this.variantsLoader.loadMany(productIds);
-
       return productsList.map((product, index) => ({
         ...product,
         variants: Array.isArray(variantsMap[index]) ? variantsMap[index] : [],
@@ -304,6 +288,7 @@ export class ProductsService {
 
     return productsList;
   }
+
   // ==========================================
   // VARIANT MANAGEMENT
   // ==========================================
@@ -312,38 +297,31 @@ export class ProductsService {
     productId: string,
     createVariantDto: CreateProductVariantDto,
   ) {
-    this.logger.log(`Adding variant to product: ${productId}`);
-
+    this.logInfo(`Adding variant to product: ${productId}`);
     await this._validateProductExists(productId);
 
-    let color: { id: string } | null = null;
     if (createVariantDto.colorId) {
-      [color] = await this.drizzle.db
+      const [color] = await this.drizzle.db
         .select({ id: colors.id })
         .from(colors)
         .where(eq(colors.id, createVariantDto.colorId))
         .limit(1);
-
-      if (!color) {
+      if (!color)
         throw new NotFoundException(
           `Color with ID ${createVariantDto.colorId} not found`,
         );
-      }
     }
 
-    let size: { id: string } | null = null;
     if (createVariantDto.sizeId) {
-      [size] = await this.drizzle.db
+      const [size] = await this.drizzle.db
         .select({ id: sizes.id })
         .from(sizes)
         .where(eq(sizes.id, createVariantDto.sizeId))
         .limit(1);
-
-      if (!size) {
+      if (!size)
         throw new NotFoundException(
           `Size with ID ${createVariantDto.sizeId} not found`,
         );
-      }
     }
 
     if (createVariantDto.colorId && createVariantDto.sizeId) {
@@ -366,9 +344,15 @@ export class ProductsService {
       }
     }
 
+    const [product] = await this.drizzle.db
+      .select({ slug: products.slug })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+
     const sku =
       createVariantDto.sku ||
-      `${productId.slice(0, 8)}-${color?.id.slice(0, 4) || 'NO'}-${size?.id.slice(0, 4) || 'NO'}`.toUpperCase();
+      `${product?.slug?.slice(0, 8) || 'PROD'}-${createVariantDto.colorId?.slice(0, 4) || 'NO'}-${createVariantDto.sizeId?.slice(0, 4) || 'NO'}`.toUpperCase();
 
     const [variant] = await this.drizzle.db
       .insert(productVariants)
@@ -383,7 +367,7 @@ export class ProductsService {
       })
       .returning();
 
-    this.logger.log(`Variant created: ${variant.id} (SKU: ${sku})`);
+    this.logInfo(`Variant created: ${variant.id}`);
     return this._findVariantWithRelations(variant.id);
   }
 
@@ -394,10 +378,7 @@ export class ProductsService {
 
     const [updatedVariant] = await this.drizzle.db
       .update(productVariants)
-      .set({
-        stock: quantity,
-        updatedAt: new Date(),
-      })
+      .set({ stock: quantity, updatedAt: new Date() })
       .where(eq(productVariants.id, variantId))
       .returning();
 
@@ -405,7 +386,7 @@ export class ProductsService {
       throw new NotFoundException(`Variant with ID ${variantId} not found`);
     }
 
-    this.logger.log(`Variant ${variantId} stock updated to ${quantity}`);
+    this.logInfo(`Variant ${variantId} stock updated to ${quantity}`);
     return updatedVariant;
   }
 
@@ -431,20 +412,12 @@ export class ProductsService {
     if (productVariantId) {
       const variant = await this.drizzle.db.query.productVariants.findFirst({
         where: eq(productVariants.id, productVariantId),
-        with: {
-          product: { with: { images: true } },
-          color: true,
-          size: true,
-        },
+        with: { product: { with: { images: true } }, color: true, size: true },
       });
 
-      if (!variant) {
-        throw new NotFoundException('Product variant not found');
-      }
-
-      if (variant.stock < quantity) {
+      if (!variant) throw new NotFoundException('Product variant not found');
+      if (variant.stock < quantity)
         throw new BadRequestException('Insufficient stock');
-      }
 
       price = variant.price
         ? Number(variant.price)
@@ -461,13 +434,9 @@ export class ProductsService {
         with: { images: true },
       });
 
-      if (!product) {
-        throw new NotFoundException('Product not found');
-      }
-
-      if (product.stock < quantity) {
+      if (!product) throw new NotFoundException('Product not found');
+      if (product.stock < quantity)
         throw new BadRequestException('Insufficient stock');
-      }
 
       price = Number(product.price);
       stock = product.stock;
@@ -536,13 +505,9 @@ export class ProductsService {
   }
 
   async updateCartItem(userId: string, itemId: string, quantity: number) {
-    if (quantity < 0) {
+    if (quantity < 0)
       throw new BadRequestException('Quantity cannot be negative');
-    }
-
-    if (quantity === 0) {
-      return this.removeCartItem(userId, itemId);
-    }
+    if (quantity === 0) return this.removeCartItem(userId, itemId);
 
     const [existingItem] = await this.drizzle.db
       .select()
@@ -550,24 +515,20 @@ export class ProductsService {
       .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
       .limit(1);
 
-    if (!existingItem) {
-      throw new NotFoundException('Cart item not found');
-    }
+    if (!existingItem) throw new NotFoundException('Cart item not found');
 
     if (existingItem.productVariantId) {
       const variant = await this.drizzle.db.query.productVariants.findFirst({
         where: eq(productVariants.id, existingItem.productVariantId),
       });
-      if (variant && variant.stock < quantity) {
+      if (variant && variant.stock < quantity)
         throw new BadRequestException('Insufficient stock');
-      }
     } else {
       const product = await this.drizzle.db.query.products.findFirst({
         where: eq(products.id, existingItem.productId as string),
       });
-      if (product && product.stock < quantity) {
+      if (product && product.stock < quantity)
         throw new BadRequestException('Insufficient stock');
-      }
     }
 
     const [updated] = await this.drizzle.db
@@ -576,9 +537,7 @@ export class ProductsService {
       .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
       .returning();
 
-    if (!updated) {
-      throw new NotFoundException('Cart item not found');
-    }
+    if (!updated) throw new NotFoundException('Cart item not found');
 
     const product = await this.drizzle.db.query.products.findFirst({
       where: eq(products.id, existingItem.productId as string),
@@ -621,10 +580,7 @@ export class ProductsService {
       .where(and(eq(cartItems.id, itemId), eq(cartItems.userId, userId)))
       .returning();
 
-    if (!deleted) {
-      throw new NotFoundException('Cart item not found');
-    }
-
+    if (!deleted) throw new NotFoundException('Cart item not found');
     return { message: 'Cart item removed successfully' };
   }
 
@@ -694,13 +650,7 @@ export class ProductsService {
   }
 
   // ==========================================
-  // PRODUCT QUERIES (WITH REVIEW STATS & DATALOADER)
-  // ==========================================
-  // GET ALL PRODUCTS
-  // ==========================================
-
-  // ==========================================
-  // GET PRODUCTS BY CATEGORY
+  // PRODUCT QUERIES
   // ==========================================
 
   async findOne(id: string) {
@@ -711,17 +661,13 @@ export class ProductsService {
         images: {
           orderBy: [desc(mediaAssets.isMain), desc(mediaAssets.order)],
         },
-        variants: {
-          with: { color: true, size: true },
-          limit: 10,
-        },
+        variants: { with: { color: true, size: true }, limit: 10 },
       },
       extras: this._reviewStatsExtras,
     });
 
-    if (!product) {
+    if (!product)
       throw new NotFoundException(`Product with ID ${id} not found`);
-    }
     return product;
   }
 
@@ -733,17 +679,13 @@ export class ProductsService {
         images: {
           orderBy: [desc(mediaAssets.isMain), desc(mediaAssets.order)],
         },
-        variants: {
-          with: { color: true, size: true },
-          limit: 10,
-        },
+        variants: { with: { color: true, size: true }, limit: 10 },
       },
       extras: this._reviewStatsExtras,
     });
 
-    if (!product) {
+    if (!product)
       throw new NotFoundException(`Product with slug ${slug} not found`);
-    }
     return product;
   }
 
@@ -766,7 +708,6 @@ export class ProductsService {
     const productIds = productsList.map((p) => p.id);
     if (productIds.length > 0) {
       const variantsMap = await this.variantsLoader.loadMany(productIds);
-
       return productsList.map((product, index) => ({
         ...product,
         variants: Array.isArray(variantsMap[index]) ? variantsMap[index] : [],
@@ -848,7 +789,7 @@ export class ProductsService {
       .where(eq(products.id, id))
       .returning();
 
-    this.logger.log(`Product updated: ${id}`);
+    this.logInfo(`Product updated: ${id}`);
     return this.findOne(updatedProduct.id);
   }
 
@@ -861,16 +802,14 @@ export class ProductsService {
       )
       .limit(1);
 
-    if (!image) {
-      throw new NotFoundException('Image not found');
-    }
+    if (!image) throw new NotFoundException('Image not found');
 
     await this.supabaseService.deleteImage(image.publicId);
     await this.drizzle.db
       .delete(mediaAssets)
       .where(eq(mediaAssets.id, imageId));
 
-    this.logger.log(`Image deleted: ${imageId}`);
+    this.logInfo(`Image deleted: ${imageId}`);
     return { message: 'Image deleted successfully' };
   }
 
@@ -881,7 +820,7 @@ export class ProductsService {
       await Promise.all(
         product.images.map((image) =>
           this.supabaseService.deleteImage(image.publicId).catch((e) => {
-            this.logger.warn(`Failed to delete image ${image.publicId}: ${e}`);
+            this.logInfo(`Failed to delete image ${image.publicId}`);
           }),
         ),
       );
@@ -892,7 +831,7 @@ export class ProductsService {
       .where(eq(products.id, id))
       .returning();
 
-    this.logger.log(`Product deleted: ${id}`);
+    this.logInfo(`Product deleted: ${id}`);
     return deletedProduct;
   }
 
@@ -950,197 +889,9 @@ export class ProductsService {
   }
 
   // ==========================================
-  // PRIVATE HELPERS
+  // FIND ALL WITH FILTERS
   // ==========================================
 
-  private async _validateProductExists(productId: string): Promise<void> {
-    const [product] = await this.drizzle.db
-      .select({ id: products.id })
-      .from(products)
-      .where(eq(products.id, productId))
-      .limit(1);
-
-    if (!product) {
-      throw new NotFoundException(`Product with ID ${productId} not found`);
-    }
-  }
-
-  private async _generateUniqueSlug(
-    providedSlug?: string,
-    name?: string,
-  ): Promise<string> {
-    const baseSlug =
-      providedSlug ||
-      name
-        ?.toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '') ||
-      'product';
-
-    const existingSlugs = await this.drizzle.db
-      .select({ slug: products.slug })
-      .from(products)
-      .where(sql`${products.slug} LIKE ${baseSlug + '%'}`);
-
-    const slugSet = new Set(existingSlugs.map((s) => s.slug));
-
-    if (!slugSet.has(baseSlug)) {
-      return baseSlug;
-    }
-
-    let counter = 1;
-    while (slugSet.has(`${baseSlug}-${counter}`)) {
-      counter++;
-    }
-    return `${baseSlug}-${counter}`;
-  }
-
-  private async _createBaseVariant(
-    product: any,
-    productData: any,
-  ): Promise<void> {
-    const baseSku = `${product.id.slice(0, 8)}-BASE`.toUpperCase();
-
-    await this.drizzle.db.insert(productVariants).values({
-      id: uuidv4(),
-      productId: product.id,
-      colorId: null,
-      sizeId: null,
-      sku: baseSku,
-      stock: productData.stock ?? 0,
-      price: productData.price.toString(),
-    });
-
-    this.logger.log(
-      `Base variant created for product ${product.id}: ${baseSku}`,
-    );
-  }
-
-  private async _createVariants(
-    productId: string,
-    variants: any[],
-  ): Promise<void> {
-    for (const variant of variants) {
-      const variantData: any = {
-        id: uuidv4(),
-        productId,
-        colorId: variant.colorId || null,
-        sizeId: variant.sizeId || null,
-        stock: variant.stock ?? 0,
-      };
-
-      if (variant.sku) variantData.sku = variant.sku;
-      if (variant.price !== undefined) {
-        variantData.price = variant.price.toString();
-      }
-
-      await this.drizzle.db.insert(productVariants).values(variantData);
-    }
-    this.logger.log(
-      `Created ${variants.length} variants for product ${productId}`,
-    );
-  }
-
-  private async _findVariantWithRelations(variantId: string) {
-    const variant = await this.drizzle.db.query.productVariants.findFirst({
-      where: eq(productVariants.id, variantId),
-      with: { product: true, color: true, size: true },
-    });
-
-    if (!variant) {
-      throw new NotFoundException(`Variant with ID ${variantId} not found`);
-    }
-    return variant;
-  }
-
-  private async _getAllDescendantCategoryIds(
-    parentId: string,
-  ): Promise<string[]> {
-    const result = await this.drizzle.db.execute(sql`
-      WITH RECURSIVE category_tree AS (
-        SELECT id FROM categories WHERE id = ${parentId}
-        UNION ALL
-        SELECT c.id FROM categories c
-        INNER JOIN category_tree ct ON c.parent_id = ct.id
-        WHERE c.is_active = true
-      )
-      SELECT id FROM category_tree WHERE id != ${parentId};
-    `);
-
-    const rows = (result as unknown as { rows: Array<Record<string, unknown>> })
-      .rows;
-
-    return rows.map((row) => row.id as string);
-  }
-
-  private _getOrderExpression(sortBy?: string): SQL[] {
-    switch (sortBy) {
-      case 'price_asc':
-        return [sql`CAST(${products.price} AS DECIMAL) ASC`, desc(products.id)];
-      case 'price_desc':
-        return [
-          sql`CAST(${products.price} AS DECIMAL) DESC`,
-          desc(products.id),
-        ];
-      case 'discount_desc':
-        return [
-          sql`CAST(COALESCE(${products.compareAtPrice}, ${products.price}) AS DECIMAL) - CAST(${products.price} AS DECIMAL) DESC`,
-          desc(products.id),
-        ];
-      case 'newest':
-        return [desc(products.createdAt), desc(products.id)];
-      case 'popular':
-        return [desc(products.stock), desc(products.id)];
-      default:
-        return [desc(products.createdAt), desc(products.id)];
-    }
-  }
-  private get _reviewStatsExtras() {
-    return {
-      // ✅ CRITICAL FIX: Use raw SQL strings for the 'reviews' table.
-      // Using ${reviews.rating} inside 'extras' causes Drizzle to incorrectly map it to "products"."rating".
-      rating:
-        sql<number>`COALESCE(ROUND((SELECT AVG(r.rating)::numeric FROM reviews r WHERE r.product_id = ${products.id}), 1), 0)`.as(
-          'rating',
-        ),
-      reviewCount:
-        sql<number>`COALESCE((SELECT COUNT(*)::int FROM reviews r WHERE r.product_id = ${products.id}), 0)`.as(
-          'reviewCount',
-        ),
-    };
-  }
-
-  // ✅ NEW HELPER: Batch fetch review stats in ONE query instead of N queries
-  private async _batchFetchReviewStats(productIds: string[]) {
-    const reviewStatsMap = new Map<
-      string,
-      { rating: number; reviewCount: number }
-    >();
-    if (productIds.length === 0) return reviewStatsMap;
-
-    const stats = await this.drizzle.db
-      .select({
-        productId: reviews.productId,
-        avgRating: sql<string>`COALESCE(ROUND(AVG(${reviews.rating}::numeric), 1), '0')`,
-        reviewCount: sql<string>`COUNT(*)`,
-      })
-      .from(reviews)
-      .where(inArray(reviews.productId, productIds))
-      .groupBy(reviews.productId);
-
-    stats.forEach((s) => {
-      reviewStatsMap.set(s.productId, {
-        rating: Number(s.avgRating),
-        reviewCount: Number(s.reviewCount),
-      });
-    });
-
-    return reviewStatsMap;
-  }
-
-  // ==========================================
-  // ✅ UPDATED: FIND ALL
-  // ==========================================
   async findAll(filters?: {
     sortBy?: string;
     limit?: number;
@@ -1184,11 +935,9 @@ export class ProductsService {
           },
           variants: { with: { color: true, size: true } },
         },
-        // ❌ REMOVED: extras: this._reviewStatsExtras
       }),
     ]);
 
-    // ✅ INDUSTRY SOLUTION: Batch fetch review stats
     const productIds = productsList.map((p) => p.id);
     const reviewStatsMap = await this._batchFetchReviewStats(productIds);
 
@@ -1219,9 +968,6 @@ export class ProductsService {
     };
   }
 
-  // ==========================================
-  // ✅ UPDATED: GET PRODUCTS BY CATEGORY
-  // ==========================================
   async getProductsByCategory(categoryId: string, filters?: any) {
     const page = Math.max(filters?.page || 1, 1);
     const limit = Math.min(filters?.limit || 20, 50);
@@ -1271,7 +1017,6 @@ export class ProductsService {
           },
           variants: { with: { color: true, size: true } },
         },
-        // ❌ REMOVED: extras: this._reviewStatsExtras
       }),
     ]);
 
@@ -1300,9 +1045,6 @@ export class ProductsService {
     };
   }
 
-  // ==========================================
-  // ✅ UPDATED: SEARCH PRODUCTS
-  // ==========================================
   async searchProducts(searchTerm: string, filters?: any) {
     const page = Math.max(filters?.page || 1, 1);
     const limit = Math.min(filters?.limit || 20, 50);
@@ -1347,7 +1089,6 @@ export class ProductsService {
           },
           variants: { with: { color: true, size: true }, limit: 10 },
         },
-        // ❌ REMOVED: extras: this._reviewStatsExtras
       }),
     ]);
 
@@ -1374,5 +1115,188 @@ export class ProductsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  // ==========================================
+  // PRIVATE HELPERS
+  // ==========================================
+
+  private logInfo(message: string) {
+    if (!this.isProduction) {
+      this.logger.log(message);
+    }
+  }
+
+  private async _validateProductExists(productId: string): Promise<void> {
+    const [product] = await this.drizzle.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+
+    if (!product)
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+  }
+
+  private async _generateUniqueSlug(
+    providedSlug?: string,
+    name?: string,
+  ): Promise<string> {
+    const baseSlug =
+      providedSlug ||
+      name
+        ?.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') ||
+      'product';
+
+    const existingSlugs = await this.drizzle.db
+      .select({ slug: products.slug })
+      .from(products)
+      .where(sql`${products.slug} LIKE ${baseSlug + '%'}`);
+
+    const slugSet = new Set(existingSlugs.map((s) => s.slug));
+
+    if (!slugSet.has(baseSlug)) return baseSlug;
+
+    let counter = 1;
+    while (slugSet.has(`${baseSlug}-${counter}`)) counter++;
+    return `${baseSlug}-${counter}`;
+  }
+
+  private async _createBaseVariant(
+    product: any,
+    productData: any,
+  ): Promise<void> {
+    const baseSku = `${product.id.slice(0, 8)}-BASE`.toUpperCase();
+
+    await this.drizzle.db.insert(productVariants).values({
+      id: uuidv4(),
+      productId: product.id,
+      colorId: null,
+      sizeId: null,
+      sku: baseSku,
+      stock: productData.stock ?? 0,
+      price: productData.price.toString(),
+    });
+
+    this.logInfo(`Base variant created for product ${product.id}`);
+  }
+
+  private async _createVariants(
+    productId: string,
+    variants: any[],
+  ): Promise<void> {
+    for (const variant of variants) {
+      const variantData: any = {
+        id: uuidv4(),
+        productId,
+        colorId: variant.colorId || null,
+        sizeId: variant.sizeId || null,
+        stock: variant.stock ?? 0,
+      };
+
+      if (variant.sku) variantData.sku = variant.sku;
+      if (variant.price !== undefined)
+        variantData.price = variant.price.toString();
+
+      await this.drizzle.db.insert(productVariants).values(variantData);
+    }
+    this.logInfo(
+      `Created ${variants.length} variants for product ${productId}`,
+    );
+  }
+
+  private async _findVariantWithRelations(variantId: string) {
+    const variant = await this.drizzle.db.query.productVariants.findFirst({
+      where: eq(productVariants.id, variantId),
+      with: { product: true, color: true, size: true },
+    });
+
+    if (!variant)
+      throw new NotFoundException(`Variant with ID ${variantId} not found`);
+    return variant;
+  }
+
+  private async _getAllDescendantCategoryIds(
+    parentId: string,
+  ): Promise<string[]> {
+    const result = await this.drizzle.db.execute(sql`
+      WITH RECURSIVE category_tree AS (
+        SELECT id FROM categories WHERE id = ${parentId}
+        UNION ALL
+        SELECT c.id FROM categories c
+        INNER JOIN category_tree ct ON c.parent_id = ct.id
+        WHERE c.is_active = true
+      )
+      SELECT id FROM category_tree WHERE id != ${parentId};
+    `);
+
+    const rows = (result as unknown as { rows: Array<Record<string, unknown>> })
+      .rows;
+    return rows.map((row) => row.id as string);
+  }
+
+  private _getOrderExpression(sortBy?: string): SQL[] {
+    switch (sortBy) {
+      case 'price_asc':
+        return [sql`CAST(${products.price} AS DECIMAL) ASC`, desc(products.id)];
+      case 'price_desc':
+        return [
+          sql`CAST(${products.price} AS DECIMAL) DESC`,
+          desc(products.id),
+        ];
+      case 'discount_desc':
+        return [
+          sql`CAST(COALESCE(${products.compareAtPrice}, ${products.price}) AS DECIMAL) - CAST(${products.price} AS DECIMAL) DESC`,
+          desc(products.id),
+        ];
+      case 'newest':
+        return [desc(products.createdAt), desc(products.id)];
+      case 'popular':
+        return [desc(products.stock), desc(products.id)];
+      default:
+        return [desc(products.createdAt), desc(products.id)];
+    }
+  }
+
+  private get _reviewStatsExtras() {
+    return {
+      rating:
+        sql<number>`COALESCE(ROUND((SELECT AVG(r.rating)::numeric FROM reviews r WHERE r.product_id = ${products.id}), 1), 0)`.as(
+          'rating',
+        ),
+      reviewCount:
+        sql<number>`COALESCE((SELECT COUNT(*)::int FROM reviews r WHERE r.product_id = ${products.id}), 0)`.as(
+          'reviewCount',
+        ),
+    };
+  }
+
+  private async _batchFetchReviewStats(productIds: string[]) {
+    const reviewStatsMap = new Map<
+      string,
+      { rating: number; reviewCount: number }
+    >();
+    if (productIds.length === 0) return reviewStatsMap;
+
+    const stats = await this.drizzle.db
+      .select({
+        productId: reviews.productId,
+        avgRating: sql<string>`COALESCE(ROUND(AVG(${reviews.rating}::numeric), 1), '0')`,
+        reviewCount: sql<string>`COUNT(*)`,
+      })
+      .from(reviews)
+      .where(inArray(reviews.productId, productIds))
+      .groupBy(reviews.productId);
+
+    stats.forEach((s) => {
+      reviewStatsMap.set(s.productId, {
+        rating: Number(s.avgRating),
+        reviewCount: Number(s.reviewCount),
+      });
+    });
+
+    return reviewStatsMap;
   }
 }

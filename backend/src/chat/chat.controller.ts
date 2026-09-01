@@ -1,3 +1,4 @@
+// src/chat/chat.controller.ts
 import {
   Controller,
   Get,
@@ -18,6 +19,8 @@ import {
   BadRequestException,
   ForbiddenException,
   Inject,
+  ParseUUIDPipe,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -32,10 +35,12 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Redis } from '@upstash/redis';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChatService } from './chat.service';
 import { ChatGateway } from './chat.gateway';
 import { SupabaseService } from 'src/supabase/supabase.service';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 interface RequestUser {
   userId?: string;
@@ -49,18 +54,27 @@ interface AuthenticatedRequest {
 
 @ApiTags('Chat')
 @Controller('chat')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ThrottlerGuard)
 @ApiBearerAuth('JWT-auth')
 export class ChatController {
+  private readonly logger = new Logger(ChatController.name);
+  private readonly isProduction: boolean;
+
   constructor(
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
     private readonly supabaseService: SupabaseService,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
-  ) {}
+  ) {
+    this.isProduction = process.env.NODE_ENV === 'production';
+  }
 
   private getUserId(req: AuthenticatedRequest): string {
-    return String(req.user.userId || req.user.sub || req.user.id);
+    const userId = String(req.user.userId || req.user.sub || req.user.id);
+    if (!userId || userId === 'undefined') {
+      throw new ForbiddenException('Invalid user ID');
+    }
+    return userId;
   }
 
   private async getUserOrThrow(userId: string) {
@@ -74,6 +88,11 @@ export class ChatController {
   private async isSuperAdmin(userId: string): Promise<boolean> {
     const user = await this.getUserOrThrow(userId);
     return Boolean(user.isSuperAdmin);
+  }
+
+  private async isAdmin(userId: string): Promise<boolean> {
+    const user = await this.getUserOrThrow(userId);
+    return Boolean(user.isAdmin || user.isSuperAdmin);
   }
 
   // ==========================================
@@ -101,13 +120,12 @@ export class ChatController {
     return this.chatService.getAllConversationsForSuperAdmin(
       userId,
       page,
-      limit,
+      Math.min(limit, 50),
       search,
     );
   }
 
   @Get('admin/:adminId/users')
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({
     summary: 'Get all users a specific admin has conversations with',
   })
@@ -115,7 +133,7 @@ export class ChatController {
   @ApiQuery({ name: 'search', required: false })
   async getAdminUsers(
     @Request() req: AuthenticatedRequest,
-    @Param('adminId') adminId: string,
+    @Param('adminId', ParseUUIDPipe) adminId: string,
     @Query('search') search?: string,
   ) {
     const userId = this.getUserId(req);
@@ -136,7 +154,7 @@ export class ChatController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   async getConversationMessages(
     @Request() req: AuthenticatedRequest,
-    @Param('conversationId') conversationId: string,
+    @Param('conversationId', ParseUUIDPipe) conversationId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
   ) {
     const userId = this.getUserId(req);
@@ -146,7 +164,10 @@ export class ChatController {
         'Only super admins can access this endpoint',
       );
     }
-    return this.chatService.getConversationMessages(conversationId, limit);
+    return this.chatService.getConversationMessages(
+      conversationId,
+      Math.min(limit, 100),
+    );
   }
 
   // ==========================================
@@ -154,6 +175,7 @@ export class ChatController {
   // ==========================================
 
   @Get('users/search')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'Search users by name, phone, or email' })
   @ApiQuery({ name: 'q', required: true })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -167,7 +189,13 @@ export class ChatController {
     @Query('role') role?: 'user' | 'admin',
     @Query('isOnline') isOnline?: string,
   ) {
-    return this.chatService.searchUsers(query, {
+    if (!query || query.trim().length < 2) {
+      throw new BadRequestException(
+        'Search query must be at least 2 characters',
+      );
+    }
+
+    return this.chatService.searchUsers(query.trim(), {
       limit: Math.min(limit, 100),
       offset,
       role,
@@ -185,9 +213,15 @@ export class ChatController {
     @Query('q') query: string,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
+    if (!query || query.trim().length < 2) {
+      throw new BadRequestException(
+        'Search query must be at least 2 characters',
+      );
+    }
+
     return this.chatService.searchChatUsers(
       this.getUserId(req),
-      query,
+      query.trim(),
       Math.min(limit, 50),
     );
   }
@@ -214,6 +248,7 @@ export class ChatController {
 
   @Post('conversations')
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: 'Create a new conversation' })
   @ApiBody({
     schema: {
@@ -226,6 +261,10 @@ export class ChatController {
     @Request() req: AuthenticatedRequest,
     @Body('participantId') participantId: string,
   ) {
+    if (!participantId || !participantId.trim()) {
+      throw new BadRequestException('Participant ID is required');
+    }
+
     return this.chatService.createConversation(
       this.getUserId(req),
       participantId,
@@ -253,7 +292,7 @@ export class ChatController {
   @ApiQuery({ name: 'before', required: false, type: String })
   async getMessages(
     @Request() req: AuthenticatedRequest,
-    @Param('partnerId') partnerId: string,
+    @Param('partnerId', ParseUUIDPipe) partnerId: string,
     @Query('limit', new DefaultValuePipe(50), ParseIntPipe) limit: number,
     @Query('before') before?: string,
   ) {
@@ -270,7 +309,7 @@ export class ChatController {
   @ApiOperation({ summary: 'Mark all messages from a partner as read' })
   async markAsRead(
     @Request() req: AuthenticatedRequest,
-    @Param('partnerId') partnerId: string,
+    @Param('partnerId', ParseUUIDPipe) partnerId: string,
   ) {
     return this.chatService.markAsRead(this.getUserId(req), partnerId);
   }
@@ -286,15 +325,27 @@ export class ChatController {
   // ==========================================
 
   @Post('device-token')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Register device token for push notifications' })
   async registerDeviceToken(
     @Request() req: AuthenticatedRequest,
     @Body() body: { token: string; platform: string },
   ) {
+    if (!body.token || !body.token.trim()) {
+      throw new BadRequestException('Device token is required');
+    }
+
+    // Safe logging - mask token
+    if (!this.isProduction) {
+      this.logger.log(
+        `Registering device token: ${LogSanitizer.maskValue(body.token)}`,
+      );
+    }
+
     await this.chatService.registerDeviceToken(
       this.getUserId(req),
       body.token,
-      body.platform,
+      body.platform || 'unknown',
     );
     return { success: true };
   }
@@ -305,6 +356,10 @@ export class ChatController {
     @Request() req: AuthenticatedRequest,
     @Body() body: { token: string },
   ) {
+    if (!body.token || !body.token.trim()) {
+      throw new BadRequestException('Device token is required');
+    }
+
     await this.chatService.unregisterDeviceToken(
       this.getUserId(req),
       body.token,
@@ -318,7 +373,7 @@ export class ChatController {
 
   @Get('users/:userId/status')
   @ApiOperation({ summary: 'Check if a user is online and get basic info' })
-  async getUserStatus(@Param('userId') userId: string) {
+  async getUserStatus(@Param('userId', ParseUUIDPipe) userId: string) {
     const [isOnline, user] = await Promise.all([
       this.chatGateway.isUserOnline(userId),
       this.chatService.getUserById(userId),
@@ -329,7 +384,9 @@ export class ChatController {
       isOnline,
       lastSeen: isOnline ? null : user?.lastSeen,
       name: user?.name || null,
-      phoneNumber: user?.phoneNumber || null,
+      phoneNumber: user?.phoneNumber
+        ? LogSanitizer.maskPhoneNumber(user.phoneNumber)
+        : null,
       profileImage: user?.profileImage || null,
     };
   }
@@ -360,6 +417,7 @@ export class ChatController {
   // ==========================================
 
   @Post('upload-media')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Upload chat media to Supabase' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -370,6 +428,21 @@ export class ChatController {
   )
   async uploadChatMedia(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file uploaded');
+
+    // Validate file type
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+      'image/gif',
+    ];
+    if (!allowedTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Invalid file type. Only images are allowed.',
+      );
+    }
+
     const result = await this.supabaseService.uploadFile(file, 'chat_images');
     return {
       success: true,

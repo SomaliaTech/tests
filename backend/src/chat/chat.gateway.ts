@@ -1,3 +1,4 @@
+// src/chat/chat.gateway.ts
 import {
   Logger,
   Inject,
@@ -20,6 +21,7 @@ import { Redis } from '@upstash/redis';
 import { ChatService } from './chat.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notification.entity';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 interface SocketMeta {
   userId: string;
@@ -66,14 +68,11 @@ export class ChatGateway
     OnGatewayDisconnect,
     OnApplicationBootstrap
 {
-  /**
-   * Because we are using namespace: '/chat',
-   * Nest usually injects a Socket.IO Namespace, not the root Server.
-   */
   @WebSocketServer()
   server!: Namespace;
 
   private readonly logger = new Logger(ChatGateway.name);
+  private readonly isProduction: boolean;
 
   private readonly PRESENCE_TTL = 120;
   private readonly SOCKET_TTL = 3600;
@@ -84,7 +83,9 @@ export class ChatGateway
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
-  ) {}
+  ) {
+    this.isProduction = process.env.NODE_ENV === 'production';
+  }
 
   // ==========================================
   // LIFECYCLE HOOKS
@@ -140,7 +141,7 @@ export class ChatGateway
       const userId = String(payload.sub || payload.userId || '');
       const isAdmin = Boolean(payload.isAdmin);
 
-      if (!userId) {
+      if (!userId || userId === 'undefined') {
         this.disconnectWithError(client, 'Invalid user ID in token');
         return;
       }
@@ -172,8 +173,9 @@ export class ChatGateway
         timestamp: new Date().toISOString(),
       });
 
+      // Safe logging - mask user ID
       this.logger.log(
-        `🔗 Client connected: ${client.id} (User: ${userId}, Admin: ${isAdmin})`,
+        `🔗 Client connected: ${client.id.substring(0, 8)}... (User: ${LogSanitizer.maskValue(userId)}, Admin: ${isAdmin})`,
       );
     } catch (error) {
       const errorMessage =
@@ -215,9 +217,8 @@ export class ChatGateway
           new Date().toISOString(),
         );
 
-        this.logger.log(`🔴 User ${userId} offline`);
+        this.logger.log(`🔴 User offline`);
       } else {
-        // User still has another active socket/device/tab
         await Promise.all([
           this.redis.expire(`user_sockets:${userId}`, this.SOCKET_TTL),
           this.redis.set(`user_online:${userId}`, '1', {
@@ -227,11 +228,13 @@ export class ChatGateway
         ]);
 
         this.logger.log(
-          `🟢 User ${userId} still online with ${remainingSockets.length} socket(s)`,
+          `🟢 User still online with ${remainingSockets.length} socket(s)`,
         );
       }
 
-      this.logger.log(`🔌 Client disconnected: ${client.id}`);
+      this.logger.log(
+        `🔌 Client disconnected: ${client.id.substring(0, 8)}...`,
+      );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -275,7 +278,7 @@ export class ChatGateway
       await this.redis.expire(`socket:${client.id}`, this.SOCKET_TTL);
       await this.refreshPresence(userId, client.id);
     } catch (error) {
-      this.logger.debug(`Heartbeat error: ${error}`);
+      this.logger.debug(`Heartbeat error`);
     }
   }
 
@@ -293,7 +296,7 @@ export class ChatGateway
         isTyping: data.isTyping,
       });
     } catch (error) {
-      this.logger.error(`Typing event error: ${error}`);
+      this.logger.error(`Typing event error`);
     }
   }
 
@@ -337,7 +340,6 @@ export class ChatGateway
       // Emit to receiver's room
       const receiverRoom = `user:${data.receiverId}`;
       this.server.to(receiverRoom).emit('new_message', message);
-      this.logger.log(`📨 Emitted new_message to ${receiverRoom}`);
 
       // Emit to sender's room for multi-device sync
       const senderRoom = `user:${senderId}`;
@@ -347,7 +349,7 @@ export class ChatGateway
       const isReceiverOnline = await this.isUserOnline(data.receiverId);
       if (!isReceiverOnline) {
         this.sendPushNotification(senderId, data).catch((err) =>
-          this.logger.error(`Push notification failed: ${err.message}`),
+          this.logger.error(`Push notification failed`),
         );
       }
     } catch (error) {
@@ -374,10 +376,6 @@ export class ChatGateway
         data.chatPartnerId,
       );
 
-      this.logger.log(
-        `✅ Marked ${result.count} messages as read: ${userId} → ${data.chatPartnerId}`,
-      );
-
       const readReceipt = {
         readerId: userId,
         conversationId: result.conversationId,
@@ -385,12 +383,10 @@ export class ChatGateway
         timestamp: new Date().toISOString(),
       };
 
-      // Notify partner
       this.server
         .to(`user:${data.chatPartnerId}`)
         .emit('message_read', readReceipt);
 
-      // Notify current user's other devices too
       client.emit('message_read', readReceipt);
     } catch (error) {
       const errorMessage =
@@ -411,12 +407,8 @@ export class ChatGateway
         userId: data.partnerId,
         isOnline,
       });
-
-      this.logger.log(
-        `Status check for ${data.partnerId}: ${isOnline ? 'online' : 'offline'}`,
-      );
     } catch (error) {
-      this.logger.error(`Status check error: ${error}`);
+      this.logger.error(`Status check error`);
     }
   }
 
@@ -434,7 +426,7 @@ export class ChatGateway
 
       return this.hasActiveSockets(userSockets);
     } catch (error) {
-      this.logger.error(`Redis isUserOnline error: ${error}`);
+      this.logger.error(`Redis isUserOnline error`);
       return false;
     }
   }
@@ -443,7 +435,7 @@ export class ChatGateway
     try {
       return await this.redis.smembers('online_users');
     } catch (error) {
-      this.logger.error(`Redis getOnlineUsers error: ${error}`);
+      this.logger.error(`Redis getOnlineUsers error`);
       return [];
     }
   }
@@ -452,13 +444,6 @@ export class ChatGateway
   // PRIVATE HELPERS
   // ==========================================
 
-  /**
-   * Safe helper to get the actual Socket.IO sockets map.
-   *
-   * Works for:
-   * - Namespace: namespace.sockets = Map<string, Socket>
-   * - Server: server.sockets.sockets = Map<string, Socket>
-   */
   private get socketsMap(): Map<string, Socket> | undefined {
     const serverAny = this.server as any;
     if (!serverAny) return undefined;
@@ -470,20 +455,11 @@ export class ChatGateway
     return serverAny.sockets?.sockets;
   }
 
-  /**
-   * Checks whether the given socket IDs are still active.
-   *
-   * - If a socket exists in this process and is connected => active.
-   * - If a socket is NOT in this process, we assume it may belong to another
-   *   server instance and trust Redis TTL/heartbeat.
-   * - If all sockets are known locally and none are connected => inactive.
-   */
   private hasActiveSockets(socketIds: string[]): boolean {
     if (!socketIds.length) return false;
 
     const socketsMap = this.socketsMap;
 
-    // If we cannot access local socket map, trust Redis.
     if (!socketsMap) {
       return socketIds.length > 0;
     }
@@ -499,8 +475,6 @@ export class ChatGateway
       (socketId) => !socketsMap.has(socketId),
     );
 
-    // If any socket is not known to this process, it may be connected
-    // on another instance. Do not mark offline immediately.
     if (hasUnknownSocket) return true;
 
     return false;
@@ -549,7 +523,7 @@ export class ChatGateway
         actionLink: `/chat/${senderId}`,
       });
     } catch (error) {
-      this.logger.error(`Push notification error: ${error}`);
+      this.logger.error(`Push notification error`);
     }
   }
 
@@ -574,14 +548,9 @@ export class ChatGateway
         this.server.to(`user:${partnerId}`).emit('partner_status', payload);
       }
 
-      // Optional: also notify the user's own other devices
       this.server.to(`user:${userId}`).emit('partner_status', payload);
 
-      this.logger.log(
-        `📡 Broadcast status for ${userId} (${
-          isOnline ? 'online' : 'offline'
-        }) to ${partnerIds.length} partners`,
-      );
+      this.logger.log(`📡 Broadcast status to ${partnerIds.length} partners`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';

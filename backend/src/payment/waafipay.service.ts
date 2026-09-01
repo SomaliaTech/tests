@@ -1,6 +1,8 @@
+// src/payment/waafipay.service.ts
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosError } from 'axios';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 export interface WaafiPayConfig {
   merchantUId: string;
@@ -71,7 +73,49 @@ export class WaafiPayService {
       !this.config.apiKey
     ) {
       this.logger.warn('⚠️ WaafiPay credentials not fully configured');
+    } else {
+      // ✅ SAFE: Log only masked credentials
+      this.logger.log('✅ WaafiPay credentials configured');
+      this.logger.log(
+        `   Merchant UID: ${LogSanitizer.maskValue(this.config.merchantUId)}`,
+      );
+      this.logger.log(
+        `   API UID: ${LogSanitizer.maskValue(this.config.apiUId)}`,
+      );
+      this.logger.log('   API Key: ***CONFIGURED***');
     }
+  }
+
+  private createSafeRequestBody(
+    data: PaymentRequest,
+    referenceId: string,
+    orderId: string,
+  ): any {
+    const requestBody = {
+      schemaVersion: '1.0',
+      requestId: referenceId,
+      timestamp: new Date().toISOString(),
+      channelName: 'WEB',
+      serviceName: 'API_PURCHASE',
+      serviceParams: {
+        merchantUid: this.config.merchantUId,
+        apiUserId: this.config.apiUId,
+        apiKey: this.config.apiKey,
+        paymentMethod: 'MWALLET_ACCOUNT',
+        payerInfo: {
+          accountNo: this.formatPhoneNumber(data.phoneNumber),
+        },
+        transactionInfo: {
+          referenceId: referenceId,
+          invoiceId: orderId,
+          amount: data.amount.toString(),
+          currency: 'USD',
+          description: data.description,
+        },
+      },
+    };
+
+    return requestBody;
   }
 
   async initiatePayment(data: PaymentRequest): Promise<PaymentResponse> {
@@ -96,54 +140,15 @@ export class WaafiPayService {
       const waafiPaymentMethod = this.getWaafiPaymentMethod(data.paymentMethod);
       this.logger.debug(`Using payment method: ${waafiPaymentMethod}`);
 
-      //       {
-      // 	"schemaVersion": "1.0",
-      //   "requestId": "{{$guid}}",
-      //     "timestamp": "{{$timestamp}}",
-      // 	"channelName": "WEB",
-      // 	"serviceName": "API_PURCHASE",
-      // 	"serviceParams": {
-      //      "merchantUid": "M0914352",
-      //         "apiUserId": "1009097",
-      //         "apiKey": "API-CXV4bcVgLIQMEBrN0PWWN4c5LUla",
-      // 	"paymentMethod": "MWALLET_ACCOUNT",
-      // 	"payerInfo": {
-      // 			 "accountNo": "252612883364"
-      // 		},
-      // 	"transactionInfo": {
-      // 		"referenceId": "FR_{{$randomBankAccount}}",
-      // 		"invoiceId": "FR_IN_{{$randomBankAccount}}",
-      // 		"amount": "0.1",
-      // 		"currency": "USD",
-      // 		"description": "test direct purchase"
-      // 		}
-      // 	}
-      // }
-      const requestBody = {
-        schemaVersion: '1.0',
-        requestId: data.referenceId, // ✅ FIX: Use actual referenceId (Removed {{$guid}})
-        timestamp: new Date().toISOString(), // ✅ FIX: Use actual time (Removed {{$timestamp}})
-        channelName: 'WEB',
-        serviceName: 'API_PURCHASE',
-        serviceParams: {
-          merchantUid: this.config.merchantUId,
-          apiUserId: this.config.apiUId,
-          apiKey: this.config.apiKey,
-          paymentMethod: 'MWALLET_ACCOUNT', // ✅ FIX: Use the dynamic variable, NOT 'MWALLET_ACCOUNT'
-          payerInfo: {
-            accountNo: this.formatPhoneNumber(data.phoneNumber),
-          },
-          transactionInfo: {
-            referenceId: data.referenceId,
-            invoiceId: data.orderId,
-            amount: data.amount.toString(),
-            currency: 'USD',
-            description: data.description,
-          },
-        },
-      };
+      const requestBody = this.createSafeRequestBody(
+        data,
+        data.referenceId,
+        data.orderId,
+      );
 
-      this.logger.debug(`WaafiPay Request: ${JSON.stringify(requestBody)}`);
+      // ✅ SAFE: Log sanitized request body (mask API key and phone)
+      const safeRequestBody = LogSanitizer.sanitize(requestBody);
+      this.logger.debug(`WaafiPay Request: ${JSON.stringify(safeRequestBody)}`);
 
       const response = await axios.post<WaafiPayApiResponse>(
         `${this.config.baseUrl}/asm`,
@@ -156,12 +161,17 @@ export class WaafiPayService {
         },
       );
 
-      this.logger.debug(`WaafiPay Response: ${JSON.stringify(response.data)}`);
+      // ✅ SAFE: Log sanitized response
+      const safeResponse = LogSanitizer.sanitize(response.data);
+      this.logger.debug(`WaafiPay Response: ${JSON.stringify(safeResponse)}`);
 
       return this.parseResponse(response.data);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        this.logger.error(`WaafiPay Payment Error: ${error.message}`);
+        // ✅ SAFE: Sanitize error message
+        this.logger.error(
+          `WaafiPay Payment Error: ${LogSanitizer.sanitizeString(error.message)}`,
+        );
       }
 
       if (axios.isAxiosError(error)) {
@@ -170,9 +180,9 @@ export class WaafiPayService {
           errorMsg?: string;
         }>;
         if (axiosError.response?.data) {
-          this.logger.error(
-            `Response data: ${JSON.stringify(axiosError.response.data)}`,
-          );
+          // ✅ SAFE: Sanitize response data
+          const safeErrorData = LogSanitizer.sanitize(axiosError.response.data);
+          this.logger.error(`Response data: ${JSON.stringify(safeErrorData)}`);
           return {
             success: false,
             message:
@@ -206,6 +216,12 @@ export class WaafiPayService {
         },
       };
 
+      // ✅ SAFE: Log sanitized request body
+      const safeRequestBody = LogSanitizer.sanitize(requestBody);
+      this.logger.debug(
+        `Status Check Request: ${JSON.stringify(safeRequestBody)}`,
+      );
+
       const response = await axios.post<WaafiPayApiResponse>(
         `${this.config.baseUrl}/asm`,
         requestBody,
@@ -215,10 +231,18 @@ export class WaafiPayService {
         },
       );
 
+      // ✅ SAFE: Log sanitized response
+      const safeResponse = LogSanitizer.sanitize(response.data);
+      this.logger.debug(
+        `Status Check Response: ${JSON.stringify(safeResponse)}`,
+      );
+
       return this.parseResponse(response.data);
     } catch (error: unknown) {
       if (error instanceof Error) {
-        this.logger.error(`Status check error: ${error.message}`);
+        this.logger.error(
+          `Status check error: ${LogSanitizer.sanitizeString(error.message)}`,
+        );
       }
       return {
         success: false,
@@ -235,7 +259,6 @@ export class WaafiPayService {
     const isSuccess =
       responseCode === '2001' || description.toLowerCase().includes('success');
 
-    // ✅ Map WaafiPay codes to friendly messages
     let friendlyMessage = description || 'Unknown response';
 
     if (responseCode === '5310' || description.includes('REJECTED')) {
@@ -261,6 +284,7 @@ export class WaafiPayService {
       responseCode: responseCode,
     };
   }
+
   private getWaafiPaymentMethod(method: string | undefined): string {
     if (!method) return 'EVC_PLUS';
 

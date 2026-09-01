@@ -29,6 +29,7 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notification.entity';
 import { WaafiPayService } from 'src/payment/waafipay.service';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 @Injectable()
 export class OrdersService {
@@ -344,7 +345,9 @@ export class OrdersService {
   // ✅ KEEP only this combined version:
 
   async createOrder(userId: string, orderData: CreateOrderDto) {
-    this.logger.log(`Creating order for user: ${userId}`);
+    this.logger.log(
+      `Processing payment for user: ${LogSanitizer.maskValue(userId)}`,
+    );
 
     // Step 1: Calculate total first
     let itemsTotal = 0;

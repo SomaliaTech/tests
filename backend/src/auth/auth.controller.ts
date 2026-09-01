@@ -1,3 +1,4 @@
+// src/auth/auth.controller.ts
 import {
   Controller,
   Post,
@@ -21,7 +22,7 @@ import {
   ApiBody,
   ApiConsumes,
 } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler'; // ✅ Import ThrottlerGuard
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -59,7 +60,7 @@ export class AuthController {
   }
 
   @Post('complete-profile')
-  @UseGuards(JwtAuthGuard) // ✅ No ThrottlerGuard here
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('profileImage'))
   @ApiBearerAuth('JWT-auth')
   async completeProfile(
@@ -83,7 +84,7 @@ export class AuthController {
   }
 
   @Post('upload-profile-image')
-  @UseGuards(JwtAuthGuard) // ✅ No ThrottlerGuard here
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('image'))
   @ApiBearerAuth('JWT-auth')
   @ApiConsumes('multipart/form-data')
@@ -113,7 +114,7 @@ export class AuthController {
   }
 
   @Post('upload-profile-image-url')
-  @UseGuards(JwtAuthGuard) // ✅ No ThrottlerGuard here
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiBody({ type: UploadProfileImageDto })
   async uploadProfileImageFromUrl(
@@ -125,14 +126,14 @@ export class AuthController {
 
   // ✅ UNLIMITED: Get Current User (Called frequently by app)
   @Get('me')
-  @UseGuards(JwtAuthGuard) // ✅ No ThrottlerGuard here
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   async getMe(@Request() req) {
     return this.authService.getMe(req.user.userId);
   }
 
   @Patch('profile')
-  @UseGuards(JwtAuthGuard) // ✅ No ThrottlerGuard here
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiBody({ type: UpdateProfileDto })
   async updateProfile(

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Inject,
   forwardRef,
+  Logger,
 } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { CloudflareService } from '../cloudfare/cloudflare.service';
@@ -43,6 +44,7 @@ import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from 'src/notifications/notifications.service';
 import { NotificationType } from 'src/notifications/notification.entity';
 import { PermissionGroups, Permission } from './enums/permissions.enum'; // ✅ ADD THIS
+import { LogSanitizer } from 'src/common/utils/log-sanitizer.util';
 
 // Type definitions
 interface CategoryData {
@@ -133,6 +135,9 @@ interface MarketUpdateData {
 @Injectable()
 export class AdminService {
   // ✅ CORRECT - all services properly injected
+
+  private readonly logger = new Logger(AdminService.name);
+  private readonly isProduction: boolean;
   constructor(
     private drizzle: DrizzleService,
     private cloudflareService: CloudflareService,
@@ -141,8 +146,9 @@ export class AdminService {
     private chatGateway: ChatGateway,
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
-  ) {}
-
+  ) {
+    this.isProduction = process.env.NODE_ENV === 'production';
+  }
   async getStats() {
     const [result] = await this.drizzle.db
       .select({
@@ -984,7 +990,6 @@ export class AdminService {
       userRolesList.forEach((ur) => {
         let permissions = ur.permissions as unknown;
 
-        // ✅ Handle string permissions (in case stored as JSON string)
         if (typeof permissions === 'string') {
           try {
             permissions = JSON.parse(permissions);
@@ -1000,7 +1005,8 @@ export class AdminService {
 
       return Array.from(allPermissions);
     } catch (error) {
-      console.error('❌ [Admin] Error getting user permissions:', error);
+      // ✅ FIX: Use sanitized error logging
+      this.logError('Error getting user permissions', error);
       return [];
     }
   }
@@ -1023,9 +1029,11 @@ export class AdminService {
         })
         .returning();
 
+      // ✅ FIX: Don't log role data (may contain permissions)
+      this.logInfo('Role created successfully', { roleId: role.id });
       return role;
     } catch (error) {
-      console.error('❌ [Admin] Error creating role:', error);
+      this.logError('Failed to create role', error);
       throw new BadRequestException('Failed to create role');
     }
   }
@@ -1089,10 +1097,8 @@ export class AdminService {
     await this.drizzle.db.delete(roles).where(eq(roles.id, roleId));
     return { message: 'Role deleted successfully' };
   }
-
   async getAllRoles() {
     try {
-      // ✅ Single query with LEFT JOIN instead of N+1 queries
       const rolesWithCount = await this.drizzle.db
         .select({
           id: roles.id,
@@ -1122,7 +1128,7 @@ export class AdminService {
         userCount: Number(role.userCount) || 0,
       }));
     } catch (error) {
-      console.error('❌ [Admin] Error getting roles:', error);
+      this.logError('Error getting roles', error);
       throw new BadRequestException('Failed to get roles');
     }
   }
@@ -1170,15 +1176,17 @@ export class AdminService {
         })
         .returning();
 
-      // ✅ Notify with role name
       await this.emitRoleChanged(userId, role[0].name, 'assigned');
+
+      // ✅ FIX: Don't log full user/role data
+      this.logInfo('Role assigned', { userId, roleId });
 
       return {
         message: 'Role assigned successfully',
         assignment,
       };
     } catch (error) {
-      console.error('❌ [Admin] Error assigning role:', error);
+      this.logError('Failed to assign role', error);
       throw new BadRequestException('Failed to assign role');
     }
   }
@@ -1214,17 +1222,20 @@ export class AdminService {
         };
       }
 
-      // ✅ Notify with role name
       await this.emitRoleChanged(userId, role?.name, 'removed');
+
+      // ✅ FIX: Safe logging
+      this.logInfo('Role removed', { userId, roleId });
 
       return {
         message: 'Role removed successfully',
       };
     } catch (error) {
-      console.error('❌ [Admin] Error removing role:', error);
+      this.logError('Failed to remove role', error);
       throw error;
     }
   }
+
   async getUserRoles(userId: string) {
     try {
       const assignments = await this.drizzle.db.query.userRoles.findMany({
@@ -1417,14 +1428,18 @@ export class AdminService {
           ...roleData,
           permissions: roleData.permissions,
         });
-        console.log(`✅ Created default role: ${roleData.name}`);
+
+        // ✅ FIX: Safe logging (don't log permissions)
+        this.logInfo(`Created default role: ${roleData.name}`);
       }
     }
   }
   // Add to admin.service.ts
 
   async getAnalyticsForCustomDates(dates: Date[]) {
-    console.log('📊 [Admin] Fetching analytics for custom dates:', dates);
+    this.logInfo('Fetching analytics for custom dates', {
+      dateCount: dates.length,
+    });
 
     try {
       const [
@@ -1450,7 +1465,7 @@ export class AdminService {
         selectedDates: dates.map((d) => d.toISOString().split('T')[0]),
       };
     } catch (error) {
-      console.error('❌ [Admin] Custom dates analytics failed:', error);
+      this.logError('Custom dates analytics failed', error);
       throw error;
     }
   }
@@ -1913,8 +1928,10 @@ export class AdminService {
     }
 
     try {
-      console.log('✅ [Admin] Inserting product with data:', insertData);
-      console.log('✅ [Admin] Price type:', typeof insertData.price);
+      this.logInfo('Creating product', {
+        productName: createProductDto.name,
+        categoryId: createProductDto.categoryId,
+      });
 
       await this.drizzle.db
         .insert(products)
@@ -1950,7 +1967,11 @@ export class AdminService {
       return this.getProductById(productId);
     } catch (error: unknown) {
       const err = error as { message?: string; detail?: string; code?: string };
-      console.error('❌ Database Insert Error:', err.message);
+      this.logError('Database Insert Error', {
+        message: err.message,
+        code: err.code,
+        detail: err.detail,
+      });
       console.error('❌ Error Code:', err.code);
       console.error('❌ Error Detail:', err.detail);
 
@@ -2012,9 +2033,7 @@ export class AdminService {
 
       // 2. Delete images marked for deletion
       if (updateData.deleted_image_ids?.length > 0) {
-        console.log(
-          `🗑️ Deleting ${updateData.deleted_image_ids.length} images`,
-        );
+        this.logInfo(`Deleting ${updateData.deleted_image_ids.length} images`);
 
         // Delete from Supabase storage (fire and forget)
         const imagesToDelete = await tx
@@ -2036,8 +2055,8 @@ export class AdminService {
 
       // 3. ✅ SAFE DELETE variants (Handle foreign key constraints)
       if (updateData.deleted_variant_ids?.length > 0) {
-        console.log(
-          `🗑️ Attempting to delete ${updateData.deleted_variant_ids.length} variants`,
+        this.logInfo(
+          `Attempting to delete ${updateData.deleted_variant_ids.length} variants`,
         );
         try {
           await tx
@@ -2064,8 +2083,8 @@ export class AdminService {
 
       // 4. Update existing variants
       if (updateData.existing_variants?.length > 0) {
-        console.log(
-          `✏️ Updating ${updateData.existing_variants.length} variants`,
+        this.logInfo(
+          `Updating ${updateData.existing_variants.length} variants`,
         );
         for (const variant of updateData.existing_variants) {
           // ✅ CRITICAL FIX: Check both variantId AND id to support frontend sync
@@ -2099,9 +2118,7 @@ export class AdminService {
 
       // 5. Create new variants
       if (updateData.new_variants?.length > 0) {
-        console.log(
-          `➕ Creating ${updateData.new_variants.length} new variants`,
-        );
+        this.logInfo(`Creating ${updateData.new_variants.length} new variants`);
         for (const variant of updateData.new_variants) {
           await tx.insert(productVariants).values({
             id: uuidv4(),
@@ -2119,7 +2136,7 @@ export class AdminService {
 
       // 6. Upload new images (inside transaction)
       if (newImages && newImages.length > 0) {
-        console.log(`🖼️ Uploading ${newImages.length} new images`);
+        this.logInfo(`Uploading ${newImages.length} new images`);
         for (let i = 0; i < newImages.length; i++) {
           const image = newImages[i];
           try {
@@ -2302,22 +2319,24 @@ export class AdminService {
     // ✅ STEP 5: Apply sorting to roots and all nested children
     sortChildrenByNewest(roots);
 
-    console.log('📊 [Admin] Categories tree sorted (newest first):');
-    const logTree = (items: any[], level: number = 0) => {
-      items.forEach((item) => {
-        const indent = '  '.repeat(level);
-        const date = item.createdAt
-          ? new Date(item.createdAt as string).toISOString().split('T')[0]
-          : 'no date';
-        console.log(
-          `${indent}${level === 0 ? '📁' : '└─'} ${item.name} (${date})`,
-        );
-        if (item.children && item.children.length > 0) {
-          logTree(item.children as any[], level + 1);
-        }
-      });
-    };
-    logTree(roots);
+    if (!this.isProduction) {
+      this.logInfo('Categories tree sorted');
+      const logTree = (items: any[], level: number = 0) => {
+        items.forEach((item) => {
+          const indent = '  '.repeat(level);
+          const date = item.createdAt
+            ? new Date(item.createdAt as string).toISOString().split('T')[0]
+            : 'no date';
+          this.logInfo(
+            `${indent}${level === 0 ? '📁' : '└─'} ${item.name} (${date})`,
+          );
+          if (item.children && item.children.length > 0) {
+            logTree(item.children as any[], level + 1);
+          }
+        });
+      };
+      logTree(roots);
+    }
 
     return roots;
   }
@@ -3504,9 +3523,10 @@ export class AdminService {
         isRead: false,
       });
 
-      console.log(
-        `🔔 [Admin] Emitted role_changed + notification to user: ${userId}`,
-      );
+      this.logInfo(`Emitted role_changed + notification`, {
+        userId: LogSanitizer.maskValue(userId),
+        action,
+      });
     } catch (error) {
       console.error('❌ [Admin] Failed to emit role_changed:', error);
     }
@@ -3515,7 +3535,7 @@ export class AdminService {
   // ANALYTICS - All Analytics Combined
   // ==========================================
   async getAllAnalytics(period: string = 'week') {
-    console.log('📊 [Admin] Fetching all analytics for period:', period);
+    this.logInfo('Fetching all analytics', { period });
 
     try {
       const [
@@ -3555,7 +3575,7 @@ export class AdminService {
         recentSignups,
       };
     } catch (error) {
-      console.error('❌ [Admin] Analytics fetch failed:', error);
+      this.logError('Analytics fetch failed', error);
       // ✅ Return empty data instead of throwing
       return {
         topProducts: [],
@@ -3565,5 +3585,18 @@ export class AdminService {
         recentSignups: [],
       };
     }
+  }
+
+  private logInfo(message: string, ...data: any[]) {
+    if (this.isProduction) return; // Skip info logs in production
+
+    const sanitizedData = data.map((d) => LogSanitizer.sanitize(d));
+    this.logger.log(message, ...sanitizedData);
+  }
+
+  private logError(message: string, error?: any) {
+    // ✅ Always log errors, but sanitize
+    const sanitizedError = error ? LogSanitizer.sanitize(error) : undefined;
+    this.logger.error(message, sanitizedError);
   }
 }

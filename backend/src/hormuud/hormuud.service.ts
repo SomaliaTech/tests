@@ -1,7 +1,9 @@
+// src/sms/hormuud.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import * as crypto from 'crypto';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
 // Define TypeScript interfaces for API responses
 interface TokenResponse {
@@ -37,16 +39,29 @@ export class HormuudService {
   private readonly logger = new Logger(HormuudService.name);
   private accessToken: string | null = null;
   private tokenExpiry: Date | null = null;
+  private readonly isProduction: boolean;
 
   constructor(private configService: ConfigService) {
-    const username = this.configService.get<string>('HORMUUD_USERNAME');
-    const password = this.configService.get<string>('HORMUUD_PASSWORD');
-    const senderId = this.configService.get<string>('HORMUUD_SENDER_ID');
+    this.isProduction = configService.get('NODE_ENV') === 'production';
 
-    this.logger.log('✅ Hormuud credentials configured');
-    this.logger.log(`   Username: ${username ?? 'MISSING'}`);
-    this.logger.log(`   Password: ${password ? '***HIDDEN***' : 'MISSING'}`);
-    this.logger.log(`   Sender ID: ${senderId ?? 'MISSING'}`);
+    // ✅ ONLY log in development
+    if (!this.isProduction) {
+      const username = this.configService.get<string>('HORMUUD_USERNAME');
+      const senderId = this.configService.get<string>('HORMUUD_SENDER_ID');
+
+      this.logger.log('✅ Hormuud credentials configured');
+      this.logger.log(`   Username: ${this.maskUsername(username)}`);
+      this.logger.log(`   Password: ***CONFIGURED***`);
+      this.logger.log(`   Sender ID: ${senderId ?? 'MISSING'}`);
+    }
+  }
+  private maskUsername(username: string | undefined): string {
+    if (!username) return 'MISSING';
+    if (username.length <= 4) return '***';
+
+    const firstTwo = username.substring(0, 2);
+    const lastTwo = username.substring(username.length - 2);
+    return `${firstTwo}***${lastTwo}`;
   }
 
   private async getAccessToken(): Promise<string> {
@@ -90,13 +105,24 @@ export class HormuudService {
       this.tokenExpiry = new Date(Date.now() + 55 * 60 * 1000); // 55 minutes
 
       this.logger.log('✅ Successfully obtained Hormuud access token');
+
+      // ✅ SAFE: Never log the actual token
+      if (this.accessToken) {
+        this.logger.log(
+          `   Token: ${LogSanitizer.maskValue(this.accessToken)}`,
+        );
+      }
+
       return this.accessToken;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        this.logger.error('Token API Error:', {
+        // ✅ SAFE: Sanitize error response before logging
+        const sanitizedError = LogSanitizer.sanitize({
           status: error.response?.status,
           data: error.response?.data,
         });
+
+        this.logger.error('Token API Error:', sanitizedError);
 
         const errorData = error.response?.data as
           | { error?: string }
@@ -112,7 +138,11 @@ export class HormuudService {
 
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to get Hormuud access token: ${errorMessage}`);
+
+      // ✅ SAFE: Sanitize error message before logging
+      this.logger.error(
+        `Failed to get Hormuud access token: ${LogSanitizer.sanitizeString(errorMessage)}`,
+      );
       throw new Error('Failed to authenticate with Hormuud SMS provider');
     }
   }
@@ -123,8 +153,9 @@ export class HormuudService {
       const formattedPhone = phoneNumber.replace('+', '');
       const senderId = this.configService.get<string>('HORMUUD_SENDER_ID');
 
+      // ✅ SAFE: Mask phone number in logs
       this.logger.log(
-        `Sending SMS to ${formattedPhone} from ${senderId ?? 'Unknown'}`,
+        `Sending SMS to ${LogSanitizer.maskPhoneNumber(formattedPhone)}`,
       );
 
       const response = await axios.post<SmsResponse>(
@@ -158,7 +189,11 @@ export class HormuudService {
         smsResponse.ResponseMessage === 'Failed.'
       ) {
         const description = smsResponse.Data?.Description ?? 'Unknown error';
-        this.logger.error(`SMS sending failed: ${description}`);
+
+        // ✅ SAFE: Sanitize description
+        this.logger.error(
+          `SMS sending failed: ${LogSanitizer.sanitizeString(description)}`,
+        );
 
         if (description === 'Zero Balance!!') {
           throw new Error(
@@ -169,17 +204,30 @@ export class HormuudService {
         throw new Error(`SMS sending failed: ${description}`);
       }
 
-      this.logger.log(`✅ SMS sent successfully to ${formattedPhone}`);
-      this.logger.log('Response:', JSON.stringify(smsResponse));
+      // ✅ SAFE: Mask phone in success log
+      this.logger.log(
+        `✅ SMS sent successfully to ${LogSanitizer.maskPhoneNumber(formattedPhone)}`,
+      );
+      // ✅ SAFE: Sanitize response before logging
+      this.logger.log('Response:', LogSanitizer.sanitize(smsResponse));
+
       return true;
     } catch (error: unknown) {
-      this.logger.error(`Failed to send SMS to ${phoneNumber}`);
+      // ✅ SAFE: Mask phone in error log
+      this.logger.error(
+        `Failed to send SMS to ${LogSanitizer.maskPhoneNumber(phoneNumber)}`,
+        error,
+      );
 
       if (axios.isAxiosError(error)) {
-        this.logger.error('API Error:', {
-          status: error.response?.status,
-          data: error.response?.data,
-        });
+        // ✅ SAFE: Sanitize API error
+        this.logger.error(
+          'API Error:',
+          LogSanitizer.sanitize({
+            status: error.response?.status,
+            data: error.response?.data,
+          }),
+        );
       }
 
       if (error instanceof Error) {
@@ -192,6 +240,12 @@ export class HormuudService {
 
   async sendOtpSms(phoneNumber: string, otpCode: string): Promise<boolean> {
     const message = `Koodhkaaga xaqiijinta waa ${otpCode}. Fadlan ha la wadaagin cidna. Wuu dhacayaa 10 daqiiqo gudahood.`;
+
+    // ✅ SAFE: Log without OTP code
+    this.logger.log(
+      `Sending OTP SMS to ${LogSanitizer.maskPhoneNumber(phoneNumber)}`,
+    );
+
     return this.sendSms(phoneNumber, message);
   }
 }

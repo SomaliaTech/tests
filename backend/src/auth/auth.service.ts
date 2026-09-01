@@ -1,3 +1,4 @@
+// src/auth/auth.service.ts
 import {
   BadRequestException,
   Inject,
@@ -20,7 +21,10 @@ import { OAuth2Client, TokenPayload } from 'google-auth-library';
 import { HormuudService } from '../hormuud/hormuud.service';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { FacebookAuthDto } from './dto/facebook-auth.dto';
+import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 import axios from 'axios';
+import * as crypto from 'crypto';
+
 interface User {
   id: string;
   phoneNumber: string;
@@ -51,7 +55,7 @@ interface UpdateUserData {
 }
 
 interface OtpCacheData {
-  otpCode: string;
+  otpHash: string; // ✅ Store hash instead of plain OTP
   phoneNumber: string;
   attempts: number;
 }
@@ -117,14 +121,21 @@ export class AuthService {
   }
 
   // ==========================================
-  // OTP SEND
+  // OTP SEND - WITH HASHING
   // ==========================================
   async sendOtp(phoneNumber: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // ✅ Hash OTP with phone number as salt
+    const hashedOtp = crypto
+      .createHash('sha256')
+      .update(otpCode + normalizedPhone)
+      .digest('hex');
+
     const redisKey = `otp:${normalizedPhone}`;
     const otpData: OtpCacheData = {
-      otpCode,
+      otpHash: hashedOtp, // Store hash, not plain OTP
       phoneNumber: normalizedPhone,
       attempts: 0,
     };
@@ -133,34 +144,49 @@ export class AuthService {
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
-      this.logger.log(`OTP stored in Redis for ${normalizedPhone}`);
+
+      // ✅ Safe logging - mask phone
+      this.logger.log(
+        `OTP stored for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+      );
 
       if (this.isProduction) {
         await this.hormuudService.sendOtpSms(normalizedPhone, otpCode);
-        this.logger.log('OTP sent via SMS');
+        this.logger.log(
+          `OTP sent via SMS to ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+        );
         return {
           message: 'OTP sent successfully',
         };
       } else {
-        // In development, still store in Redis but return the OTP for testing
-        this.logger.log(`[DEV] OTP for ${normalizedPhone}: ${otpCode}`);
+        // ✅ Only return OTP in development AND if explicitly allowed
+        const allowDebugOtp =
+          this.configService.get('ALLOW_DEBUG_OTP') === 'true';
+
+        this.logger.log(
+          `[DEV] OTP sent to ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+        );
+
         return {
           message: 'OTP sent successfully (Development Mode)',
-          debugOtp: otpCode,
+          debugOtp: allowDebugOtp ? otpCode : undefined,
         };
       }
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to send OTP: ${errorMessage}`);
+      this.logger.error(
+        `Failed to send OTP: ${LogSanitizer.sanitizeString(errorMessage)}`,
+      );
       await this.redis.del(redisKey);
       throw new BadRequestException(
         `Failed to send verification code: ${errorMessage}`,
       );
     }
   }
+
   // ==========================================
-  // OTP VERIFY
+  // OTP VERIFY - WITH HASH CHECK
   // ==========================================
   async verifyOtp(phoneNumber: string, otpCode: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
@@ -193,15 +219,23 @@ export class AuthService {
       );
     }
 
-    // ✅ ALWAYS check OTP - both in production AND development
-    if (otpData.otpCode !== otpCode) {
+    // ✅ Hash the input OTP and compare
+    const hashedInput = crypto
+      .createHash('sha256')
+      .update(otpCode + normalizedPhone)
+      .digest('hex');
+
+    if (hashedInput !== otpData.otpHash) {
       otpData.attempts += 1;
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
+
+      // ✅ Safe logging
       this.logger.warn(
-        `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS} for ${normalizedPhone}`,
+        `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS} for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
+
       throw new UnauthorizedException('Invalid OTP code');
     }
 
@@ -259,7 +293,6 @@ export class AuthService {
 
     const token = this.generateToken(
       currentUser.id,
-      currentUser.phoneNumber as string,
       currentUser.isAdmin ?? false,
       currentUser.isSuperAdmin ?? false,
     );
@@ -332,7 +365,6 @@ export class AuthService {
 
       const currentUser = userResult[0];
 
-      // ✅ FIX: hasProfile should be false if phoneNumber is empty OR marketId is null
       const hasProfile = !!(
         currentUser.phoneNumber &&
         currentUser.phoneNumber.trim().length > 0 &&
@@ -342,9 +374,13 @@ export class AuthService {
 
       const token = this.generateToken(
         currentUser.id,
-        currentUser.phoneNumber || '',
         currentUser.isAdmin ?? false,
         currentUser.isSuperAdmin ?? false,
+      );
+
+      // ✅ Safe logging
+      this.logger.log(
+        `Google sign-in successful for ${LogSanitizer.maskEmail(verifiedEmail)}`,
       );
 
       return {
@@ -357,7 +393,7 @@ export class AuthService {
           profileImage: currentUser.profileImage,
           marketId: currentUser.marketId,
           isVerified: currentUser.isVerified,
-          hasProfile: hasProfile, // ✅ Now correctly false for new Google users
+          hasProfile: hasProfile,
           isAdmin: currentUser.isAdmin ?? false,
           isSuperAdmin: currentUser.isSuperAdmin ?? false,
         },
@@ -366,16 +402,15 @@ export class AuthService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      this.logger.error('Google sign in failed:', error);
+      this.logger.error('Google sign in failed');
       throw new UnauthorizedException('Google authentication failed');
     }
   }
 
   async facebookSignIn(dto: FacebookAuthDto) {
-    this.logger.log('📘 Facebook sign in called');
+    this.logger.log('Facebook sign in called');
 
     try {
-      // Get user info from Facebook
       const graphResponse = await axios.get(`https://graph.facebook.com/me`, {
         params: {
           fields: 'id,name,email,picture',
@@ -383,17 +418,12 @@ export class AuthService {
         },
       });
 
-      this.logger.log(
-        `📘 Facebook user: ${JSON.stringify(graphResponse.data)}`,
-      );
-
       const fbUser = graphResponse.data;
       const fbId = fbUser.id;
       const name = fbUser.name || 'Facebook User';
       const email = fbUser.email || null;
       const profileImage = fbUser.picture?.data?.url || null;
 
-      // Check if user exists
       let userResult = await this.drizzle.db
         .select()
         .from(users)
@@ -429,12 +459,15 @@ export class AuthService {
 
       const token = this.generateToken(
         currentUser.id,
-        currentUser.phoneNumber || '',
         currentUser.isAdmin ?? false,
         currentUser.isSuperAdmin ?? false,
       );
 
-      // ✅ RETURN the result
+      // ✅ Safe logging
+      this.logger.log(
+        `Facebook sign-in successful for ${LogSanitizer.maskValue(fbId)}`,
+      );
+
       return {
         message: 'Facebook login successful',
         token,
@@ -452,10 +485,11 @@ export class AuthService {
         },
       };
     } catch (error) {
-      this.logger.error('❌ Facebook sign in error:', error);
+      this.logger.error('Facebook sign in error');
       throw new UnauthorizedException('Facebook authentication failed');
     }
   }
+
   /**
    * ✅ Verify Google ID Token and return TokenPayload
    */
@@ -476,8 +510,6 @@ export class AuthService {
         throw new UnauthorizedException('Invalid Google token payload');
       }
 
-      // ✅ TokenPayload has: iss, aud, email, email_verified, name, picture, exp, iat, sub
-
       if (!this.GOOGLE_ISSUERS.includes(payload.iss)) {
         this.logger.warn(`Invalid Google issuer: ${payload.iss}`);
         throw new UnauthorizedException('Invalid Google token issuer');
@@ -486,7 +518,7 @@ export class AuthService {
       const expectedAudience =
         this.configService.get<string>('GOOGLE_CLIENT_ID');
       if (payload.aud !== expectedAudience) {
-        this.logger.warn(`Invalid Google audience: ${payload.aud}`);
+        this.logger.warn(`Invalid Google audience`);
         throw new UnauthorizedException('Invalid Google token audience');
       }
 
@@ -503,12 +535,12 @@ export class AuthService {
         throw new UnauthorizedException('Google token issued in the future');
       }
 
-      return payload; // ✅ Return TokenPayload type
+      return payload;
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      this.logger.error('Google token verification failed:', error);
+      this.logger.error('Google token verification failed');
       throw new UnauthorizedException('Failed to verify Google token');
     }
   }
@@ -567,14 +599,11 @@ export class AuthService {
 
     if (data.phoneNumber && data.phoneNumber.trim().length > 0) {
       const cleanedPhone = data.phoneNumber.trim();
-
-      // ✅ Check if this is a Google user (existing user has empty phone)
       const isGoogleUser =
         existingUser &&
         (!existingUser.phoneNumber || existingUser.phoneNumber.trim() === '');
 
       if (isGoogleUser) {
-        // ✅ Google users: Accept international numbers (6-15 digits with country code)
         const internationalPhone = cleanedPhone.replace(/\D/g, '');
 
         if (internationalPhone.length < 6 || internationalPhone.length > 15) {
@@ -583,12 +612,25 @@ export class AuthService {
           );
         }
 
-        // Preserve the + sign and country code
-        updateData.phoneNumber = cleanedPhone.startsWith('+')
+        const formattedPhone = cleanedPhone.startsWith('+')
           ? cleanedPhone
           : `+${internationalPhone}`;
+
+        // ✅ Check if phone already exists
+        const existingPhone = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.phoneNumber, formattedPhone))
+          .limit(1);
+
+        if (existingPhone.length > 0 && existingPhone[0].id !== userId) {
+          throw new BadRequestException(
+            'This phone number is already registered to another account.',
+          );
+        }
+
+        updateData.phoneNumber = formattedPhone;
       } else {
-        // ✅ OTP users: Somali numbers only (9 digits)
         updateData.phoneNumber = this.normalizePhoneNumber(cleanedPhone);
       }
     }
@@ -601,7 +643,7 @@ export class AuthService {
         );
         updateData.profileImage = uploadResult.secure_url;
       } catch (error: unknown) {
-        this.logger.error('Image upload failed:', error);
+        this.logger.error('Image upload failed');
         throw new BadRequestException('Failed to upload profile image');
       }
     }
@@ -621,7 +663,6 @@ export class AuthService {
 
       const token = this.generateToken(
         updatedUser.id,
-        updatedUser.phoneNumber || '',
         updatedUser.isAdmin ?? false,
         updatedUser.isSuperAdmin ?? false,
       );
@@ -672,7 +713,7 @@ export class AuthService {
         throw error;
       }
 
-      this.logger.error('Error completing profile:', error);
+      this.logger.error('Error completing profile');
       throw new BadRequestException('Failed to update profile.');
     }
   }
@@ -694,7 +735,6 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // ✅ FIX: hasProfile should check BOTH phone and marketId
     const hasProfile = !!(
       user.phoneNumber &&
       user.phoneNumber.trim().length > 0 &&
@@ -710,11 +750,12 @@ export class AuthService {
       profileImage: user.profileImage,
       marketId: user.marketId,
       isVerified: user.isVerified,
-      hasProfile: hasProfile, // ✅ Now correctly false if no phone/market
+      hasProfile: hasProfile,
       isAdmin: user.isAdmin ?? false,
       isSuperAdmin: user.isSuperAdmin ?? false,
     };
   }
+
   // ==========================================
   // UPDATE PROFILE
   // ==========================================
@@ -837,24 +878,27 @@ export class AuthService {
   }
 
   // ==========================================
-  // TOKEN GENERATION
+  // TOKEN GENERATION - REMOVE PII
   // ==========================================
-
   private generateToken(
     userId: string,
-    phoneNumber: string,
     isAdmin?: boolean,
     isSuperAdmin?: boolean,
   ): string {
-    const expiresIn = 90 * 24 * 60 * 60; // 6 month
+    const expiresIn = 90 * 24 * 60 * 60; // 90 days (3 months)
+
     return this.jwtService.sign(
       {
         sub: userId,
-        phoneNumber,
+        // ❌ REMOVE: phoneNumber - don't put PII in JWT
         isAdmin: isAdmin ?? false,
         isSuperAdmin: isSuperAdmin ?? false,
       },
-      { expiresIn },
+      {
+        expiresIn,
+        issuer: 'dhaqan-celiyo-app',
+        audience: 'dhaqan-celiyo-users',
+      },
     );
   }
 }
