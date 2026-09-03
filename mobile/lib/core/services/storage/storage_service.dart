@@ -1,6 +1,12 @@
-import 'package:flutter/rendering.dart';
+// lib/core/services/storage/storage_service.dart
+
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io' show Platform;
 
 class StorageService {
   static const String _tokenKey = 'auth_token';
@@ -14,23 +20,102 @@ class StorageService {
   static const String _isAdminKey = 'is_admin';
   static const String _isSuperAdminKey = 'is_super_admin';
   static const String _messageSoundKey = 'message_sound_enabled';
-  static const String _permissionsKey = 'cached_permissions'; // ✅ Added
+  static const String _permissionsKey = 'cached_permissions';
+  static const String _lastActivityKey = 'last_activity_timestamp';
 
   final FlutterSecureStorage _secureStorage;
 
   // ✅ In-memory cache to prevent read delays
   String? _cachedToken;
   bool? _cachedIsSuperAdmin;
-  List<String>? _cachedPermissions; // ✅ Added cache for permissions
+  List<String>? _cachedPermissions;
+  DateTime? _lastActivity;
 
   StorageService({FlutterSecureStorage? secureStorage})
     : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   // ==========================================
-  // Permissions Management (using SharedPreferences)
+  // 🔒 DEVICE SECURITY CHECKS
   // ==========================================
 
-  /// Save user permissions to local storage
+  /// Check if the device is secure (not rooted/jailbroken)
+  static Future<bool> isDeviceSecure() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        // Check for root indicators
+        final isRooted =
+            androidInfo.isPhysicalDevice == false ||
+            androidInfo.bootloader?.contains('root') == true ||
+            androidInfo.fingerprint?.contains('test-keys') == true ||
+            androidInfo.hardware?.contains('goldfish') == true;
+
+        if (isRooted) {
+          debugPrint('⚠️ Device appears to be rooted');
+          return false;
+        }
+        return true;
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        // Check for jailbreak indicators
+        final isJailbroken =
+            iosInfo.isPhysicalDevice == false ||
+            iosInfo.name?.contains('iPhone') == false;
+
+        if (isJailbroken) {
+          debugPrint('⚠️ Device appears to be jailbroken');
+          return false;
+        }
+        return true;
+      }
+
+      return true;
+    } catch (e) {
+      // If we can't check, assume device is secure
+      debugPrint('⚠️ Could not check device security: $e');
+      return true;
+    }
+  }
+
+  // ==========================================
+  // 🔐 SESSION MANAGEMENT
+  // ==========================================
+
+  /// Update last activity timestamp
+  Future<void> updateLastActivity() async {
+    _lastActivity = DateTime.now();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastActivityKey, _lastActivity!.toIso8601String());
+  }
+
+  /// Get last activity timestamp
+  Future<DateTime?> getLastActivity() async {
+    if (_lastActivity != null) return _lastActivity;
+
+    final prefs = await SharedPreferences.getInstance();
+    final timestamp = prefs.getString(_lastActivityKey);
+    if (timestamp != null) {
+      _lastActivity = DateTime.parse(timestamp);
+      return _lastActivity;
+    }
+    return null;
+  }
+
+  /// Check if session is expired (30 minutes timeout)
+  Future<bool> isSessionExpired() async {
+    final lastActivity = await getLastActivity();
+    if (lastActivity == null) return true;
+
+    final difference = DateTime.now().difference(lastActivity);
+    return difference.inMinutes > 30; // 30 minute timeout
+  }
+
+  // ==========================================
+  // 🔑 PERMISSIONS MANAGEMENT
+  // ==========================================
+
   Future<void> savePermissions(List<String> permissions) async {
     debugPrint('💾 Saving permissions: ${permissions.length} permissions');
     _cachedPermissions = permissions;
@@ -39,102 +124,51 @@ class StorageService {
     debugPrint('💾 Permissions saved successfully');
   }
 
-  /// Get cached user permissions
   Future<List<String>> getPermissions() async {
     if (_cachedPermissions != null) {
-      debugPrint(
-        '🔍 Returning cached permissions: ${_cachedPermissions!.length}',
-      );
       return _cachedPermissions!;
     }
 
     final prefs = await SharedPreferences.getInstance();
     final permissions = prefs.getStringList(_permissionsKey) ?? [];
     _cachedPermissions = permissions;
-    debugPrint('🔍 Loaded permissions from storage: ${permissions.length}');
     return permissions;
   }
 
-  /// Clear cached permissions (call on logout)
   Future<void> clearPermissions() async {
-    debugPrint('🗑️ Clearing cached permissions');
     _cachedPermissions = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_permissionsKey);
-    debugPrint('🗑️ Permissions cleared successfully');
   }
 
-  /// Check if user has a specific permission
   Future<bool> hasPermission(String permission) async {
     final permissions = await getPermissions();
-    final hasPermission = permissions.contains(permission);
-    debugPrint('🔍 Checking permission "$permission": $hasPermission');
-    return hasPermission;
-  }
-
-  /// Check if user has any of the specified permissions
-  Future<bool> hasAnyPermission(List<String> permissions) async {
-    final userPermissions = await getPermissions();
-    final hasAny = permissions.any((p) => userPermissions.contains(p));
-    debugPrint('🔍 Checking any permission from $permissions: $hasAny');
-    return hasAny;
-  }
-
-  /// Check if user has all of the specified permissions
-  Future<bool> hasAllPermissions(List<String> permissions) async {
-    final userPermissions = await getPermissions();
-    final hasAll = permissions.every((p) => userPermissions.contains(p));
-    debugPrint('🔍 Checking all permissions from $permissions: $hasAll');
-    return hasAll;
+    return permissions.contains(permission);
   }
 
   // ==========================================
-  // Super Admin
+  // 🔐 AUTH TOKEN (Stored securely)
   // ==========================================
-  Future<void> saveIsSuperAdmin(bool isSuperAdmin) async {
-    debugPrint('💾 Saving isSuperAdmin: $isSuperAdmin');
-    _cachedIsSuperAdmin = isSuperAdmin;
-    await _secureStorage.write(
-      key: _isSuperAdminKey,
-      value: isSuperAdmin.toString(),
-    );
-    debugPrint('💾 isSuperAdmin saved successfully');
-  }
 
-  Future<void> setChatMuted(String chatId, bool isMuted) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('chat_muted_$chatId', isMuted);
-  }
-
-  // Get mute status for a specific chat
-  Future<bool> isChatMuted(String chatId) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('chat_muted_$chatId') ?? false;
-  }
-
-  Future<bool> getIsSuperAdmin() async {
-    debugPrint('🔍 Getting isSuperAdmin from storage...');
-    if (_cachedIsSuperAdmin != null) {
-      debugPrint('🔍 Cached isSuperAdmin: $_cachedIsSuperAdmin');
-      return _cachedIsSuperAdmin!;
-    }
-    final value = await _secureStorage.read(key: _isSuperAdminKey);
-    debugPrint('🔍 Raw isSuperAdmin value: $value');
-    final result = value == 'true';
-    _cachedIsSuperAdmin = result;
-    debugPrint('🔍 Parsed isSuperAdmin: $result');
-    return result;
-  }
-
-  // ==========================================
-  // Auth related
-  // ==========================================
   Future<void> saveAuthToken(String token) async {
+    if (token.isEmpty) {
+      debugPrint('⚠️ Attempted to save empty token, ignoring');
+      return;
+    }
     _cachedToken = token;
     await _secureStorage.write(key: _tokenKey, value: token);
+    await updateLastActivity();
+    debugPrint('✅ Auth token saved securely (length: ${token.length})');
   }
 
   Future<String?> getAuthToken() async {
+    // Check session expiry
+    if (await isSessionExpired()) {
+      debugPrint('⚠️ Session expired, clearing token');
+      await clearAuthData();
+      return null;
+    }
+
     if (_cachedToken != null && _cachedToken!.isNotEmpty) {
       return _cachedToken;
     }
@@ -146,6 +180,16 @@ class StorageService {
     return token;
   }
 
+  Future<void> clearAuthToken() async {
+    _cachedToken = null;
+    await _secureStorage.delete(key: _tokenKey);
+    debugPrint('🗑️ Auth token cleared from secure storage');
+  }
+
+  // ==========================================
+  // 👤 USER ID
+  // ==========================================
+
   Future<void> saveUserId(String userId) async {
     await _secureStorage.write(key: _userIdKey, value: userId);
   }
@@ -154,22 +198,36 @@ class StorageService {
     return await _secureStorage.read(key: _userIdKey);
   }
 
+  // ==========================================
+  // 🔓 LOGIN STATUS
+  // ==========================================
+
   Future<void> saveLoginStatus(bool isLoggedIn) async {
     await _secureStorage.write(
       key: _isLoggedInKey,
       value: isLoggedIn.toString(),
     );
+    if (isLoggedIn) {
+      await updateLastActivity();
+    }
   }
 
   Future<bool> isAuthenticated() async {
+    // First check if device is secure
+    if (!(await isDeviceSecure())) {
+      await clearAuthData();
+      return false;
+    }
+
     final token = await getAuthToken();
     final isLoggedIn = await _secureStorage.read(key: _isLoggedInKey);
     return token != null && token.isNotEmpty && isLoggedIn == 'true';
   }
 
   // ==========================================
-  // Admin related
+  // 👑 ADMIN STATUS
   // ==========================================
+
   Future<void> saveIsAdmin(bool isAdmin) async {
     await _secureStorage.write(key: _isAdminKey, value: isAdmin.toString());
   }
@@ -179,9 +237,28 @@ class StorageService {
     return value == 'true';
   }
 
+  Future<void> saveIsSuperAdmin(bool isSuperAdmin) async {
+    _cachedIsSuperAdmin = isSuperAdmin;
+    await _secureStorage.write(
+      key: _isSuperAdminKey,
+      value: isSuperAdmin.toString(),
+    );
+  }
+
+  Future<bool> getIsSuperAdmin() async {
+    if (_cachedIsSuperAdmin != null) {
+      return _cachedIsSuperAdmin!;
+    }
+    final value = await _secureStorage.read(key: _isSuperAdminKey);
+    final result = value == 'true';
+    _cachedIsSuperAdmin = result;
+    return result;
+  }
+
   // ==========================================
-  // Profile related
+  // 👤 PROFILE INFORMATION
   // ==========================================
+
   Future<void> saveUserName(String name) async {
     await _secureStorage.write(key: _userNameKey, value: name);
   }
@@ -223,8 +300,23 @@ class StorageService {
   }
 
   // ==========================================
-  // Sound Settings (uses SharedPreferences)
+  // 🔇 CHAT MUTE SETTINGS (SharedPreferences - non-sensitive)
   // ==========================================
+
+  Future<void> setChatMuted(String chatId, bool isMuted) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('chat_muted_$chatId', isMuted);
+  }
+
+  Future<bool> isChatMuted(String chatId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('chat_muted_$chatId') ?? false;
+  }
+
+  // ==========================================
+  // 🔊 SOUND SETTINGS (SharedPreferences - non-sensitive)
+  // ==========================================
+
   Future<bool> getMessageSoundEnabled() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_messageSoundKey) ?? true;
@@ -236,15 +328,19 @@ class StorageService {
   }
 
   // ==========================================
-  // Clear Data (Logout)
+  // 🗑️ CLEAR ALL DATA (Logout)
   // ==========================================
+
   Future<void> clearAuthData() async {
-    debugPrint('🗑️ Clearing all auth data...');
+    debugPrint('🗑️ Clearing all auth data from secure storage...');
+
+    // Clear cache
     _cachedToken = null;
     _cachedIsSuperAdmin = null;
-    _cachedPermissions = null; // ✅ Clear permissions cache
+    _cachedPermissions = null;
+    _lastActivity = null;
 
-    // Clear secure storage
+    // Clear ALL secure storage keys
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);
@@ -256,9 +352,49 @@ class StorageService {
     await _secureStorage.delete(key: _isAdminKey);
     await _secureStorage.delete(key: _isSuperAdminKey);
 
-    // Clear permissions from SharedPreferences
+    // Clear SharedPreferences data
     await clearPermissions();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_lastActivityKey);
 
     debugPrint('🗑️ All auth data cleared successfully');
+  }
+
+  // ==========================================
+  // 📊 TOKEN VALIDATION
+  // ==========================================
+
+  /// Validate if the token is still valid (not expired)
+  Future<bool> isValidToken() async {
+    final token = await getAuthToken();
+    if (token == null || token.isEmpty) return false;
+
+    try {
+      // Decode JWT to check expiration
+      final parts = token.split('.');
+      if (parts.length != 3) return false;
+
+      final payload = parts[1];
+      // Add padding if needed
+      String normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
+      while (normalized.length % 4 != 0) {
+        normalized += '=';
+      }
+
+      final decoded = utf8.decode(base64Url.decode(normalized));
+      final json = jsonDecode(decoded) as Map<String, dynamic>;
+
+      if (json.containsKey('exp')) {
+        final expiry = DateTime.fromMillisecondsSinceEpoch(
+          (json['exp'] as int) * 1000,
+        );
+        return expiry.isAfter(DateTime.now());
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ Token validation failed: $e');
+      return false;
+    }
   }
 }

@@ -1,4 +1,5 @@
-// drizzle/schema.ts
+// src/drizzle/schema.ts
+
 import {
   decimal,
   integer,
@@ -10,9 +11,9 @@ import {
   text,
   index,
   uniqueIndex,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { jsonb } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // CATEGORY TABLE
@@ -265,14 +266,13 @@ export const productVariants = pgTable(
 );
 
 // ==========================================
-// USERS TABLE (FIXED - REMOVED GIN INDEXES)
+// USERS TABLE
 // ==========================================
-// src/drizzle/schema.ts - Update users table
 export const users = pgTable(
   'users',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    phoneNumber: varchar('phone_number', { length: 20 }).unique(), // ✅ Remove .notNull()
+    phoneNumber: varchar('phone_number', { length: 20 }).unique(),
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 255 }),
     profileImage: varchar('profile_image', { length: 500 }),
@@ -285,8 +285,7 @@ export const users = pgTable(
     lastSeen: timestamp('last_seen', { withTimezone: true }),
     otpCode: varchar('otp_code', { length: 6 }),
     otpExpiresAt: timestamp('otp_expires_at', { withTimezone: true }),
-    facebookId: varchar('facebook_id', { length: 255 }).unique(), // ✅ ADD THIS
-
+    facebookId: varchar('facebook_id', { length: 255 }).unique(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -296,7 +295,7 @@ export const users = pgTable(
   },
   (table) => ({
     phoneNumberIdx: index('users_phone_number_idx').on(table.phoneNumber),
-    emailIdx: index('users_email_idx').on(table.email), // ✅ Add email index
+    emailIdx: index('users_email_idx').on(table.email),
     marketIdIdx: index('users_market_id_idx').on(table.marketId),
     adminActiveIdx: index('idx_users_admin_active').on(
       table.isAdmin,
@@ -371,16 +370,13 @@ export const markets = pgTable(
     slug: varchar('slug', { length: 255 }).notNull().unique(),
     city: varchar('city', { length: 255 }),
     isActive: boolean('is_active').default(true),
-
-    // ✅ NEW FIELDS
     deliveryPrice: decimal('delivery_price', { precision: 10, scale: 2 })
       .notNull()
       .default('0.00'),
-    freeDeliveryMinQuantity: integer('free_delivery_min_quantity'), // Optional: min items for free delivery
+    freeDeliveryMinQuantity: integer('free_delivery_min_quantity'),
     deliveryEstimationMinutes: integer('delivery_estimation_minutes').default(
       90,
-    ), // Default 90 mins
-
+    ),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -391,23 +387,26 @@ export const markets = pgTable(
 );
 
 // ==========================================
-// ORDERS TABLE
+// ✅ ORDERS TABLE - FIXED
 // ==========================================
 export const orders = pgTable(
   'orders',
   {
     id: uuid('id').defaultRandom().primaryKey(),
     orderNumber: varchar('order_number', { length: 255 }).notNull().unique(),
+    userId: uuid('user_id').references(() => users.id),
     customerName: varchar('customer_name', { length: 255 }).notNull(),
-    customerEmail: varchar('customer_email', { length: 255 }).notNull(),
+    customerEmail: varchar('customer_email', { length: 255 }),
     customerPhone: varchar('customer_phone', { length: 50 }),
     shippingAddress: text('shipping_address'),
     totalAmount: decimal('total_amount', { precision: 10, scale: 2 }).notNull(),
     status: varchar('status', { length: 50 }).notNull().default('PENDING'),
-    paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
     paymentMethod: varchar('payment_method', { length: 50 }),
+    paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
+    // ✅ ADDED THESE TWO FIELDS
+    paymentReferenceId: varchar('payment_reference_id', { length: 255 }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
     notes: text('notes'),
-    userId: uuid('user_id').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -420,6 +419,8 @@ export const orders = pgTable(
     emailIdx: index('order_email_idx').on(table.customerEmail),
     orderNumberIdx: index('order_number_idx').on(table.orderNumber),
     userIdIdx: index('order_user_id_idx').on(table.userId),
+    paymentStatusIdx: index('order_payment_status_idx').on(table.paymentStatus),
+    paymentRefIdx: index('order_payment_ref_idx').on(table.paymentReferenceId),
   }),
 );
 
@@ -604,7 +605,7 @@ export const paymentTransactions = pgTable(
 );
 
 // ==========================================
-// NOTIFICATIONS TABLE (FIXED - REMOVED PARTIAL INDEX)
+// NOTIFICATIONS TABLE
 // ==========================================
 export const notifications = pgTable(
   'notifications',
@@ -619,8 +620,7 @@ export const notifications = pgTable(
     isRead: boolean('is_read').default(false),
     actionText: varchar('action_text', { length: 100 }),
     actionLink: varchar('action_link', { length: 500 }),
-    imageUrl: varchar('image_url', { length: 500 }), // ✅ ADD THIS
-
+    imageUrl: varchar('image_url', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -665,6 +665,60 @@ export const reviews = pgTable(
       table.productId,
     ),
     productIdx: index('review_product_idx').on(table.productId),
+  }),
+);
+
+// ==========================================
+// ROLES TABLE
+// ==========================================
+export const roles = pgTable(
+  'roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: varchar('description', { length: 500 }),
+    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+    isSystem: boolean('is_system').default(false),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    nameIdx: index('idx_roles_name').on(table.name),
+    systemIdx: index('idx_roles_system').on(table.isSystem),
+  }),
+);
+
+// ==========================================
+// USER ROLES JUNCTION TABLE
+// ==========================================
+export const userRoles = pgTable(
+  'user_roles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('idx_user_roles_user_id').on(table.userId),
+    roleIdIdx: index('idx_user_roles_role_id').on(table.roleId),
+    uniqueUserRole: uniqueIndex('idx_user_roles_unique').on(
+      table.userId,
+      table.roleId,
+    ),
   }),
 );
 
@@ -850,65 +904,7 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     references: [orders.id],
   }),
 }));
-// src/drizzle/schema.ts - Add this after your existing tables
 
-// ==========================================
-// ROLES TABLE
-// ==========================================
-export const roles = pgTable(
-  'roles',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    name: varchar('name', { length: 100 }).notNull(),
-    description: varchar('description', { length: 500 }),
-    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
-    isSystem: boolean('is_system').default(false),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => ({
-    nameIdx: index('idx_roles_name').on(table.name),
-    systemIdx: index('idx_roles_system').on(table.isSystem),
-  }),
-);
-
-// ==========================================
-// USER ROLES JUNCTION TABLE
-// ==========================================
-export const userRoles = pgTable(
-  'user_roles',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    roleId: uuid('role_id')
-      .notNull()
-      .references(() => roles.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp('updated_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => ({
-    userIdIdx: index('idx_user_roles_user_id').on(table.userId),
-    roleIdIdx: index('idx_user_roles_role_id').on(table.roleId),
-    uniqueUserRole: uniqueIndex('idx_user_roles_unique').on(
-      table.userId,
-      table.roleId,
-    ),
-  }),
-);
-
-// ==========================================
-// ROLES RELATIONS
-// ==========================================
 export const rolesRelations = relations(roles, ({ many }) => ({
   userRoles: many(userRoles),
 }));
@@ -924,7 +920,6 @@ export const userRolesRelations = relations(userRoles, ({ one }) => ({
   }),
 }));
 
-// Also update usersRelations to include roles
 export const usersRelations = relations(users, ({ one, many }) => ({
   market: one(markets, {
     fields: [users.marketId],
@@ -940,5 +935,5 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   conversationsAsP1: many(conversations, { relationName: 'participant1' }),
   conversationsAsP2: many(conversations, { relationName: 'participant2' }),
   reviews: many(reviews),
-  userRoles: many(userRoles), // ✅ ADD THIS
+  userRoles: many(userRoles),
 }));

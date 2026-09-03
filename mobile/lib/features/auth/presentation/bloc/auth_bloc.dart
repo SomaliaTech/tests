@@ -1,4 +1,5 @@
 // lib/features/auth/presentation/bloc/auth_bloc.dart
+
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -35,10 +36,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final StorageService storageService;
   final ChatSocketService chatSocketService;
   final google_use_case.GoogleSignIn googleSignInUseCase;
+  final FacebookSignIn facebookSignInUseCase;
 
-  // ✅ Add a flag to prevent duplicate Google sign-in attempts
   bool _isGoogleSignInProgress = false;
-  final FacebookSignIn facebookSignInUseCase; // ✅ ADD THIS
+  bool _isFacebookSignInProgress = false;
 
   AuthBloc({
     required this.sendOtp,
@@ -50,8 +51,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required this.logout,
     required this.storageService,
     required this.chatSocketService,
-    required this.facebookSignInUseCase, // ✅ ADD THIS
-
+    required this.facebookSignInUseCase,
     required this.googleSignInUseCase,
   }) : super(AuthInitial()) {
     on<SendOtpEvent>(_onSendOtp);
@@ -64,22 +64,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<FacebookSignInEvent>(_onFacebookSignIn);
   }
 
+  // ==========================================
+  // 🔐 GOOGLE SIGN IN
+  // ==========================================
+
   Future<void> _onGoogleSignIn(
     GoogleSignInEvent event,
     Emitter<AuthState> emit,
   ) async {
-    // ✅ Prevent duplicate sign-in attempts
     if (_isGoogleSignInProgress) {
-      developer.log(
-        '⏳ Google sign-in already in progress, skipping...',
-        name: 'AuthBloc',
-      );
+      developer.log('⏳ Google sign-in already in progress, skipping...');
       return;
     }
 
-    developer.log('🟡 GOOGLE SIGN IN STARTED', name: 'AuthBloc');
+    developer.log('🟡 GOOGLE SIGN IN STARTED');
 
-    // ✅ Don't emit AuthLoading() if already in a loading state
     if (!emit.isDone && state is! AuthLoading) {
       emit(AuthLoading());
     }
@@ -101,7 +100,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       try {
         await googleSignIn.signOut();
       } catch (e) {
-        developer.log('⚠️ Sign out failed: $e', name: 'AuthBloc');
+        developer.log('⚠️ Sign out failed: $e');
       }
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
@@ -144,7 +143,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         (data) {
           _saveGoogleUserData(data);
 
-          // ✅ STRICT CHECK: Require marketId to be present
           final bool needsProfile =
               data.user.marketId == null ||
               data.user.marketId!.isEmpty ||
@@ -154,19 +152,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
           if (needsProfile) {
             if (!emit.isDone) {
-              developer.log(
-                '🔵 User needs to complete profile',
-                name: 'AuthBloc',
-              );
-              // ✅ Use a non-loading state
               emit(OtpVerified(data.token, data.user, isGoogleSignIn: true));
             }
           } else {
             if (!emit.isDone) {
-              developer.log(
-                '🔵 User already has complete profile',
-                name: 'AuthBloc',
-              );
               emit(Authenticated(data.user, data.token));
             }
           }
@@ -174,34 +163,108 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       );
     } catch (e) {
       _isGoogleSignInProgress = false;
-      developer.log('❌ Google sign in error: $e', name: 'AuthBloc');
+      developer.log('❌ Google sign in error: $e');
       if (!emit.isDone) {
         emit(AuthError('Google sign in failed. Please try again.'));
       }
     }
   }
 
+  // ==========================================
+  // 🔐 FACEBOOK SIGN IN
+  // ==========================================
+
   Future<void> _onFacebookSignIn(
     FacebookSignInEvent event,
     Emitter<AuthState> emit,
   ) async {
+    if (_isFacebookSignInProgress) {
+      developer.log('⏳ Facebook sign-in already in progress, skipping...');
+      return;
+    }
+
+    _isFacebookSignInProgress = true;
     emit(AuthLoading());
-    final result = await facebookSignInUseCase(event.accessToken);
 
-    result.fold((failure) => emit(AuthError(failure.message)), (data) {
-      _saveFacebookUserData(data);
+    try {
+      final result = await facebookSignInUseCase(event.accessToken);
 
-      // Facebook users won't have phone/marketId initially, so hasProfile will be false
-      // This correctly routes them to the Complete Profile screen
-      if (!data.user.hasProfile) {
-        emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
-      } else {
-        emit(Authenticated(data.user, data.token));
+      if (isClosed || emit.isDone) {
+        _isFacebookSignInProgress = false;
+        return;
+      }
+
+      result.fold(
+        (failure) {
+          _isFacebookSignInProgress = false;
+          if (!emit.isDone) {
+            emit(AuthError(failure.message));
+          }
+        },
+        (data) {
+          _saveFacebookUserData(data);
+
+          if (!data.user.hasProfile) {
+            _isFacebookSignInProgress = false;
+            if (!emit.isDone) {
+              emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
+            }
+          } else {
+            _isFacebookSignInProgress = false;
+            if (!emit.isDone) {
+              emit(Authenticated(data.user, data.token));
+            }
+          }
+        },
+      );
+    } catch (e) {
+      _isFacebookSignInProgress = false;
+      developer.log('❌ Facebook sign in error: $e');
+      if (!emit.isDone) {
+        emit(AuthError('Facebook sign in failed. Please try again.'));
+      }
+    }
+  }
+
+  // ==========================================
+  // 💾 SAVE USER DATA SECURELY
+  // ==========================================
+
+  void _saveGoogleUserData(dynamic data) {
+    Future(() async {
+      try {
+        await storageService.saveAuthToken(data.token);
+        await storageService.saveUserId(data.user.id);
+        await storageService.saveLoginStatus(true);
+        await storageService.saveUserName(data.user.name ?? '');
+        if (data.user.email != null) {
+          await storageService.saveUserEmail(data.user.email!);
+        }
+        if (data.user.profileImage != null) {
+          await storageService.saveUserProfileImage(data.user.profileImage!);
+        }
+        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
+
+        developer.log('🔵 Google user data saved securely');
+
+        // Register push token
+        try {
+          final pushService = PushNotificationService();
+          final token = await pushService.getToken();
+          if (token != null) _registerDeviceToken(token);
+        } catch (e) {
+          developer.log('⚠️ Could not register token: $e');
+        }
+
+        // Connect to chat socket
+        chatSocketService.connect();
+      } catch (e) {
+        developer.log('❌ Error saving Google user data: $e');
       }
     });
   }
 
-  // Helper to save data (similar to _saveGoogleUserData)
   void _saveFacebookUserData(dynamic data) {
     Future(() async {
       try {
@@ -218,35 +281,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         await storageService.saveIsAdmin(data.user.isAdmin ?? false);
         await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
 
-        chatSocketService.connect();
-      } catch (e) {
-        developer.log('❌ Error saving Facebook user data: $e');
-      }
-    });
-  }
-
-  // ✅ Helper method for async operations after emit
-  void _saveGoogleUserData(dynamic data) {
-    // Use Future to run async without blocking
-    Future(() async {
-      try {
-        await storageService.saveAuthToken(data.token);
-        await storageService.saveUserId(data.user.id);
-        await storageService.saveLoginStatus(true);
-        await storageService.saveUserName(data.user.name ?? '');
-        if (data.user.email != null) {
-          await storageService.saveUserEmail(data.user.email!);
-        }
-        if (data.user.profileImage != null) {
-          await storageService.saveUserProfileImage(data.user.profileImage!);
-        }
-        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
-
-        developer.log(
-          '🔵 Google user data saved successfully',
-          name: 'AuthBloc',
-        );
+        developer.log('🔵 Facebook user data saved securely');
 
         // Register push token
         try {
@@ -254,62 +289,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           final token = await pushService.getToken();
           if (token != null) _registerDeviceToken(token);
         } catch (e) {
-          developer.log('⚠️ Could not register token: $e', name: 'AuthBloc');
+          developer.log('⚠️ Could not register token: $e');
         }
 
-        // Connect to chat socket
         chatSocketService.connect();
-        developer.log('🔵 Chat socket connected', name: 'AuthBloc');
       } catch (e) {
-        developer.log('❌ Error saving Google user data: $e', name: 'AuthBloc');
+        developer.log('❌ Error saving Facebook user data: $e');
       }
     });
   }
 
-  Future<void> _clearAllCaches() async {
-    try {
-      final boxesToClear = [
-        'conversations_cache',
-        'messages_cache',
-        'sync_timestamps',
-      ];
-      for (final boxName in boxesToClear) {
-        try {
-          if (Hive.isBoxOpen(boxName)) {
-            final box = Hive.box<String>(boxName);
-            await box.clear();
-          }
-        } catch (e) {
-          developer.log('❌ Error clearing $boxName: $e');
-        }
-      }
-      developer.log('🗑️ All chat caches cleared on logout');
-    } catch (e) {
-      developer.log('❌ Error clearing caches: $e');
-    }
-  }
-
-  Future<void> _registerDeviceToken(String token) async {
-    try {
-      final authToken = await storageService.getAuthToken();
-      if (authToken == null) return;
-
-      final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/chat/device-token'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $authToken',
-        },
-        body: json.encode({'token': token, 'platform': 'web'}),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        developer.log('📱 Device token registered successfully');
-      }
-    } catch (e) {
-      developer.log('❌ Failed to register token: $e');
-    }
-  }
+  // ==========================================
+  // 📞 SEND OTP
+  // ==========================================
 
   Future<void> _onSendOtp(SendOtpEvent event, Emitter<AuthState> emit) async {
     developer.log('📞 Sending OTP for: ${event.phoneNumber}');
@@ -330,6 +322,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  // ==========================================
+  // ✅ VERIFY OTP
+  // ==========================================
+
   Future<void> _onVerifyOtp(
     VerifyOtpEvent event,
     Emitter<AuthState> emit,
@@ -342,6 +338,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         if (!emit.isDone) emit(AuthError(failure.message));
       },
       (data) async {
+        // ✅ Store token securely
         await storageService.saveAuthToken(data.token);
         await storageService.saveUserId(data.user.id);
         await storageService.saveLoginStatus(true);
@@ -363,50 +360,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
         chatSocketService.connect();
         if (!emit.isDone) {
-          // ✅ PASS isGoogleSignIn: false
           emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
         }
       },
     );
   }
 
-  // Future<void> _onCompleteProfile(
-  //   CompleteProfileEvent event,
-  //   Emitter<AuthState> emit,
-  // ) async {
-  //   if (!emit.isDone) emit(AuthLoading());
-  //   final result = await completeProfile(
-  //     name: event.name,
-  //     marketId: event.marketId,
-  //     profileImageUrl: event.profileImageUrl,
-  //     phoneNumber: event.phoneNumber,
-  //   );
-  //   if (isClosed || emit.isDone) return;
-  //   await result.fold(
-  //     (failure) async {
-  //       if (!emit.isDone) emit(AuthError(failure.message));
-  //     },
-  //     (data) async {
-  //       await storageService.saveUserName(event.name);
-  //       await storageService.saveUserMarketId(event.marketId);
-  //       if (event.phoneNumber != null && event.phoneNumber!.isNotEmpty) {
-  //         await storageService.saveUserPhone(event.phoneNumber!);
-  //       }
-  //       if (event.profileImageUrl != null) {
-  //         await storageService.saveUserProfileImage(event.profileImageUrl!);
-  //       }
-  //       if (data.user != null) {
-  //         await storageService.saveIsSuperAdmin(
-  //           data.user.isSuperAdmin ?? false,
-  //         );
-  //         await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-  //       }
-  //       await storageService.saveLoginStatus(true);
-  //       chatSocketService.connect();
-  //       if (!emit.isDone) emit(ProfileCompleted(data.token, data.user));
-  //     },
-  //   );
-  // }
+  // ==========================================
+  // 👤 COMPLETE PROFILE
+  // ==========================================
 
   Future<void> _onCompleteProfile(
     CompleteProfileEvent event,
@@ -434,16 +396,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           await storageService.saveUserProfileImage(event.profileImageUrl!);
         }
 
-        // ✅ FIX: Removed "if (data.user != null)" because data.user is never null in this record type
         await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
         await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-
         await storageService.saveLoginStatus(true);
         chatSocketService.connect();
         if (!emit.isDone) emit(ProfileCompleted(data.token, data.user));
       },
     );
   }
+
+  // ==========================================
+  // 📸 UPLOAD PROFILE IMAGE
+  // ==========================================
 
   Future<void> _onUploadProfileImage(
     UploadProfileImageEvent event,
@@ -463,17 +427,40 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
   }
 
+  // ==========================================
+  // 🔍 CHECK AUTH STATUS
+  // ==========================================
+
   Future<void> _onCheckAuthStatus(
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
+    // ✅ First check if device is secure
+    if (!(await StorageService.isDeviceSecure())) {
+      developer.log('⚠️ Device may be compromised, clearing auth data');
+      await storageService.clearAuthData();
+      if (!emit.isDone) emit(Unauthenticated());
+      return;
+    }
+
     final isAuthenticated = await storageService.isAuthenticated();
     if (!isAuthenticated) {
       if (!emit.isDone) emit(Unauthenticated());
       return;
     }
+
     final token = await storageService.getAuthToken();
     if (token == null || token.isEmpty) {
+      if (!emit.isDone) emit(Unauthenticated());
+      return;
+    }
+
+    // ✅ Validate token expiration
+    if (!(await storageService.isValidToken())) {
+      developer.log('🔴 Token expired, logging out...');
+      await _clearAllCaches();
+      await storageService.clearAuthData();
+      chatSocketService.disconnect();
       if (!emit.isDone) emit(Unauthenticated());
       return;
     }
@@ -498,6 +485,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     if (!emit.isDone) emit(Authenticated(localUser, token));
     chatSocketService.connect();
+
     try {
       final userResult = await getCurrentUser();
       if (isClosed || emit.isDone) return;
@@ -506,7 +494,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         (failure) async {
           developer.log('Failed to get current user: ${failure.message}');
 
-          // ✅ CRITICAL FIX: Auto-logout on 401 Unauthorized (expired/invalid token)
           if (failure.message.contains('401') ||
               failure.message.contains('Unauthorized') ||
               failure.message.contains('expired') ||
@@ -540,13 +527,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  // ==========================================
+  // 🚪 LOGOUT
+  // ==========================================
+
   Future<void> _onLogout(LogoutEvent event, Emitter<AuthState> emit) async {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       await googleSignIn.signOut();
-      developer.log('🔵 Google sign out completed', name: 'AuthBloc');
+      developer.log('🔵 Google sign out completed');
     } catch (e) {
-      developer.log('⚠️ Google sign out failed: $e', name: 'AuthBloc');
+      developer.log('⚠️ Google sign out failed: $e');
     }
 
     chatSocketService.disconnect();
@@ -558,6 +549,59 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     if (!emit.isDone) {
       emit(Unauthenticated());
+    }
+  }
+
+  // ==========================================
+  // 🗑️ CLEAR CACHES
+  // ==========================================
+
+  Future<void> _clearAllCaches() async {
+    try {
+      final boxesToClear = [
+        'conversations_cache',
+        'messages_cache',
+        'sync_timestamps',
+      ];
+      for (final boxName in boxesToClear) {
+        try {
+          if (Hive.isBoxOpen(boxName)) {
+            final box = Hive.box<String>(boxName);
+            await box.clear();
+          }
+        } catch (e) {
+          developer.log('❌ Error clearing $boxName: $e');
+        }
+      }
+      developer.log('🗑️ All chat caches cleared on logout');
+    } catch (e) {
+      developer.log('❌ Error clearing caches: $e');
+    }
+  }
+
+  // ==========================================
+  // 📱 REGISTER DEVICE TOKEN
+  // ==========================================
+
+  Future<void> _registerDeviceToken(String token) async {
+    try {
+      final authToken = await storageService.getAuthToken();
+      if (authToken == null) return;
+
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/chat/device-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: json.encode({'token': token, 'platform': 'web'}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        developer.log('📱 Device token registered successfully');
+      }
+    } catch (e) {
+      developer.log('❌ Failed to register token: $e');
     }
   }
 

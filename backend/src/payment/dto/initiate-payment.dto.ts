@@ -1,29 +1,39 @@
 // src/payment/dto/initiate-payment.dto.ts
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  Min,
+  IsOptional,
+  IsUUID,
+  Max,
+} from 'class-validator';
 
 export class InitiatePaymentDto {
-  @ApiProperty({ description: 'Order ID', example: 'uuid' })
-  @IsString()
+  @ApiProperty({ description: 'Order ID' })
+  @IsUUID()
+  @IsNotEmpty()
   orderId: string;
 
-  @ApiProperty({
-    description: 'Phone number for payment',
-    example: '612345678',
-  })
-  @IsString()
-  phoneNumber: string;
-
-  @ApiProperty({ description: 'Payment amount', example: 50.0 })
+  @ApiProperty({ description: 'Payment amount' })
   @IsNumber()
   @Min(0.01)
   amount: number;
 
-  @ApiProperty({
-    description: 'Payment description',
-    example: 'Order #ORD-123',
-  })
+  @ApiProperty({ description: 'Phone number (without +)' })
+  @IsString()
+  @IsNotEmpty()
+  phoneNumber: string;
+
+  @ApiPropertyOptional({ description: 'Payment description' })
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Payment method (EVC_PLUS, ZAAD, etc.)' })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }

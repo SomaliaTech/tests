@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+// lib/features/auth/presentation/bloc/auth_event.dart
 
 abstract class AuthEvent extends Equatable {
   const AuthEvent();
@@ -24,21 +25,20 @@ class VerifyOtpEvent extends AuthEvent {
   List<Object?> get props => [phoneNumber, otpCode];
 }
 
-// lib/features/auth/presentation/bloc/auth_event.dart
 class CompleteProfileEvent extends AuthEvent {
   final String name;
-  final String? email;
   final String marketId;
   final String? profileImageUrl;
-  final String? phoneNumber; // ✅ Add phone number
-
+  final String? phoneNumber;
   const CompleteProfileEvent({
     required this.name,
-    this.email,
     required this.marketId,
     this.profileImageUrl,
-    this.phoneNumber, // ✅ Add phone number
+    this.phoneNumber,
   });
+
+  @override
+  List<Object?> get props => [name, marketId, profileImageUrl, phoneNumber];
 }
 
 class UploadProfileImageEvent extends AuthEvent {
@@ -57,13 +57,14 @@ class LogoutEvent extends AuthEvent {
   const LogoutEvent();
 }
 
-class FacebookSignInEvent extends AuthEvent {
-  final String accessToken;
-  FacebookSignInEvent(this.accessToken);
-}
-
-// Add to auth_event.dart
-// auth_event.dart
 class GoogleSignInEvent extends AuthEvent {
   const GoogleSignInEvent();
+}
+
+class FacebookSignInEvent extends AuthEvent {
+  final String accessToken;
+  const FacebookSignInEvent(this.accessToken);
+
+  @override
+  List<Object?> get props => [accessToken];
 }
