@@ -30,12 +30,14 @@ class CompleteProfileScreen extends StatefulWidget {
   final String token;
   final User user;
   final bool isGoogleSignIn;
+  final bool isFacebookSignIn; // ✅ ADDED
 
   const CompleteProfileScreen({
     super.key,
     required this.token,
     required this.user,
     this.isGoogleSignIn = false,
+    this.isFacebookSignIn = false, // ✅ ADDED
   });
 
   @override
@@ -57,6 +59,9 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   List<Map<String, dynamic>> _markets = [];
   String? _selectedMarketId;
   bool _loadingMarkets = false;
+
+  // ✅ Helper to check if it's social login (Google OR Facebook)
+  bool get _isSocialLogin => widget.isGoogleSignIn || widget.isFacebookSignIn;
 
   // ✅ Somali providers (only for OTP users)
   static const List<ProviderInfo> _somaliProviders = [
@@ -86,7 +91,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     ),
   ];
 
-  // ✅ Common country codes (for Google users)
+  // ✅ Common country codes (for Google/Facebook users)
   static const List<String> _countryCodes = [
     '+252', // Somalia
     '+1', // USA/Canada
@@ -145,7 +150,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     '+974', // Qatar
     '+968', // Oman
     '+967', // Yemen
-    '+971', // UAE
   ];
 
   @override
@@ -161,8 +165,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       _profileImageUrl = widget.user.profileImage;
     }
 
-    // Pre-fill phone for OTP users
-    if (!widget.isGoogleSignIn && widget.user.phoneNumber.isNotEmpty) {
+    // Pre-fill phone for OTP users (not social login)
+    if (!_isSocialLogin && widget.user.phoneNumber.isNotEmpty) {
       String phone = widget.user.phoneNumber;
       if (phone.startsWith('+252')) {
         phone = phone.substring(4);
@@ -278,15 +282,15 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   // ✅ Phone validation based on user type
   String? _validatePhone(String? value) {
     if (value == null || value.isEmpty) {
-      return widget.isGoogleSignIn
+      return _isSocialLogin
           ? 'Phone number is required'
           : null; // Phone not required for OTP users (they already have it)
     }
 
     String cleaned = value.trim().replaceAll(RegExp(r'\s+'), '');
 
-    if (widget.isGoogleSignIn) {
-      // ✅ Google users: ANY country, 6-15 digits
+    if (_isSocialLogin) {
+      // ✅ Google/Facebook users: ANY country, 6-15 digits
       if (cleaned.length < 6 || cleaned.length > 15) {
         return 'Phone number must be between 6 and 15 digits';
       }
@@ -315,8 +319,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   String _formatPhoneForApi(String phone) {
     String cleaned = phone.trim().replaceAll(RegExp(r'\s+'), '');
 
-    if (widget.isGoogleSignIn) {
-      // ✅ Google users: Use country code + phone
+    if (_isSocialLogin) {
+      // ✅ Google/Facebook users: Use country code + phone
       final countryCode = countryCodeController.text.trim();
       return '$countryCode$cleaned';
     } else {
@@ -346,7 +350,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     }
 
     String? phoneNumber;
-    if (widget.isGoogleSignIn) {
+    if (_isSocialLogin) {
       final phoneText = phoneController.text.trim();
       if (phoneText.isEmpty) {
         toastification.show(
@@ -377,7 +381,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          widget.isGoogleSignIn ? 'Complete Your Profile' : 'Complete Profile',
+          _isSocialLogin ? 'Complete Your Profile' : 'Complete Profile',
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -453,10 +457,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   textCapitalization: TextCapitalization.words,
                 ),
 
-                // ✅ Phone Input - DIFFERENT for Google vs OTP users
-                if (widget.isGoogleSignIn) ...[
+                // ✅ Phone Input - DIFFERENT for Social vs OTP users
+                if (_isSocialLogin) ...[
                   const SizedBox(height: 20),
-                  _buildInternationalPhoneInput(), // ✅ Google: any country
+                  _buildInternationalPhoneInput(), // ✅ Google/Facebook: any country
                   const SizedBox(height: 8),
                   _buildPhoneHelper(),
                 ] else ...[
@@ -498,7 +502,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                               ),
                             )
                           : Text(
-                              widget.isGoogleSignIn
+                              _isSocialLogin
                                   ? 'Save & Continue'
                                   : 'Complete Profile',
                               style: const TextStyle(
@@ -518,7 +522,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  // ✅ INTERNATIONAL PHONE INPUT (for Google users)
+  // ✅ INTERNATIONAL PHONE INPUT (for Google/Facebook users)
   Widget _buildInternationalPhoneInput() {
     return Container(
       padding: const EdgeInsets.all(1),
@@ -698,7 +702,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     );
   }
 
-  // ✅ Phone helper text (for Google users)
+  // ✅ Phone helper text (for Google/Facebook users)
   Widget _buildPhoneHelper() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),

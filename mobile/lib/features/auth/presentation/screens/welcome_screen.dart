@@ -1,4 +1,5 @@
-// lib/features/auth/presentation/screens/welcome_screen.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -24,30 +25,96 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     setState(() => _loadingProvider = 'google');
+    if (!mounted) return;
     context.read<AuthBloc>().add(const GoogleSignInEvent());
   }
 
-  // welcome_screen.dart - Fix Facebook login
   Future<void> _handleFacebookSignIn() async {
     setState(() => _loadingProvider = 'facebook');
+
     try {
-      // ✅ Try different login behaviors for Android
+      final existingToken = await FacebookAuth.instance.accessToken;
+
+      if (existingToken != null) {
+        debugPrint(
+          '📘 Using existing FB token: ${existingToken.tokenString.substring(0, 20)}...',
+        );
+
+        final tokenString = existingToken.tokenString;
+        if (tokenString.startsWith('eyJ') &&
+            tokenString.split('.').length == 3) {
+          try {
+            final parts = tokenString.split('.');
+            final payloadB64 = parts[1]
+                .replaceAll('-', '+')
+                .replaceAll('_', '/');
+            final padded = payloadB64.padRight(
+              payloadB64.length + (4 - payloadB64.length % 4) % 4,
+              '=',
+            );
+            final decoded = utf8.decode(base64Decode(padded));
+            final payload = json.decode(decoded) as Map<String, dynamic>;
+            final aud = payload['aud'] as String?;
+
+            if (aud != null && aud != '869167092793903') {
+              debugPrint(
+                '⚠️ Cached FB token has wrong audience ($aud), forcing fresh login...',
+              );
+              await FacebookAuth.instance.logOut();
+
+              // ✅ FIX: Give iOS keychain 500ms to clear before triggering fresh login
+              await Future.delayed(const Duration(milliseconds: 500));
+            } else {
+              if (!mounted) return;
+              context.read<AuthBloc>().add(FacebookSignInEvent(tokenString));
+              return;
+            }
+          } catch (e) {
+            debugPrint(
+              '⚠️ Failed to decode cached FB token, forcing fresh login: $e',
+            );
+            await FacebookAuth.instance.logOut();
+
+            // ✅ FIX: Give iOS keychain 500ms to clear before triggering fresh login
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        } else {
+          if (!mounted) return;
+          context.read<AuthBloc>().add(FacebookSignInEvent(tokenString));
+          return;
+        }
+      }
+
+      if (!mounted) return;
+      toastification.show(
+        context: context,
+        title: const Text('Connecting to Facebook...'),
+        description: const Text('Please wait'),
+        type: ToastificationType.info,
+        autoCloseDuration: const Duration(seconds: 10),
+        alignment: Alignment.topCenter,
+      );
+
       final LoginResult result = await FacebookAuth.instance.login(
         permissions: ['email', 'public_profile'],
-        loginBehavior:
-            LoginBehavior.nativeWithFallback, // ← Changed from webOnly
+        loginBehavior: LoginBehavior.webOnly,
       );
 
       if (result.status == LoginStatus.success) {
-        final accessToken = result.accessToken!.tokenString;
-        debugPrint('📘 FB token: ${accessToken.substring(0, 20)}...');
-        if (mounted) {
-          context.read<AuthBloc>().add(FacebookSignInEvent(accessToken));
+        final accessToken = result.accessToken?.tokenString;
+
+        if (accessToken == null) {
+          if (mounted) setState(() => _loadingProvider = null);
+          return;
         }
-      } else {
-        // Handle cancellation
+
+        debugPrint('📘 New FB token: ${accessToken.substring(0, 20)}...');
+        if (!mounted) return;
+        context.read<AuthBloc>().add(FacebookSignInEvent(accessToken));
+      } else if (result.status == LoginStatus.cancelled) {
         if (mounted) {
           setState(() => _loadingProvider = null);
+          toastification.dismissAll();
           toastification.show(
             context: context,
             title: const Text('Facebook login cancelled'),
@@ -56,15 +123,29 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             alignment: Alignment.topCenter,
           );
         }
+      } else {
+        if (mounted) {
+          setState(() => _loadingProvider = null);
+          toastification.dismissAll();
+          toastification.show(
+            context: context,
+            title: const Text('Facebook login failed'),
+            description: Text(result.message ?? 'Unknown error'),
+            type: ToastificationType.error,
+            autoCloseDuration: const Duration(seconds: 3),
+            alignment: Alignment.topCenter,
+          );
+        }
       }
     } catch (e) {
       debugPrint('❌ FB error: $e');
       if (mounted) {
         setState(() => _loadingProvider = null);
+        toastification.dismissAll();
         toastification.show(
           context: context,
           title: const Text('Facebook login failed'),
-          description: Text(e.toString()),
+          description: const Text('Please try again'),
           type: ToastificationType.error,
           autoCloseDuration: const Duration(seconds: 3),
           alignment: Alignment.topCenter,
@@ -74,7 +155,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   void _goToPhoneScreen() {
-    // ✅ Use push so WelcomeScreen stays in the stack
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const PhoneInputScreen()),
@@ -86,8 +166,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is AuthLoading) {
-          return; // buttons already show their own spinners
+          return;
         } else if (state is Authenticated) {
+          toastification.dismissAll();
           HapticFeedback.mediumImpact();
           toastification.show(
             context: context,
@@ -97,19 +178,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             autoCloseDuration: const Duration(seconds: 2),
             alignment: Alignment.topCenter,
           );
-          // ✅ Clear entire stack and go to home
           Navigator.of(
             context,
           ).pushNamedAndRemoveUntil('/home', (route) => false);
         } else if (state is OtpVerified) {
+          toastification.dismissAll();
           HapticFeedback.mediumImpact();
           if (state.user.hasProfile) {
-            // ✅ Clear entire stack and go to home
             Navigator.of(
               context,
             ).pushNamedAndRemoveUntil('/home', (route) => false);
           } else {
-            // ✅ Replace current screen with CompleteProfileScreen
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
@@ -117,16 +196,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   token: state.token,
                   user: state.user,
                   isGoogleSignIn: state.isGoogleSignIn,
+                  isFacebookSignIn: !state.isGoogleSignIn,
                 ),
               ),
             );
           }
         } else if (state is ProfileCompleted) {
-          // ✅ Clear entire stack and go to home
+          toastification.dismissAll();
           Navigator.of(
             context,
           ).pushNamedAndRemoveUntil('/home', (route) => false);
         } else if (state is AuthError) {
+          toastification.dismissAll();
           setState(() => _loadingProvider = null);
           HapticFeedback.heavyImpact();
           toastification.show(
@@ -159,7 +240,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Brand logo
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -170,7 +250,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
+                                  color: Colors.black.withValues(alpha: 0.15),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -195,7 +275,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // ✅ SOMALI LANGUAGE ADVERTISEMENT
                       Text(
                         'Ku Soo Dhawoow FARXADA 🤍',
                         style: TextStyle(
@@ -234,7 +313,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // BIG IMAGE
                       Container(
                         width: double.infinity,
                         height: 260,
@@ -246,7 +324,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             return Container(
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white.withOpacity(0.15),
+                                color: Colors.white.withValues(alpha: 0.15),
                               ),
                               child: const Icon(
                                 Iconsax.shopping_bag,
@@ -261,10 +339,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
                 ),
               ),
-
-              // ==========================================
-              // BOTTOM CARD (buttons)
-              // ==========================================
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
@@ -282,7 +356,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Google
                     _buildAuthButton(
                       isLoading: _loadingProvider == 'google',
                       label: 'Continue with Google',
@@ -290,18 +363,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         'https://www.google.com/favicon.ico',
                         height: 22,
                         width: 22,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Iconsax.activity,
-                          color: Color(0xFFEA4335),
-                          size: 22,
-                        ),
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                              Iconsax.activity,
+                              color: Color(0xFFEA4335),
+                              size: 22,
+                            ),
                       ),
                       borderColor: const Color(0xFFDADCE0),
                       textColor: const Color(0xFF3C4043),
                       onTap: _handleGoogleSignIn,
                     ),
                     const SizedBox(height: 12),
-                    // Facebook
                     _buildAuthButton(
                       isLoading: _loadingProvider == 'facebook',
                       label: 'Continue with Facebook',
@@ -315,7 +388,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       onTap: _handleFacebookSignIn,
                     ),
                     const SizedBox(height: 16),
-                    // OR divider
                     Row(
                       children: [
                         Expanded(child: Divider(color: Colors.grey.shade300)),
@@ -334,7 +406,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Phone (primary)
                     SizedBox(
                       width: double.infinity,
                       height: 54,

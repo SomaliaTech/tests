@@ -6,20 +6,45 @@ class OrderHistoryModel {
   static OrderHistory fromJson(Map<String, dynamic> json) {
     final items =
         (json['items'] as List?)?.map((item) {
-          // 🚀 Extract image URL from the nested variant -> product -> images structure
+          // ✅ FIXED: Better image URL extraction with fallback
           String imageUrl = '';
           try {
+            // Try variant -> product -> images
             final images = item['variant']?['product']?['images'] as List?;
             if (images != null && images.isNotEmpty) {
-              imageUrl = images[0]['url'] as String? ?? '';
+              final firstImage = images[0];
+              if (firstImage is Map) {
+                imageUrl = firstImage['url']?.toString() ?? '';
+              } else if (firstImage is String) {
+                imageUrl = firstImage;
+              }
             }
-          } catch (_) {}
+
+            // ✅ Fallback: try direct product images
+            if (imageUrl.isEmpty) {
+              final productImages = item['product']?['images'] as List?;
+              if (productImages != null && productImages.isNotEmpty) {
+                final firstImage = productImages[0];
+                if (firstImage is Map) {
+                  imageUrl = firstImage['url']?.toString() ?? '';
+                } else if (firstImage is String) {
+                  imageUrl = firstImage;
+                }
+              }
+            }
+
+            // ✅ Fallback: use placeholder if still empty
+            if (imageUrl.isEmpty) {
+              imageUrl = ''; // Let the widget show placeholder
+            }
+          } catch (_) {
+            imageUrl = '';
+          }
 
           return OrderHistoryItem(
             id: item['id'] as String? ?? '',
             name: item['productName'] as String? ?? 'Product',
             quantity: item['quantity'] as int? ?? 1,
-            // Use tryParse to prevent crashes if backend sends a number instead of string
             price: double.tryParse(item['unitPrice']?.toString() ?? '0') ?? 0.0,
             totalPrice:
                 double.tryParse(item['totalPrice']?.toString() ?? '0') ?? 0.0,
@@ -44,7 +69,7 @@ class OrderHistoryModel {
       case 'PENDING':
         return OrderHistoryStatus.pending;
       case 'PROCESSING':
-      case 'CONFIRMED': // 🚨 Added CONFIRMED since your backend sets this after payment
+      case 'CONFIRMED':
         return OrderHistoryStatus.processing;
       case 'SHIPPED':
         return OrderHistoryStatus.shipped;

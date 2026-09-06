@@ -74,6 +74,28 @@
         <package android:name="com.facebook.katana" />
         <package android:name="com.facebook.orca" />
         <package android:name="com.facebook.lite" />
+        
+        <!-- ✅ ADD THESE FOR URL_LAUNCHER (Phone, SMS, Email, Web) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sms" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="mailto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
     </queries>
     
 </manifest>

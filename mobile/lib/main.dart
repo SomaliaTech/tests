@@ -215,12 +215,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   StreamSubscription? _socketConnectionSubscription;
   StreamSubscription? _socketErrorSubscription;
 
+  // ✅ FIX: Add timer to debounce rapid network changes
+  Timer? _connectivityDebounce;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // ✅ Listen to socket connection status
     _socketConnectionSubscription = widget.socketService.onConnectionChange
         .listen((isConnected) {
           setState(() {
@@ -228,16 +230,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           });
         });
 
-    // ✅ Listen to socket errors
     _socketErrorSubscription = widget.socketService.onError.listen((error) {
-      // Only show critical errors to user
       if (error.contains('failed to reconnect') ||
           error.contains('Unable to connect')) {
         _showChatErrorSnackBar(error);
       }
     });
 
-    // ✅ Listen to connectivity changes using the stream
     _connectivitySubscription = widget.connectivityService.onConnectivityChange
         .listen((status) {
           _onConnectivityChanged(status);
@@ -250,25 +249,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _connectivitySubscription?.cancel();
     _socketConnectionSubscription?.cancel();
     _socketErrorSubscription?.cancel();
+    _connectivityDebounce?.cancel(); // ✅ FIX: Cancel timer on dispose
     super.dispose();
   }
 
   void _onConnectivityChanged(ConnectionStatus status) {
-    // ✅ When network comes back online, try to reconnect socket
-    if (status == ConnectionStatus.online) {
-      debugPrint('🌐 Network online - checking chat socket...');
+    // ✅ FIX: Cancel previous timer to prevent rapid firing/flapping
+    _connectivityDebounce?.cancel();
 
-      // Only reconnect if user is authenticated
-      final storageService = sl<StorageService>();
-      storageService.isAuthenticated().then((isAuth) {
-        if (isAuth && !_socketConnected) {
-          debugPrint('🔄 Attempting to reconnect chat socket...');
-          widget.socketService.reconnect().catchError((e) {
-            debugPrint('⚠️ Socket reconnect error: $e');
-          });
-        }
-      });
-    }
+    // ✅ FIX: Wait 2 seconds to ensure the connection is actually stable before reacting
+    _connectivityDebounce = Timer(const Duration(seconds: 2), () {
+      if (status == ConnectionStatus.online) {
+        debugPrint('🌐 Network stable and online - checking chat socket...');
+        final storageService = sl<StorageService>();
+        storageService.isAuthenticated().then((isAuth) {
+          if (isAuth && !_socketConnected) {
+            debugPrint('🔄 Attempting to reconnect chat socket...');
+            widget.socketService.reconnect().catchError((e) {
+              debugPrint('⚠️ Socket reconnect error: $e');
+            });
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -290,8 +293,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _showChatErrorSnackBar(String error) {
-    // ✅ Show a snackbar or banner to the user
-    // Using a global key or NavigationService
     final context = NavigationService.navigatorKey.currentContext;
     if (context != null) {
       ScaffoldMessenger.of(context).showSnackBar(

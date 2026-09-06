@@ -60,41 +60,88 @@ class _SupportScreenState extends State<SupportScreen>
 
   Future<void> _makePhoneCall() async {
     final l10n = context.supportLocalization;
-    final phoneUri = Uri(scheme: 'tel', path: l10n.phoneNumber);
-    final smsUri = Uri(scheme: 'sms', path: l10n.phoneNumber);
+    // Clean phone number (remove spaces just in case)
+    final cleanPhone = l10n.phoneNumber.replaceAll(' ', '');
+    final phoneUri = Uri(scheme: 'tel', path: cleanPhone);
+    final smsUri = Uri(scheme: 'sms', path: cleanPhone);
 
     try {
-      if (await canLaunchUrl(phoneUri)) {
-        await launchUrl(phoneUri);
-        debugPrint('✅ Phone call initiated to: ${l10n.phoneNumber}');
-      } else if (await canLaunchUrl(smsUri)) {
-        await launchUrl(smsUri);
-        debugPrint('✅ Opened SMS instead of call');
-      } else {
-        debugPrint('❌ Could not launch phone or SMS app');
+      // Force external application mode to prevent opening inside the app's webview
+      final launched = await launchUrl(
+        phoneUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        // Fallback to SMS if Phone app isn't available (e.g. iPads or Simulators)
+        await launchUrl(smsUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       debugPrint('❌ Error launching phone call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not open phone app. Please call: ${l10n.phoneNumber}',
+            ),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _sendEmail() async {
     final l10n = context.supportLocalization;
+    String emailAddress = l10n.email.trim();
+
+    // ✅ Clean up the email address just in case it includes "mailto:" already
+    if (emailAddress.toLowerCase().startsWith('mailto:')) {
+      emailAddress = emailAddress.substring(7);
+    }
+
     final emailUri = Uri(
       scheme: 'mailto',
-      path: l10n.email,
+      path: emailAddress,
       queryParameters: {'subject': 'Support Request - Faraxada'},
     );
 
     try {
-      if (await canLaunchUrl(emailUri)) {
-        await launchUrl(emailUri);
-        debugPrint('✅ Email client opened for: ${l10n.email}');
-      } else {
-        debugPrint('❌ Could not launch email app');
+      final launched = await launchUrl(
+        emailUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        throw Exception('No email app found');
       }
+      debugPrint('✅ Email client opened for: $emailAddress');
     } catch (e) {
       debugPrint('❌ Error launching email: $e');
+
+      // ✅ SMART FALLBACK: Copy email to clipboard so the user can paste it anywhere
+      await Clipboard.setData(ClipboardData(text: emailAddress));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Iconsax.copy, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No email app found. "$emailAddress" copied to clipboard!',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2ED573), // Your brand green
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 

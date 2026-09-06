@@ -4,77 +4,55 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	
 	<key>CFBundleDisplayName</key>
 	<string>FARXADA</string>
-	
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
-	
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	
 	<key>CFBundleName</key>
 	<string>mobile</string>
-	
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
-	
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
-	
 	<key>CFBundleSignature</key>
 	<string>????</string>
-	
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	
 	<key>UIFileSharingEnabled</key>
 	<true/>
-	
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
-	
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 		<string>remote-notification</string>
 	</array>
-	
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
-	
 	<key>NSCameraUsageDescription</key>
 	<string>Allow access to camera to take profile picture</string>
-	
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to change profile picture</string>
-	
-	<!-- ✅ FACEBOOK: URL Schemes -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>fb476493349999779</string>
+				<string>fb869167092793903</string>
 			</array>
 		</dict>
 		<dict>
@@ -86,33 +64,27 @@
 			</array>
 		</dict>
 	</array>
-	
-	<!-- ✅ FACEBOOK: App ID -->
 	<key>FacebookAppID</key>
-	<string>476493349999779</string>
-	
-	<!-- ✅ FACEBOOK: Client Token -->
+	<string>869167092793903</string>
 	<key>FacebookClientToken</key>
-	<string>8c49f38b5ccf7ca3c9405f2e6fd070f7</string>
-	
-	<!-- ✅ FACEBOOK: Display Name -->
+	<string>417cad25aacd2d0615bda33621a37e68</string>
 	<key>FacebookDisplayName</key>
-	<string>Farxada</string>
-	
-	<!-- ✅ FACEBOOK: Auto Log App Events -->
+	<string>farxada</string>
 	<key>FacebookAutoLogAppEventsEnabled</key>
 	<true/>
 	
-	<!-- ✅ FACEBOOK: Query Schemes -->
+	<!-- ✅ QUERY SCHEMES: Added tel, sms, mailto -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>fbapi</string>
 		<string>fb-messenger-share-api</string>
 		<string>fbauth2</string>
 		<string>fbshareextension</string>
+		<string>tel</string>
+		<string>sms</string>
+		<string>mailto</string>
 	</array>
 	
-	<!-- ✅ HTTPS ONLY -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -124,14 +96,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -139,6 +109,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	
 </dict>
 </plist>

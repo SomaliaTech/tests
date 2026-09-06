@@ -407,29 +407,45 @@ export class AuthService {
     }
   }
 
-  // src/auth/auth.service.ts - Fix facebookSignIn
+  // src/auth/auth.service.ts
+
+  // ==========================================
+  // FACEBOOK SIGN-IN (supports Classic + iOS Limited Login JWT)
+  // ==========================================
+
   async facebookSignIn(dto: FacebookAuthDto) {
     this.logger.log('Facebook sign in called');
 
     try {
-      const graphResponse = await axios.get(`https://graph.facebook.com/me`, {
-        params: {
-          fields: 'id,name,email,picture',
-          access_token: dto.accessToken,
-        },
-      });
+      // ✅ iOS SDK now returns a JWT (Limited Login): "eyJhbGciOiJSUzI1NiIs..."
+      // ✅ Android SDK returns classic token: "EAAB..."
+      const isLimitedLoginJwt =
+        dto.accessToken.startsWith('eyJ') &&
+        dto.accessToken.split('.').length === 3;
 
-      const fbUser = graphResponse.data;
+      const fbUser = isLimitedLoginJwt
+        ? await this.verifyFacebookLimitedLoginToken(dto.accessToken)
+        : await this.verifyFacebookToken(dto.accessToken);
+
       const fbId = fbUser.id;
-      const name = fbUser.name || 'Facebook User';
+      const name = fbUser.name || null;
       const email = fbUser.email || null;
       const profileImage = fbUser.picture?.data?.url || null;
 
+      // Check if user exists
       let userResult = await this.drizzle.db
         .select()
         .from(users)
         .where(eq(users.facebookId, fbId))
         .limit(1);
+
+      if (userResult.length === 0 && email) {
+        userResult = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1);
+      }
 
       if (userResult.length === 0) {
         const newUser = {
@@ -438,7 +454,7 @@ export class AuthService {
           email: email,
           name: name,
           profileImage: profileImage,
-          phoneNumber: null, // ✅ null, not empty string
+          phoneNumber: null,
           isVerified: true,
           isAdmin: false,
           isSuperAdmin: false,
@@ -454,6 +470,23 @@ export class AuthService {
 
         await this.drizzle.db.insert(users).values(newUser);
         userResult = [newUser as typeof users.$inferSelect];
+      } else {
+        await this.drizzle.db
+          .update(users)
+          .set({
+            facebookId: fbId,
+            name: name || userResult[0].name,
+            profileImage: profileImage || userResult[0].profileImage,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userResult[0].id));
+
+        // ✅ Re-fetch so we use the updated values below
+        userResult = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.id, userResult[0].id))
+          .limit(1);
       }
 
       const currentUser = userResult[0];
@@ -464,8 +497,17 @@ export class AuthService {
         currentUser.isSuperAdmin ?? false,
       );
 
+      const hasCompleteProfile = !!(
+        currentUser.name &&
+        currentUser.name.trim().length > 0 &&
+        currentUser.phoneNumber &&
+        currentUser.phoneNumber.trim().length > 0 &&
+        currentUser.marketId &&
+        currentUser.marketId.trim().length > 0
+      );
+
       this.logger.log(
-        `Facebook sign-in successful for ${LogSanitizer.maskValue(fbId)}`,
+        `Facebook sign-in successful for ${LogSanitizer.maskValue(fbId)} - hasProfile: ${hasCompleteProfile}`,
       );
 
       return {
@@ -473,21 +515,173 @@ export class AuthService {
         token,
         user: {
           id: currentUser.id,
-          phoneNumber: currentUser.phoneNumber || null,
+          phoneNumber: currentUser.phoneNumber || '',
           email: currentUser.email,
-          name: currentUser.name,
+          name: currentUser.name || '',
           profileImage: currentUser.profileImage,
           marketId: currentUser.marketId,
           isVerified: currentUser.isVerified,
-          hasProfile: !!currentUser.phoneNumber,
+          hasProfile: hasCompleteProfile,
           isAdmin: currentUser.isAdmin ?? false,
           isSuperAdmin: currentUser.isSuperAdmin ?? false,
         },
       };
     } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+
       this.logger.error('Facebook sign in error');
+
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new UnauthorizedException(
+            'Facebook verification timed out. Please try again.',
+          );
+        }
+        if (error.response?.status === 400) {
+          throw new UnauthorizedException(
+            'Invalid Facebook token. Please login again.',
+          );
+        }
+        this.logger.error(`Facebook API error: ${error.message}`);
+      }
+
       throw new UnauthorizedException('Facebook authentication failed');
     }
+  }
+
+  // ==========================================
+  // ✅ NEW: iOS "Limited Login" JWT verification
+  // ==========================================
+
+  // ==========================================
+  // CLASSIC FACEBOOK GRAPH API VERIFICATION (Android/Web)
+  // ==========================================
+  private async verifyFacebookToken(
+    accessToken: string,
+    maxRetries = 2,
+  ): Promise<any> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await axios.get(`https://graph.facebook.com/me`, {
+          params: {
+            fields: 'id,name,email,picture',
+            access_token: accessToken,
+          },
+          timeout: 10000,
+        });
+        return response.data;
+      } catch (error) {
+        if (attempt === maxRetries) throw error;
+        // Wait before retry
+        await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+      }
+    }
+  }
+  private facebookJwksCache: { keys: any[]; fetchedAt: number } | null = null;
+
+  private async getFacebookJwks(): Promise<any[]> {
+    const now = Date.now();
+    if (
+      this.facebookJwksCache &&
+      now - this.facebookJwksCache.fetchedAt < 60 * 60 * 1000 // cache 1h
+    ) {
+      return this.facebookJwksCache.keys;
+    }
+
+    const res = await axios.get(
+      'https://www.facebook.com/.well-known/oauth/openid/jwks/',
+      { timeout: 10000 },
+    );
+    this.facebookJwksCache = { keys: res.data.keys, fetchedAt: now };
+    return res.data.keys as any[];
+  }
+
+  private decodeJwtPart(part: string): any {
+    const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+  }
+  private async verifyFacebookLimitedLoginToken(idToken: string): Promise<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    picture: { data: { url: string } } | null;
+  }> {
+    const parts = idToken.split('.');
+    if (parts.length !== 3) {
+      throw new UnauthorizedException('Invalid Facebook ID token format');
+    }
+
+    const header = this.decodeJwtPart(parts[0]);
+    const payload = this.decodeJwtPart(parts[1]);
+
+    // 1️⃣ Claim checks
+    if (payload.iss && !String(payload.iss).includes('facebook.com')) {
+      throw new UnauthorizedException('Invalid Facebook token issuer');
+    }
+
+    // ✅ FIX: Accept BOTH App IDs (iOS and Android might be using different ones)
+    const validAppIds = [
+      '869167092793903', // Your main Android/Backend ID
+      '476493349999779', // The ID iOS is currently using
+      this.configService.get<string>('FACEBOOK_APP_ID'),
+    ].filter((id): id is string => !!id); // Remove undefined/null
+
+    if (payload.aud && !validAppIds.includes(payload.aud)) {
+      this.logger.warn(
+        `❌ Facebook audience mismatch! Backend accepts: ${validAppIds.join(', ')}, but token has: ${payload.aud}`,
+      );
+      throw new UnauthorizedException('Invalid Facebook token audience');
+    }
+
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      throw new UnauthorizedException('Facebook token expired');
+    }
+
+    if (!payload.sub) {
+      throw new UnauthorizedException('Facebook token missing user id');
+    }
+
+    // 2️⃣ Verify RS256 signature with Facebook's public keys
+    try {
+      const keys = await this.getFacebookJwks();
+      const jwk = keys.find((k) => k.kid === header.kid);
+      if (!jwk) throw new Error('No matching Facebook JWK');
+
+      const publicKey = crypto.createPublicKey({
+        key: jwk,
+        format: 'jwk',
+      });
+
+      const signedData = Buffer.from(`${parts[0]}.${parts[1]}`);
+      const signature = Buffer.from(
+        parts[2].replace(/-/g, '+').replace(/_/g, '/'),
+        'base64',
+      );
+
+      const isValid = crypto.verify(
+        'RSA-SHA256',
+        signedData,
+        publicKey,
+        signature,
+      );
+      if (!isValid) throw new Error('Bad signature');
+    } catch (e) {
+      this.logger.error(`Limited Login verification failed: ${e}`);
+      throw new UnauthorizedException('Failed to verify Facebook token');
+    }
+
+    // 3️⃣ Extract claims (Limited Login puts user data INSIDE the JWT)
+    const pictureUrl =
+      typeof payload.picture === 'string'
+        ? payload.picture
+        : payload.picture?.data?.url || null;
+
+    return {
+      id: payload.sub,
+      name: payload.name || null,
+      email: payload.email || null,
+      picture: pictureUrl ? { data: { url: pictureUrl } } : null,
+    };
   }
   /**
    * ✅ Verify Google ID Token and return TokenPayload

@@ -69,6 +69,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         final error = json.decode(response.body);
         throw ServerException(error['message'] ?? 'Facebook sign in failed');
       }
+    } on ServerException {
+      rethrow; // ✅ keep the clean message
     } catch (e) {
       throw ServerException('Network error: $e');
     }

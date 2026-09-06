@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'package:flutter/foundation.dart'; // ✅ REQUIRED FOR kReleaseMode
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive/hive.dart';
@@ -23,6 +23,7 @@ import 'auth_event.dart';
 import 'auth_state.dart';
 import '../../domain/entities/user.dart';
 import 'dart:io' show Platform;
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SendOtp sendOtp;
@@ -132,15 +133,17 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
 
-      result.fold(
-        (failure) {
+      // ✅ FIX: Await the fold so we can await the saves inside it
+      await result.fold(
+        (failure) async {
           _isGoogleSignInProgress = false;
           if (!emit.isDone) {
             emit(AuthError(failure.message));
           }
         },
-        (data) {
-          _saveGoogleUserData(data);
+        (data) async {
+          // ✅ FIX: Wait for data to be saved BEFORE navigating
+          await _saveGoogleUserData(data);
 
           final bool needsProfile =
               data.user.marketId == null ||
@@ -193,23 +196,40 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         return;
       }
 
-      result.fold(
-        (failure) {
+      // ✅ FIX: Await the fold so we can await the saves inside it
+      await result.fold(
+        (failure) async {
           _isFacebookSignInProgress = false;
           if (!emit.isDone) {
             emit(AuthError(failure.message));
           }
         },
-        (data) {
-          _saveFacebookUserData(data);
+        (data) async {
+          // ✅ FIX: Wait for data to be saved BEFORE navigating
+          await _saveFacebookUserData(data);
 
-          if (!data.user.hasProfile) {
-            _isFacebookSignInProgress = false;
+          final bool needsProfile =
+              (data.user.name == null || data.user.name!.trim().isEmpty) ||
+              data.user.phoneNumber.isEmpty ||
+              data.user.marketId == null ||
+              data.user.marketId!.isEmpty ||
+              !data.user.hasProfile;
+
+          _isFacebookSignInProgress = false;
+
+          developer.log(
+            '📘 Facebook user - Name: "${data.user.name}", Phone: "${data.user.phoneNumber}", Market: "${data.user.marketId}", hasProfile: ${data.user.hasProfile}',
+          );
+
+          if (needsProfile) {
+            developer.log('📘 Facebook user needs to complete profile');
             if (!emit.isDone) {
               emit(OtpVerified(data.token, data.user, isGoogleSignIn: false));
             }
           } else {
-            _isFacebookSignInProgress = false;
+            developer.log(
+              '📘 Facebook user has complete profile in DB, authenticating directly',
+            );
             if (!emit.isDone) {
               emit(Authenticated(data.user, data.token));
             }
@@ -229,73 +249,89 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   // 💾 SAVE USER DATA SECURELY
   // ==========================================
 
-  void _saveGoogleUserData(dynamic data) {
-    Future(() async {
-      try {
-        await storageService.saveAuthToken(data.token);
-        await storageService.saveUserId(data.user.id);
-        await storageService.saveLoginStatus(true);
-        await storageService.saveUserName(data.user.name ?? '');
-        if (data.user.email != null) {
-          await storageService.saveUserEmail(data.user.email!);
-        }
-        if (data.user.profileImage != null) {
-          await storageService.saveUserProfileImage(data.user.profileImage!);
-        }
-        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
-
-        developer.log('🔵 Google user data saved securely');
-
-        // Register push token
-        try {
-          final pushService = PushNotificationService();
-          final token = await pushService.getToken();
-          if (token != null) _registerDeviceToken(token);
-        } catch (e) {
-          developer.log('⚠️ Could not register token: $e');
-        }
-
-        // Connect to chat socket
-        chatSocketService.connect();
-      } catch (e) {
-        developer.log('❌ Error saving Google user data: $e');
+  // ✅ FIX: Removed Future(() async {}) wrapper. Now returns a Future and runs synchronously in the event loop.
+  Future<void> _saveGoogleUserData(dynamic data) async {
+    try {
+      await storageService.saveAuthToken(data.token);
+      await storageService.saveUserId(data.user.id);
+      await storageService.saveLoginStatus(true);
+      await storageService.saveUserName(data.user.name ?? '');
+      if (data.user.email != null) {
+        await storageService.saveUserEmail(data.user.email!);
       }
-    });
+      if (data.user.profileImage != null) {
+        await storageService.saveUserProfileImage(data.user.profileImage!);
+      }
+
+      if (data.user.phoneNumber != null &&
+          data.user.phoneNumber.toString().isNotEmpty) {
+        await storageService.saveUserPhone(data.user.phoneNumber.toString());
+      }
+      if (data.user.marketId != null &&
+          data.user.marketId.toString().isNotEmpty) {
+        await storageService.saveUserMarketId(data.user.marketId.toString());
+      }
+
+      await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
+
+      developer.log('🔵 Google user data saved securely');
+
+      try {
+        final pushService = PushNotificationService();
+        final token = await pushService.getToken();
+        if (token != null) await _registerDeviceToken(token);
+      } catch (e) {
+        developer.log('⚠️ Could not register token: $e');
+      }
+
+      // Socket connection can remain fire-and-forget so it doesn't block UI
+      chatSocketService.connect();
+    } catch (e) {
+      developer.log('❌ Error saving Google user data: $e');
+    }
   }
 
-  void _saveFacebookUserData(dynamic data) {
-    Future(() async {
-      try {
-        await storageService.saveAuthToken(data.token);
-        await storageService.saveUserId(data.user.id);
-        await storageService.saveLoginStatus(true);
-        await storageService.saveUserName(data.user.name ?? '');
-        if (data.user.email != null) {
-          await storageService.saveUserEmail(data.user.email!);
-        }
-        if (data.user.profileImage != null) {
-          await storageService.saveUserProfileImage(data.user.profileImage!);
-        }
-        await storageService.saveIsAdmin(data.user.isAdmin ?? false);
-        await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
-
-        developer.log('🔵 Facebook user data saved securely');
-
-        // Register push token
-        try {
-          final pushService = PushNotificationService();
-          final token = await pushService.getToken();
-          if (token != null) _registerDeviceToken(token);
-        } catch (e) {
-          developer.log('⚠️ Could not register token: $e');
-        }
-
-        chatSocketService.connect();
-      } catch (e) {
-        developer.log('❌ Error saving Facebook user data: $e');
+  // ✅ FIX: Removed Future(() async {}) wrapper. Now returns a Future and runs synchronously in the event loop.
+  Future<void> _saveFacebookUserData(dynamic data) async {
+    try {
+      await storageService.saveAuthToken(data.token);
+      await storageService.saveUserId(data.user.id);
+      await storageService.saveLoginStatus(true);
+      await storageService.saveUserName(data.user.name ?? '');
+      if (data.user.email != null) {
+        await storageService.saveUserEmail(data.user.email!);
       }
-    });
+      if (data.user.profileImage != null) {
+        await storageService.saveUserProfileImage(data.user.profileImage!);
+      }
+
+      if (data.user.phoneNumber != null &&
+          data.user.phoneNumber.toString().isNotEmpty) {
+        await storageService.saveUserPhone(data.user.phoneNumber.toString());
+      }
+      if (data.user.marketId != null &&
+          data.user.marketId.toString().isNotEmpty) {
+        await storageService.saveUserMarketId(data.user.marketId.toString());
+      }
+
+      await storageService.saveIsAdmin(data.user.isAdmin ?? false);
+      await storageService.saveIsSuperAdmin(data.user.isSuperAdmin ?? false);
+
+      developer.log('🔵 Facebook user data saved securely');
+
+      try {
+        final pushService = PushNotificationService();
+        final token = await pushService.getToken();
+        if (token != null) await _registerDeviceToken(token);
+      } catch (e) {
+        developer.log('⚠️ Could not register token: $e');
+      }
+
+      chatSocketService.connect();
+    } catch (e) {
+      developer.log('❌ Error saving Facebook user data: $e');
+    }
   }
 
   // ==========================================
@@ -337,7 +373,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         if (!emit.isDone) emit(AuthError(failure.message));
       },
       (data) async {
-        // ✅ Store token securely
         await storageService.saveAuthToken(data.token);
         await storageService.saveUserId(data.user.id);
         await storageService.saveLoginStatus(true);
@@ -434,7 +469,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
-    // ✅ ONLY enforce device security in release mode!
     if (kReleaseMode && !(await StorageService.isDeviceSecure())) {
       developer.log('⚠️ Device may be compromised, clearing auth data');
       await storageService.clearAuthData();
@@ -442,7 +476,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
-    // ✅ Check if user is authenticated - this already validates token
     final isAuthenticated = await storageService.isAuthenticated();
     if (!isAuthenticated) {
       if (!emit.isDone) emit(Unauthenticated());
@@ -455,8 +488,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
-    // ✅ Token is already validated in isAuthenticated()
-    // But let's double-check
     if (!(await storageService.isValidToken())) {
       developer.log('🔴 Token expired, logging out...');
       await _clearAllCaches();
@@ -466,13 +497,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
-    // Load user from cache
-    final cachedName = await storageService.getUserName() ?? 'User';
+    final cachedName = await storageService.getUserName() ?? '';
     final cachedPhone = await storageService.getUserPhone() ?? '';
+    final cachedMarketId = await storageService.getUserMarketId() ?? '';
     final cachedProfileImage = await storageService.getUserProfileImage();
     final cachedUserId = await storageService.getUserId() ?? '';
     final cachedIsAdmin = await storageService.getIsAdmin();
     final cachedIsSuperAdmin = await storageService.getIsSuperAdmin();
+
+    final bool isLocallyComplete =
+        cachedName.isNotEmpty &&
+        cachedPhone.isNotEmpty &&
+        cachedMarketId.isNotEmpty;
 
     final localUser = User(
       id: cachedUserId,
@@ -480,19 +516,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       name: cachedName,
       profileImage: cachedProfileImage,
       isVerified: true,
-      hasProfile: cachedName.isNotEmpty,
+      hasProfile: isLocallyComplete,
       isAdmin: cachedIsAdmin,
       isSuperAdmin: cachedIsSuperAdmin,
+      marketId: cachedMarketId,
     );
 
-    // ✅ Don't emit duplicate states - check if already authenticated
     if (!emit.isDone && state is! Authenticated) {
       emit(Authenticated(localUser, token));
     }
 
     chatSocketService.connect();
 
-    // ✅ Fetch fresh user data in background
     try {
       final userResult = await getCurrentUser();
       if (isClosed || emit.isDone) return;
@@ -516,7 +551,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         (user) async {
           await storageService.saveUserId(user.id);
           await storageService.saveUserName(user.name ?? '');
-          await storageService.saveUserPhone(user.phoneNumber);
+          if (user.phoneNumber.isNotEmpty) {
+            await storageService.saveUserPhone(user.phoneNumber);
+          }
+          if (user.marketId != null && user.marketId!.isNotEmpty) {
+            await storageService.saveUserMarketId(user.marketId!);
+          }
           if (user.profileImage != null) {
             await storageService.saveUserProfileImage(user.profileImage!);
           }
@@ -524,7 +564,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
           await storageService.saveLoginStatus(true);
 
-          // ✅ Only emit if state changed
           if (!isClosed && !emit.isDone && state is Authenticated) {
             final currentState = state as Authenticated;
             if (currentState.user != user) {
@@ -537,6 +576,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       developer.log('Error checking auth status: $e');
     }
   }
+
   // ==========================================
   // 🚪 LOGOUT
   // ==========================================
@@ -548,6 +588,13 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       developer.log('🔵 Google sign out completed');
     } catch (e) {
       developer.log('⚠️ Google sign out failed: $e');
+    }
+
+    try {
+      await FacebookAuth.instance.logOut();
+      developer.log('🔵 Facebook sign out completed');
+    } catch (e) {
+      developer.log('⚠️ Facebook sign out failed: $e');
     }
 
     chatSocketService.disconnect();

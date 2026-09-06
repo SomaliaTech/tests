@@ -1,8 +1,10 @@
 // lib/features/order/presentation/widgets/order_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/order/domain/entities/order_history.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class OrderCard extends StatelessWidget {
   final OrderHistory order;
@@ -73,7 +75,7 @@ class OrderCard extends StatelessWidget {
                                   'Order #${order.orderNumber}',
                                   style: const TextStyle(
                                     color: Color(0xFF1F2937),
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: -0.2,
                                   ),
@@ -112,33 +114,7 @@ class OrderCard extends StatelessWidget {
                               .map(
                                 (item) => Padding(
                                   padding: const EdgeInsets.only(right: 8),
-                                  child: Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: Colors.grey.withOpacity(0.15),
-                                      ),
-                                      image: item.imageUrl.isNotEmpty
-                                          ? DecorationImage(
-                                              image: NetworkImage(
-                                                item.imageUrl,
-                                              ),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
-                                    ),
-                                    child: item.imageUrl.isEmpty
-                                        ? Center(
-                                            child: Icon(
-                                              Iconsax.box,
-                                              color: Colors.grey[400],
-                                              size: 20,
-                                            ),
-                                          )
-                                        : null,
-                                  ),
+                                  child: _buildItemThumbnail(item.imageUrl),
                                 ),
                               ),
                           if (order.items.length > 3)
@@ -273,6 +249,87 @@ class OrderCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ✅ FIXED: Proper image loading with error handling
+  Widget _buildItemThumbnail(String imageUrl) {
+    // ✅ Validate URL - skip if empty or invalid
+    if (imageUrl.isEmpty || !_isValidImageUrl(imageUrl)) {
+      return _buildPlaceholderThumbnail();
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withOpacity(0.15)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          fit: BoxFit.cover,
+          // ✅ Error handling
+          errorWidget: (context, url, error) => _buildPlaceholderThumbnail(),
+          // ✅ Loading placeholder
+          placeholder: (context, url) => Container(
+            color: Colors.grey[100],
+            child: const Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2ED573)),
+                ),
+              ),
+            ),
+          ),
+          // ✅ Cache configuration
+          cacheManager: _getCacheManager(),
+          // ✅ MemCache configuration
+          memCacheWidth: 100,
+          memCacheHeight: 100,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderThumbnail() {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+      ),
+      child: Center(
+        child: Icon(Iconsax.box, color: Colors.grey[400], size: 20),
+      ),
+    );
+  }
+
+  // ✅ Validate image URL
+  bool _isValidImageUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.hasScheme && (uri.scheme == 'http' || uri.scheme == 'https');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ✅ Custom cache manager with proper configuration
+  CacheManager _getCacheManager() {
+    return CacheManager(
+      Config(
+        'order_images_cache',
+        stalePeriod: const Duration(days: 7),
+        maxNrOfCacheObjects: 200,
       ),
     );
   }

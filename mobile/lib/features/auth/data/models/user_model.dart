@@ -1,17 +1,19 @@
+// lib/features/auth/data/models/user_model.dart
 import '../../domain/entities/user.dart';
 
 class UserModel {
   static User fromJson(Map<String, dynamic> json) {
     return User(
       id: json['id'] as String,
-      phoneNumber: json['phoneNumber'] as String,
+      phoneNumber: json['phoneNumber'] as String? ?? '', // ✅ Handle null
       name: json['name'] as String?,
       profileImage: json['profileImage'] as String?,
       marketId: json['marketId'] as String?,
+      email: json['email'] as String?, // ✅ Add email
       isVerified: json['isVerified'] as bool? ?? false,
       hasProfile: json['hasProfile'] as bool? ?? false,
       isAdmin: json['isAdmin'] as bool? ?? false,
-      isSuperAdmin: json['isSuperAdmin'] as bool? ?? false, // ✅ ADDED
+      isSuperAdmin: json['isSuperAdmin'] as bool? ?? false,
     );
   }
 
@@ -22,10 +24,11 @@ class UserModel {
       'name': user.name,
       'profileImage': user.profileImage,
       'marketId': user.marketId,
+      'email': user.email,
       'isVerified': user.isVerified,
       'hasProfile': user.hasProfile,
       'isAdmin': user.isAdmin,
-      'isSuperAdmin': user.isSuperAdmin, // ✅ ADDED
+      'isSuperAdmin': user.isSuperAdmin,
     };
   }
 }
