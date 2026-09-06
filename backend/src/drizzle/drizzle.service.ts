@@ -60,7 +60,8 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
   }
 
   private validateEnvironment(): void {
-    const url = process.env.DATABASE_URL;
+    const url = process.env.DATABASE_URL as string;
+    console.log('databse_url', url);
     if (!url) {
       throw new Error('DATABASE_URL is not defined in environment variables');
     }

@@ -1,7 +1,4 @@
-// lib/core/services/storage/storage_service.dart
-
 import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,19 +35,34 @@ class StorageService {
   // 🔒 DEVICE SECURITY CHECKS
   // ==========================================
 
-  /// Check if the device is secure (not rooted/jailbroken)
   static Future<bool> isDeviceSecure() async {
+    // ✅ SKIP security checks in debug mode.
+    // Emulators are detected as "not physical devices" and falsely flagged as rooted.
+    if (kDebugMode) {
+      debugPrint('🟡 Debug mode: skipping device security check');
+      return true;
+    }
+
     try {
       final deviceInfo = DeviceInfoPlugin();
 
       if (Platform.isAndroid) {
         final androidInfo = await deviceInfo.androidInfo;
-        // Check for root indicators
+
+        // In release mode, block emulators if desired
+        if (!androidInfo.isPhysicalDevice) {
+          debugPrint('⚠️ Android emulator detected in release/profile mode');
+          return false;
+        }
+
+        final bootloader = androidInfo.bootloader?.toLowerCase() ?? '';
+        final fingerprint = androidInfo.fingerprint?.toLowerCase() ?? '';
+        final hardware = androidInfo.hardware?.toLowerCase() ?? '';
+
         final isRooted =
-            androidInfo.isPhysicalDevice == false ||
-            androidInfo.bootloader?.contains('root') == true ||
-            androidInfo.fingerprint?.contains('test-keys') == true ||
-            androidInfo.hardware?.contains('goldfish') == true;
+            bootloader.contains('root') ||
+            fingerprint.contains('test-keys') ||
+            hardware.contains('goldfish');
 
         if (isRooted) {
           debugPrint('⚠️ Device appears to be rooted');
@@ -59,22 +71,19 @@ class StorageService {
         return true;
       } else if (Platform.isIOS) {
         final iosInfo = await deviceInfo.iosInfo;
-        // Check for jailbreak indicators
-        final isJailbroken =
-            iosInfo.isPhysicalDevice == false ||
-            iosInfo.name?.contains('iPhone') == false;
 
-        if (isJailbroken) {
-          debugPrint('⚠️ Device appears to be jailbroken');
+        if (!iosInfo.isPhysicalDevice) {
+          debugPrint('⚠️ iOS simulator detected in release/profile mode');
           return false;
         }
+
         return true;
       }
 
       return true;
     } catch (e) {
-      // If we can't check, assume device is secure
       debugPrint('⚠️ Could not check device security: $e');
+      // ✅ Do not logout user just because security check failed
       return true;
     }
   }
@@ -88,6 +97,7 @@ class StorageService {
     _lastActivity = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastActivityKey, _lastActivity!.toIso8601String());
+    debugPrint('🔄 Last activity updated: ${_lastActivity}');
   }
 
   /// Get last activity timestamp
@@ -103,13 +113,28 @@ class StorageService {
     return null;
   }
 
-  /// Check if session is expired (30 minutes timeout)
+  /// ✅ Check if session is expired (30 days timeout)
   Future<bool> isSessionExpired() async {
     final lastActivity = await getLastActivity();
-    if (lastActivity == null) return true;
+    if (lastActivity == null) {
+      final token = await getAuthToken();
+      if (token != null && token.isNotEmpty) {
+        await updateLastActivity();
+        return false;
+      }
+      return true;
+    }
 
     final difference = DateTime.now().difference(lastActivity);
-    return difference.inMinutes > 30; // 30 minute timeout
+    final isExpired = difference.inDays > 30;
+
+    if (isExpired) {
+      debugPrint('⚠️ Session expired after ${difference.inDays} days');
+    } else {
+      debugPrint('✅ Session active (${difference.inDays} days old)');
+    }
+
+    return isExpired;
   }
 
   // ==========================================
@@ -121,7 +146,6 @@ class StorageService {
     _cachedPermissions = permissions;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_permissionsKey, permissions);
-    debugPrint('💾 Permissions saved successfully');
   }
 
   Future<List<String>> getPermissions() async {
@@ -162,13 +186,6 @@ class StorageService {
   }
 
   Future<String?> getAuthToken() async {
-    // Check session expiry
-    if (await isSessionExpired()) {
-      debugPrint('⚠️ Session expired, clearing token');
-      await clearAuthData();
-      return null;
-    }
-
     if (_cachedToken != null && _cachedToken!.isNotEmpty) {
       return _cachedToken;
     }
@@ -176,6 +193,7 @@ class StorageService {
     final token = await _secureStorage.read(key: _tokenKey);
     if (token != null && token.isNotEmpty) {
       _cachedToken = token;
+      await updateLastActivity();
     }
     return token;
   }
@@ -213,15 +231,26 @@ class StorageService {
   }
 
   Future<bool> isAuthenticated() async {
-    // First check if device is secure
-    if (!(await isDeviceSecure())) {
+    // ✅ ONLY enforce device security in release mode!
+    if (kReleaseMode && !(await isDeviceSecure())) {
       await clearAuthData();
       return false;
     }
 
     final token = await getAuthToken();
     final isLoggedIn = await _secureStorage.read(key: _isLoggedInKey);
-    return token != null && token.isNotEmpty && isLoggedIn == 'true';
+
+    if (token != null && token.isNotEmpty && isLoggedIn == 'true') {
+      final isValid = await isValidToken();
+      if (!isValid) {
+        debugPrint('⚠️ Token is expired, clearing auth data');
+        await clearAuthData();
+        return false;
+      }
+      return true;
+    }
+
+    return false;
   }
 
   // ==========================================
@@ -300,7 +329,7 @@ class StorageService {
   }
 
   // ==========================================
-  // 🔇 CHAT MUTE SETTINGS (SharedPreferences - non-sensitive)
+  // 🔇 CHAT MUTE SETTINGS
   // ==========================================
 
   Future<void> setChatMuted(String chatId, bool isMuted) async {
@@ -314,7 +343,7 @@ class StorageService {
   }
 
   // ==========================================
-  // 🔊 SOUND SETTINGS (SharedPreferences - non-sensitive)
+  // 🔊 SOUND SETTINGS
   // ==========================================
 
   Future<bool> getMessageSoundEnabled() async {
@@ -334,13 +363,11 @@ class StorageService {
   Future<void> clearAuthData() async {
     debugPrint('🗑️ Clearing all auth data from secure storage...');
 
-    // Clear cache
     _cachedToken = null;
     _cachedIsSuperAdmin = null;
     _cachedPermissions = null;
     _lastActivity = null;
 
-    // Clear ALL secure storage keys
     await _secureStorage.delete(key: _tokenKey);
     await _secureStorage.delete(key: _userIdKey);
     await _secureStorage.delete(key: _isLoggedInKey);
@@ -352,7 +379,6 @@ class StorageService {
     await _secureStorage.delete(key: _isAdminKey);
     await _secureStorage.delete(key: _isSuperAdminKey);
 
-    // Clear SharedPreferences data
     await clearPermissions();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lastActivityKey);
@@ -364,18 +390,15 @@ class StorageService {
   // 📊 TOKEN VALIDATION
   // ==========================================
 
-  /// Validate if the token is still valid (not expired)
   Future<bool> isValidToken() async {
     final token = await getAuthToken();
     if (token == null || token.isEmpty) return false;
 
     try {
-      // Decode JWT to check expiration
       final parts = token.split('.');
       if (parts.length != 3) return false;
 
       final payload = parts[1];
-      // Add padding if needed
       String normalized = payload.replaceAll('-', '+').replaceAll('_', '/');
       while (normalized.length % 4 != 0) {
         normalized += '=';
@@ -388,7 +411,13 @@ class StorageService {
         final expiry = DateTime.fromMillisecondsSinceEpoch(
           (json['exp'] as int) * 1000,
         );
-        return expiry.isAfter(DateTime.now());
+        final isValid = expiry.isAfter(DateTime.now());
+        if (!isValid) {
+          debugPrint('⚠️ Token expired at: $expiry');
+        } else {
+          debugPrint('✅ Token valid until: $expiry');
+        }
+        return isValid;
       }
 
       return true;

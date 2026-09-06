@@ -407,6 +407,7 @@ export class AuthService {
     }
   }
 
+  // src/auth/auth.service.ts - Fix facebookSignIn
   async facebookSignIn(dto: FacebookAuthDto) {
     this.logger.log('Facebook sign in called');
 
@@ -437,7 +438,7 @@ export class AuthService {
           email: email,
           name: name,
           profileImage: profileImage,
-          phoneNumber: null,
+          phoneNumber: null, // ✅ null, not empty string
           isVerified: true,
           isAdmin: false,
           isSuperAdmin: false,
@@ -463,7 +464,6 @@ export class AuthService {
         currentUser.isSuperAdmin ?? false,
       );
 
-      // ✅ Safe logging
       this.logger.log(
         `Facebook sign-in successful for ${LogSanitizer.maskValue(fbId)}`,
       );
@@ -489,7 +489,6 @@ export class AuthService {
       throw new UnauthorizedException('Facebook authentication failed');
     }
   }
-
   /**
    * ✅ Verify Google ID Token and return TokenPayload
    */

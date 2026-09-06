@@ -156,7 +156,8 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
       final uri = Uri.parse('${ApiConstants.baseUrl}${ApiConstants.search}')
           .replace(
             queryParameters: {
-              if (query != null) 'search': query,
+              // ✅ FIX: Backend expects 'q', not 'search'
+              if (query != null && query.trim().isNotEmpty) 'q': query,
               if (minPrice != null) 'minPrice': minPrice.toString(),
               if (maxPrice != null) 'maxPrice': maxPrice.toString(),
               if (categoryId != null) 'categoryId': categoryId,
@@ -183,7 +184,6 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
   @override
   Future<Product> getProductById(String id) async {
     try {
-      // 1. Try fetching by UUID first
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/$id'),
         headers: ApiConstants.headers,
@@ -193,7 +193,6 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
         return ProductModel.fromJson(json.decode(response.body));
       }
 
-      // 2. ✅ SMART FALLBACK: If it failed (400 Bad UUID format or 404 Not Found), try fetching by SLUG
       if (response.statusCode == 400 || response.statusCode == 404) {
         final slugResponse = await client.get(
           Uri.parse('${ApiConstants.baseUrl}${ApiConstants.products}/slug/$id'),
@@ -205,14 +204,10 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
         }
       }
 
-      // 3. If both failed, throw a clean HTTP error
       throw ServerException('Failed to load product: ${response.statusCode}');
     } on ServerException {
-      // ✅ CRITICAL FIX: Re-throw ServerExceptions exactly as they are.
-      // Do NOT wrap them in "Network error", otherwise the UI thinks you are offline!
       rethrow;
     } catch (e) {
-      // Only actual socket/timeout exceptions should be labeled as network errors
       throw ServerException('Network error: $e');
     }
   }
@@ -231,7 +226,6 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
         throw ServerException('Failed to load product: ${response.statusCode}');
       }
     } on ServerException {
-      // ✅ CRITICAL FIX: Stop masking HTTP errors as network errors
       rethrow;
     } catch (e) {
       throw ServerException('Network error: $e');

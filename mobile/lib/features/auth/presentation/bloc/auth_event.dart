@@ -1,5 +1,6 @@
-import 'package:equatable/equatable.dart';
 // lib/features/auth/presentation/bloc/auth_event.dart
+
+import 'package:equatable/equatable.dart';
 
 abstract class AuthEvent extends Equatable {
   const AuthEvent();

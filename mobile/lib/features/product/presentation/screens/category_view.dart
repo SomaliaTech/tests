@@ -1,5 +1,4 @@
-// lib/features/product/presentation/screens/category_view.dart
-
+import 'dart:async'; // ✅ Required for Timer
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -36,6 +35,8 @@ class _CategoryViewState extends State<CategoryView> {
   bool _isSubcategoriesLoading = true;
   String? _previousCategoryId;
 
+  Timer? _debounceTimer; // ✅ Add Timer for safe debouncing
+
   @override
   void initState() {
     super.initState();
@@ -49,11 +50,9 @@ class _CategoryViewState extends State<CategoryView> {
       _isSubcategoriesLoading = true;
     });
 
-    // Load subcategories
     context.read<CategoryBloc>().add(
       GetCategorySubcategoriesEvent(widget.categoryId),
     );
-    // Load products for "all" initially
     _loadProducts(widget.categoryId);
   }
 
@@ -86,13 +85,20 @@ class _CategoryViewState extends State<CategoryView> {
       return;
     }
 
-    // Debounce search
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (_searchQuery == query) {
-        context.read<ProductBloc>().add(
-          SearchProductsEvent(query: query, categoryId: widget.categoryId),
-        );
-      }
+    // ✅ Cancel previous timer to prevent multiple requests from queuing up
+    _debounceTimer?.cancel();
+
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+
+      // ✅ Respect selected subcategory when searching
+      final targetId = _selectedSubCategoryId == 'all'
+          ? widget.categoryId
+          : _selectedSubCategoryId;
+
+      context.read<ProductBloc>().add(
+        SearchProductsEvent(query: query, categoryId: targetId),
+      );
     });
   }
 
@@ -103,7 +109,7 @@ class _CategoryViewState extends State<CategoryView> {
       _selectedSubCategoryId = subCategoryId;
       _searchQuery = '';
       _searchController.clear();
-      _isInitialLoad = true; // Show skeleton when switching subcategories
+      _isInitialLoad = true;
     });
 
     final targetId = subCategoryId == 'all' ? widget.categoryId : subCategoryId;
@@ -117,7 +123,6 @@ class _CategoryViewState extends State<CategoryView> {
   @override
   void didUpdateWidget(CategoryView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Handle navigation to same view with different category
     if (widget.categoryId != oldWidget.categoryId) {
       _previousCategoryId = oldWidget.categoryId;
       setState(() {
@@ -133,6 +138,7 @@ class _CategoryViewState extends State<CategoryView> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel(); // ✅ Cancel timer on dispose
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -147,7 +153,6 @@ class _CategoryViewState extends State<CategoryView> {
         builder: (context, connectivity, _) {
           final isOnline = connectivity.status == ConnectionStatus.online;
 
-          // Handle reconnection
           if (isOnline && _wasOffline) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _retryLoad();
@@ -170,7 +175,7 @@ class _CategoryViewState extends State<CategoryView> {
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
       title: Text(
-        widget.categoryName ?? 'Products', // ✅ Added '?? "Products"' fallback
+        widget.categoryName ?? 'Products',
         style: const TextStyle(
           color: Colors.black87,
           fontWeight: FontWeight.bold,
@@ -238,7 +243,6 @@ class _CategoryViewState extends State<CategoryView> {
           current is CategorySubcategoriesLoaded ||
           current is CategoryError,
       builder: (context, state) {
-        // Show skeleton while loading
         if (state is CategorySubcategoriesLoading && _isSubcategoriesLoading) {
           return const SubcategoriesSkeleton();
         }
@@ -330,7 +334,6 @@ class _CategoryViewState extends State<CategoryView> {
         }
       },
       buildWhen: (previous, current) {
-        // Always rebuild on state change
         return true;
       },
       builder: (context, state) {
@@ -343,7 +346,6 @@ class _CategoryViewState extends State<CategoryView> {
   }
 
   Widget _buildProductState(ProductState state) {
-    // Show skeleton during initial load or when switching subcategories
     if (_isInitialLoad) {
       return const ProductsGridSkeleton(
         key: ValueKey('products_skeleton'),
@@ -351,12 +353,10 @@ class _CategoryViewState extends State<CategoryView> {
       );
     }
 
-    // Error state
     if (state is ProductError) {
       return _buildErrorState(state.message);
     }
 
-    // Loaded state
     if (state is ProductsLoaded) {
       final products = _getFilteredProducts(state.products);
 
@@ -367,7 +367,6 @@ class _CategoryViewState extends State<CategoryView> {
       return _buildProductsGrid(products);
     }
 
-    // Fallback - show skeleton
     return const ProductsGridSkeleton(
       key: ValueKey('products_fallback_skeleton'),
       itemCount: 6,

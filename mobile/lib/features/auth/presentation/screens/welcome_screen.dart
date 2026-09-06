@@ -27,12 +27,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     context.read<AuthBloc>().add(const GoogleSignInEvent());
   }
 
+  // welcome_screen.dart - Fix Facebook login
   Future<void> _handleFacebookSignIn() async {
     setState(() => _loadingProvider = 'facebook');
     try {
+      // ✅ Try different login behaviors for Android
       final LoginResult result = await FacebookAuth.instance.login(
         permissions: ['email', 'public_profile'],
-        loginBehavior: LoginBehavior.webOnly,
+        loginBehavior:
+            LoginBehavior.nativeWithFallback, // ← Changed from webOnly
       );
 
       if (result.status == LoginStatus.success) {
@@ -42,6 +45,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           context.read<AuthBloc>().add(FacebookSignInEvent(accessToken));
         }
       } else {
+        // Handle cancellation
         if (mounted) {
           setState(() => _loadingProvider = null);
           toastification.show(
@@ -193,7 +197,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       const SizedBox(height: 16),
                       // ✅ SOMALI LANGUAGE ADVERTISEMENT
                       Text(
-                        'Ku Soo Dhawoow Farxada',
+                        'Ku Soo Dhawoow FARXADA 🤍',
                         style: TextStyle(
                           color: Colors.grey[200],
                           fontSize: 12,
@@ -203,7 +207,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Badeecado Caalami Ah\nIlaalin & Badbaado Dhab Ah',
+                        'Adeegyo fudud suuq \n dukameysi  ticket diyaarad \nall in one',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
@@ -221,7 +225,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'Kaalay oo ku raaxeysto wax iibsiga\nsi ammaan ah oo kalsooni leh',
+                        'Wax kasta oo aad u baahan tahay — FARXADA ayaa kuu fududaynaysa.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white70,

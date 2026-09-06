@@ -1,7 +1,6 @@
-// lib/features/auth/presentation/bloc/auth_bloc.dart
-
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart'; // ✅ REQUIRED FOR kReleaseMode
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive/hive.dart';
@@ -435,14 +434,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     CheckAuthStatusEvent event,
     Emitter<AuthState> emit,
   ) async {
-    // ✅ First check if device is secure
-    if (!(await StorageService.isDeviceSecure())) {
+    // ✅ ONLY enforce device security in release mode!
+    if (kReleaseMode && !(await StorageService.isDeviceSecure())) {
       developer.log('⚠️ Device may be compromised, clearing auth data');
       await storageService.clearAuthData();
       if (!emit.isDone) emit(Unauthenticated());
       return;
     }
 
+    // ✅ Check if user is authenticated - this already validates token
     final isAuthenticated = await storageService.isAuthenticated();
     if (!isAuthenticated) {
       if (!emit.isDone) emit(Unauthenticated());
@@ -455,7 +455,8 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
-    // ✅ Validate token expiration
+    // ✅ Token is already validated in isAuthenticated()
+    // But let's double-check
     if (!(await storageService.isValidToken())) {
       developer.log('🔴 Token expired, logging out...');
       await _clearAllCaches();
@@ -465,6 +466,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       return;
     }
 
+    // Load user from cache
     final cachedName = await storageService.getUserName() ?? 'User';
     final cachedPhone = await storageService.getUserPhone() ?? '';
     final cachedProfileImage = await storageService.getUserProfileImage();
@@ -483,9 +485,14 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       isSuperAdmin: cachedIsSuperAdmin,
     );
 
-    if (!emit.isDone) emit(Authenticated(localUser, token));
+    // ✅ Don't emit duplicate states - check if already authenticated
+    if (!emit.isDone && state is! Authenticated) {
+      emit(Authenticated(localUser, token));
+    }
+
     chatSocketService.connect();
 
+    // ✅ Fetch fresh user data in background
     try {
       final userResult = await getCurrentUser();
       if (isClosed || emit.isDone) return;
@@ -517,8 +524,12 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           await storageService.saveIsSuperAdmin(user.isSuperAdmin ?? false);
           await storageService.saveLoginStatus(true);
 
+          // ✅ Only emit if state changed
           if (!isClosed && !emit.isDone && state is Authenticated) {
-            emit(Authenticated(user, token));
+            final currentState = state as Authenticated;
+            if (currentState.user != user) {
+              emit(Authenticated(user, token));
+            }
           }
         },
       );
@@ -526,7 +537,6 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       developer.log('Error checking auth status: $e');
     }
   }
-
   // ==========================================
   // 🚪 LOGOUT
   // ==========================================
