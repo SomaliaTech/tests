@@ -5,8 +5,10 @@ import {
   IsUUID,
   Min,
   Max,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SearchProductDto {
   @IsString()
@@ -49,4 +51,11 @@ export class SearchProductDto {
   @Min(1)
   @Max(100)
   limit?: number;
+  @ApiPropertyOptional({
+    description: 'Whether the product is featured/hot',
+    default: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean; // ✅ ADD THIS
 }

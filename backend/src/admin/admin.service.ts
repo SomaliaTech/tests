@@ -1885,11 +1885,11 @@ export class AdminService {
     const insertData: Record<string, unknown> = {
       id: productId,
       name: createProductDto.name,
-      slug: slug, // ✅ Use the unique slug
+      slug: slug,
       price: createProductDto.price.toString(),
       stock: createProductDto.stock ?? 0,
       isActive: createProductDto.isActive ?? true,
-      isFeatured: createProductDto.isFeatured ?? false,
+      isFeatured: createProductDto.isFeatured ?? false, // ✅ ADD THIS
       categoryId: createProductDto.categoryId,
     };
 
@@ -2008,7 +2008,7 @@ export class AdminService {
     });
     if (!product) throw new NotFoundException('Product not found');
 
-    // ✅ Use transaction for all database operations
+    // ✅ Use transaction for all database operations to ensure data consistency
     await this.drizzle.db.transaction(async (tx) => {
       // 1. Update basic product info
       const updateValues: Record<string, unknown> = { updatedAt: new Date() };
@@ -2026,6 +2026,11 @@ export class AdminService {
       if (updateData.isActive !== undefined)
         updateValues.isActive = updateData.isActive;
 
+      // ✅ CRITICAL FIX: Add isFeatured to the update values
+      if (updateData.isFeatured !== undefined) {
+        updateValues.isFeatured = updateData.isFeatured;
+      }
+
       await tx
         .update(products)
         .set(updateValues)
@@ -2035,7 +2040,7 @@ export class AdminService {
       if (updateData.deleted_image_ids?.length > 0) {
         this.logInfo(`Deleting ${updateData.deleted_image_ids.length} images`);
 
-        // Delete from Supabase storage (fire and forget)
+        // Fetch images to get publicId for Supabase deletion
         const imagesToDelete = await tx
           .select()
           .from(mediaAssets)
@@ -2043,7 +2048,10 @@ export class AdminService {
 
         for (const image of imagesToDelete) {
           this.supabaseService.deleteImage(image.publicId).catch((err) => {
-            console.error(`Failed to delete image: ${image.publicId}`, err);
+            console.error(
+              `Failed to delete image from Supabase: ${image.publicId}`,
+              err,
+            );
           });
         }
 
@@ -2053,7 +2061,7 @@ export class AdminService {
           .where(inArray(mediaAssets.id, updateData.deleted_image_ids));
       }
 
-      // 3. ✅ SAFE DELETE variants (Handle foreign key constraints)
+      // 3. ✅ SAFE DELETE variants (Handle foreign key constraints if already ordered)
       if (updateData.deleted_variant_ids?.length > 0) {
         this.logInfo(
           `Attempting to delete ${updateData.deleted_variant_ids.length} variants`,
@@ -2063,7 +2071,7 @@ export class AdminService {
             .delete(productVariants)
             .where(inArray(productVariants.id, updateData.deleted_variant_ids));
         } catch (error: any) {
-          // Postgres error 23503 = foreign_key_violation (variant already ordered)
+          // Postgres error 23503 = foreign_key_violation (variant already in orders)
           if (error.code === '23503') {
             console.warn(
               '⚠️ Cannot delete variant(s) because they have existing orders. Setting stock to 0 instead.',
@@ -2089,12 +2097,10 @@ export class AdminService {
         for (const variant of updateData.existing_variants) {
           // ✅ CRITICAL FIX: Check both variantId AND id to support frontend sync
           const vId = variant.variantId || variant.id;
-
           if (vId) {
             const variantUpdate: Record<string, unknown> = {
               updatedAt: new Date(),
             };
-
             if (variant.colorId) variantUpdate.colorId = variant.colorId;
             if (variant.sizeId) variantUpdate.sizeId = variant.sizeId;
             if (variant.sku !== undefined) variantUpdate.sku = variant.sku;
@@ -2123,13 +2129,16 @@ export class AdminService {
           await tx.insert(productVariants).values({
             id: uuidv4(),
             productId,
-            colorId: variant.colorId,
-            sizeId: variant.sizeId,
+            colorId: variant.colorId || null,
+            sizeId: variant.sizeId || null,
             sku:
               variant.sku ||
-              `${product.slug?.slice(0, 4)}-${variant.colorId?.slice(0, 4)}-${variant.sizeId?.slice(0, 4)}`.toUpperCase(),
+              `${product.slug?.slice(0, 4)}-${variant.colorId?.slice(0, 4) || 'NO'}-${variant.sizeId?.slice(0, 4) || 'NO'}`.toUpperCase(),
             stock: variant.stock ?? 0,
-            price: variant.price?.toString(),
+            price:
+              variant.price !== undefined && variant.price !== null
+                ? variant.price.toString()
+                : null,
           });
         }
       }
@@ -2161,7 +2170,7 @@ export class AdminService {
       }
     });
 
-    // ✅ Return fresh data after transaction
+    // ✅ Return fresh data after transaction completes successfully
     console.log('✅ Transaction completed');
     return this.getProductById(productId);
   }

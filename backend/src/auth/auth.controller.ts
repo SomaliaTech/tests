@@ -154,6 +154,7 @@ export class AuthController {
       req.user.userId,
       updateProfileDto.name,
       updateProfileDto.marketId,
+      updateProfileDto.email, // ✅ Pass email to the service
     );
   }
 }

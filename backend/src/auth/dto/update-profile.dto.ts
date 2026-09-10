@@ -1,21 +1,19 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsUUID } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateProfileDto {
-  @ApiProperty({
-    description: 'User full name',
-    example: 'farah Jamac Updated',
-    required: false,
-  })
+  @ApiPropertyOptional({ description: 'User name' })
   @IsString()
   @IsOptional()
   name?: string;
 
-  @ApiProperty({
-    description: 'Market ID associated with the user',
-    example: '550e8400-e29b-41d4-a716-446655440000',
-    required: false,
-  })
+  // ✅ ADD THIS: Allow email to be sent from the frontend
+  @ApiPropertyOptional({ description: 'User email' })
+  @IsEmail()
+  @IsOptional()
+  email?: string;
+
+  @ApiPropertyOptional({ description: 'Market ID' })
   @IsUUID()
   @IsOptional()
   marketId?: string;

@@ -67,7 +67,16 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      const parsed = new URL(url);
+      // Try to encode the URL if it contains special characters
+      let parsedUrl = url;
+      try {
+        new URL(url);
+      } catch {
+        // If URL parsing fails, try to fix the password encoding
+        parsedUrl = url.replace(/#(?=.*@)/, '%23');
+      }
+
+      const parsed = new URL(parsedUrl);
 
       if (!parsed.username) {
         throw new Error('DATABASE_URL missing username');

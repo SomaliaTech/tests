@@ -689,7 +689,6 @@ export class AdminController {
   getProductById(@Param('productId', ParseUUIDPipe) productId: string) {
     return this.adminService.getProductById(productId);
   }
-
   @Post('products')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Permissions(Permission.PRODUCT_CREATE)
@@ -701,7 +700,6 @@ export class AdminController {
     @UploadedFiles() files?: Array<Express.Multer.File>,
   ) {
     let createProductDto: any = {};
-
     if (body?.data) {
       try {
         createProductDto = JSON.parse(body.data);
@@ -712,23 +710,66 @@ export class AdminController {
       createProductDto = body;
     }
 
-    // Safe logging
     this.logInfo('Creating product', {
       productName: createProductDto?.name,
       categoryId: createProductDto?.categoryId,
-      hasPrice: !!createProductDto?.price,
       fileCount: files?.length || 0,
     });
 
-    const product = await this.adminService.createProduct(createProductDto);
+    let createdProductId: string | null = null;
 
-    if (files && files.length > 0) {
-      await this.adminService.uploadProductImages(product.id, files);
+    try {
+      // 1. Create the product in DB
+      const product = await this.adminService.createProduct(createProductDto);
+      createdProductId = product.id;
+
+      // 2. Upload images (If this fails, it jumps to catch block)
+      if (files && files.length > 0) {
+        await this.adminService.uploadProductImages(product.id, files);
+      }
+
+      return this.adminService.getProductById(product.id);
+    } catch (error: any) {
+      // 🚨 ROLLBACK: If image upload failed, delete the orphaned product from DB
+      if (createdProductId) {
+        this.logger.warn(
+          `⚠️ Rolling back product ${createdProductId} due to upload/creation failure`,
+        );
+        await this.adminService
+          .deleteProduct(createdProductId)
+          .catch((e) =>
+            this.logger.error(
+              `Failed to rollback product ${createdProductId}`,
+              e,
+            ),
+          );
+      }
+
+      // 🚨 Return a clean, user-friendly error instead of a raw 500
+      let message = 'Failed to create product. Please try again.';
+      const errMsg = error?.message || '';
+
+      if (
+        errMsg.includes('Supabase') ||
+        errMsg.includes('fetch failed') ||
+        errMsg.includes('network')
+      ) {
+        message =
+          'Image upload failed. Please check your internet connection and try again.';
+      } else if (errMsg.includes('slug') || errMsg.includes('already exists')) {
+        message =
+          'A product with a similar name already exists. Please change the name slightly.';
+      } else if (error?.response?.message) {
+        message = Array.isArray(error.response.message)
+          ? error.response.message[0]
+          : error.response.message;
+      } else if (errMsg) {
+        message = errMsg;
+      }
+
+      throw new BadRequestException(message);
     }
-
-    return this.adminService.getProductById(product.id);
   }
-
   @Put('products/:productId')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Permissions(Permission.PRODUCT_UPDATE)

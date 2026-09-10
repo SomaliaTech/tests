@@ -54,6 +54,17 @@ interface UpdateUserData {
   updatedAt: Date;
 }
 
+interface UpdateUserData {
+  name?: string;
+  marketId?: string;
+  phoneNumber?: string;
+  profileImage?: string;
+  email?: string; // ✅ ADD THIS
+  isVerified?: boolean;
+  isActive?: boolean;
+  updatedAt: Date;
+}
+
 interface OtpCacheData {
   otpHash: string; // ✅ Store hash instead of plain OTP
   phoneNumber: string;
@@ -139,6 +150,8 @@ export class AuthService {
       phoneNumber: normalizedPhone,
       attempts: 0,
     };
+
+    console.log('otp code', otpCode);
 
     try {
       await this.redis.set(redisKey, JSON.stringify(otpData), {
@@ -952,8 +965,13 @@ export class AuthService {
   // ==========================================
   // UPDATE PROFILE
   // ==========================================
-
-  async updateProfile(userId: string, name?: string, marketId?: string) {
+  async updateProfile(
+    userId: string,
+    name?: string,
+    marketId?: string,
+    email?: string,
+  ) {
+    // ✅ Add email parameter
     const oldUserResult = await this.drizzle.db
       .select()
       .from(users)
@@ -974,6 +992,13 @@ export class AuthService {
       changes.push('market');
     }
 
+    // ✅ ADD THIS: Handle email updates
+    if (email && email !== oldUser.email) {
+      updateData.email = email;
+      changes.push('email');
+    }
+
+    // If only 'updatedAt' is in the object, it means nothing actually changed
     if (Object.keys(updateData).length === 1) {
       return {
         message: 'No changes made',
