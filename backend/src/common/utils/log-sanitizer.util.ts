@@ -1,6 +1,11 @@
 // src/common/utils/log-sanitizer.util.ts
 export class LogSanitizer {
-  private static readonly SENSITIVE_PATTERNS = [
+  /**
+   * Patterns are applied in order. More specific patterns first,
+   * then generic ones. Anything that looks like a secret gets masked.
+   */
+  private static readonly SENSITIVE_PATTERNS: RegExp[] = [
+    // Key=value style secrets
     /(api[_-]?key\s*[=:]\s*)([^\s,;]+)/gi,
     /(apikey\s*[=:]\s*)([^\s,;]+)/gi,
     /(password\s*[=:]\s*)([^\s,;]+)/gi,
@@ -10,26 +15,30 @@ export class LogSanitizer {
     /(refresh_token\s*[=:]\s*)([^\s,;]+)/gi,
     /(bearer\s+)([a-zA-Z0-9._-]+)/gi,
     /(authorization\s*[=:]\s*)([^\s,;]+)/gi,
-    /(\+?252\d{2})(\d{3})(\d{3})/g,
-    /\b(\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4})\b/g,
-    /\b(cvv\s*[=:]\s*)(\d{3,4})\b/gi,
-    /\b(otp\s*[=:]\s*)(\d{4,6})\b/gi,
     /(secret\s*[=:]\s*)([^\s,;]+)/gi,
+    /(cvv\s*[=:]\s*)(\d{3,4})\b/gi,
+    /(otp\s*[=:]\s*)(\d{4,6})\b/gi,
+
+    // Phone numbers (Somali +252 format)
+    /(\+?252\d{2})(\d{3})(\d{3})/g,
+
+    // Credit card numbers
+    /\b(\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4})\b/g,
+
+    // ✅ Natural-language OTP patterns (English + Somali)
+    // Matches: "waa 352185", "code 352185", "koodh 352185", "pin 1234"
+    /\b(waa|code|koodh|koodhka|pin|otp)\s+(\d{4,6})\b/gi,
+
+    // ✅ Generic standalone 6-digit OTP (last resort)
+    // Only redact if it's NOT part of a longer number/word
+    /(?<![\d.-])\b(\d{6})\b(?![\d.-])/g,
   ];
 
   static sanitize(data: any): any {
-    if (typeof data === 'string') {
-      return this.sanitizeString(data);
-    }
-
-    if (Array.isArray(data)) {
-      return data.map((item) => this.sanitize(item));
-    }
-
-    if (typeof data === 'object' && data !== null) {
+    if (typeof data === 'string') return this.sanitizeString(data);
+    if (Array.isArray(data)) return data.map((item) => this.sanitize(item));
+    if (typeof data === 'object' && data !== null)
       return this.sanitizeObject(data);
-    }
-
     return data;
   }
 
@@ -37,14 +46,25 @@ export class LogSanitizer {
     let sanitized = str;
 
     for (const pattern of this.SENSITIVE_PATTERNS) {
-      sanitized = sanitized.replace(pattern, (match, p1, p2) => {
+      // Reset lastIndex in case the regex is global
+      pattern.lastIndex = 0;
+
+      sanitized = sanitized.replace(pattern, (...args) => {
+        // args = [match, p1?, p2?, offset, fullString]
+        const match = args[0] as string;
+        const p1 = args[1] as string | undefined;
+        const p2 = args[2] as string | undefined;
+
+        // Two capture groups => mask the second one
         if (p1 && p2) {
           return `${p1}${this.maskValue(p2)}`;
         }
+        // One capture group => mask the whole thing
         if (p1 && !p2) {
           return this.maskValue(match);
         }
-        return match;
+        // No capture groups => mask the whole match
+        return this.maskValue(match);
       });
     }
 
@@ -89,13 +109,8 @@ export class LogSanitizer {
   }
 
   static maskValue(value: any): string {
-    if (typeof value !== 'string') {
-      return '***';
-    }
-
-    if (value.length <= 4) {
-      return '***';
-    }
+    if (typeof value !== 'string') return '***';
+    if (value.length <= 4) return '***';
 
     const firstTwo = value.substring(0, 2);
     const lastTwo = value.substring(value.length - 2);
@@ -106,10 +121,12 @@ export class LogSanitizer {
   }
 
   static maskPhoneNumber(phone: string): string {
+    // If already masked, return as-is
+    if (phone.includes('*')) return phone;
+
     const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length < 6) {
-      return '***';
-    }
+    if (cleaned.length < 6) return '***';
+
     const firstThree = cleaned.substring(0, 3);
     const lastTwo = cleaned.substring(cleaned.length - 2);
     const middleLength = cleaned.length - 5;
@@ -128,6 +145,25 @@ export class LogSanitizer {
       username.length <= 2 ? `${firstChar}***` : `${firstChar}***${lastChar}`;
 
     return `${maskedUsername}@${domain}`;
+  }
+
+  /**
+   * ✅ NEW: Strip SMS message bodies from a Hormuud response before logging.
+   * The `MessageParts` array contains the raw SMS text (which includes OTPs).
+   */
+  static redactHormuudResponse(response: any): any {
+    if (!response || typeof response !== 'object') {
+      return this.sanitize(response);
+    }
+
+    const sanitized = this.sanitize(response);
+
+    // Redact MessageParts if present
+    if (sanitized?.Data?.Details?.MessageParts) {
+      sanitized.Data.Details.MessageParts = ['[REDACTED]'];
+    }
+
+    return sanitized;
   }
 
   static sanitizeForLog(data: any): any {

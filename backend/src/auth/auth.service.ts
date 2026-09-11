@@ -146,22 +146,31 @@ export class AuthService {
 
     const redisKey = `otp:${normalizedPhone}`;
     const otpData: OtpCacheData = {
-      otpHash: hashedOtp, // Store hash, not plain OTP
+      otpHash: hashedOtp,
       phoneNumber: normalizedPhone,
       attempts: 0,
     };
 
-    console.log('otp code', otpCode);
+    console.log('otp', otpCode);
 
     try {
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
 
-      // ✅ Safe logging - mask phone
       this.logger.log(
         `OTP stored for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
+
+      // ✅ Safe dev-only debug (never in prod, never raw)
+      if (
+        !this.isProduction &&
+        this.configService.get('ALLOW_DEBUG_OTP') === 'true'
+      ) {
+        this.logger.debug(
+          `[DEV] OTP for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}: ${otpCode}`,
+        );
+      }
 
       if (this.isProduction) {
         await this.hormuudService.sendOtpSms(normalizedPhone, otpCode);
@@ -172,7 +181,6 @@ export class AuthService {
           message: 'OTP sent successfully',
         };
       } else {
-        // ✅ Only return OTP in development AND if explicitly allowed
         const allowDebugOtp =
           this.configService.get('ALLOW_DEBUG_OTP') === 'true';
 

@@ -5,7 +5,6 @@ import axios from 'axios';
 import * as crypto from 'crypto';
 import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 
-// Define TypeScript interfaces for API responses
 interface TokenResponse {
   access_token: string;
   token_type: string;
@@ -44,7 +43,6 @@ export class HormuudService {
   constructor(private configService: ConfigService) {
     this.isProduction = configService.get('NODE_ENV') === 'production';
 
-    // ✅ ONLY log in development
     if (!this.isProduction) {
       const username = this.configService.get<string>('HORMUUD_USERNAME');
       const senderId = this.configService.get<string>('HORMUUD_SENDER_ID');
@@ -55,6 +53,7 @@ export class HormuudService {
       this.logger.log(`   Sender ID: ${senderId ?? 'MISSING'}`);
     }
   }
+
   private maskUsername(username: string | undefined): string {
     if (!username) return 'MISSING';
     if (username.length <= 4) return '***';
@@ -65,7 +64,6 @@ export class HormuudService {
   }
 
   private async getAccessToken(): Promise<string> {
-    // Check if token exists and hasn't expired (with 5-minute buffer)
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry) {
       this.logger.log('Using cached access token');
       return this.accessToken;
@@ -102,11 +100,10 @@ export class HormuudService {
 
       const tokenData = response.data;
       this.accessToken = tokenData.access_token;
-      this.tokenExpiry = new Date(Date.now() + 55 * 60 * 1000); // 55 minutes
+      this.tokenExpiry = new Date(Date.now() + 55 * 60 * 1000);
 
       this.logger.log('✅ Successfully obtained Hormuud access token');
 
-      // ✅ SAFE: Never log the actual token
       if (this.accessToken) {
         this.logger.log(
           `   Token: ${LogSanitizer.maskValue(this.accessToken)}`,
@@ -116,7 +113,6 @@ export class HormuudService {
       return this.accessToken;
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        // ✅ SAFE: Sanitize error response before logging
         const sanitizedError = LogSanitizer.sanitize({
           status: error.response?.status,
           data: error.response?.data,
@@ -139,7 +135,6 @@ export class HormuudService {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
 
-      // ✅ SAFE: Sanitize error message before logging
       this.logger.error(
         `Failed to get Hormuud access token: ${LogSanitizer.sanitizeString(errorMessage)}`,
       );
@@ -153,7 +148,6 @@ export class HormuudService {
       const formattedPhone = phoneNumber.replace('+', '');
       const senderId = this.configService.get<string>('HORMUUD_SENDER_ID');
 
-      // ✅ SAFE: Mask phone number in logs
       this.logger.log(
         `Sending SMS to ${LogSanitizer.maskPhoneNumber(formattedPhone)}`,
       );
@@ -183,14 +177,12 @@ export class HormuudService {
 
       const smsResponse = response.data;
 
-      // Check response for errors
       if (
         smsResponse.ResponseCode === '204' ||
         smsResponse.ResponseMessage === 'Failed.'
       ) {
         const description = smsResponse.Data?.Description ?? 'Unknown error';
 
-        // ✅ SAFE: Sanitize description
         this.logger.error(
           `SMS sending failed: ${LogSanitizer.sanitizeString(description)}`,
         );
@@ -204,23 +196,31 @@ export class HormuudService {
         throw new Error(`SMS sending failed: ${description}`);
       }
 
-      // ✅ SAFE: Mask phone in success log
       this.logger.log(
         `✅ SMS sent successfully to ${LogSanitizer.maskPhoneNumber(formattedPhone)}`,
       );
-      // ✅ SAFE: Sanitize response before logging
-      this.logger.log('Response:', LogSanitizer.sanitize(smsResponse));
+
+      // ✅ SAFE: Log only meta info — NEVER the MessageParts (contains OTP)
+      this.logger.log('Response:', {
+        ResponseCode: smsResponse.ResponseCode,
+        ResponseMessage: smsResponse.ResponseMessage,
+        MessageID: smsResponse.Data?.MessageID,
+        Description: smsResponse.Data?.Description,
+        TotalSMS: smsResponse.Data?.Details?.TotalSMS,
+        // ❌ MessageParts deliberately omitted
+      });
+
+      // If you ever need the full response for debugging, use this:
+      // this.logger.debug('Full response:', LogSanitizer.redactHormuudResponse(smsResponse));
 
       return true;
     } catch (error: unknown) {
-      // ✅ SAFE: Mask phone in error log
       this.logger.error(
         `Failed to send SMS to ${LogSanitizer.maskPhoneNumber(phoneNumber)}`,
         error,
       );
 
       if (axios.isAxiosError(error)) {
-        // ✅ SAFE: Sanitize API error
         this.logger.error(
           'API Error:',
           LogSanitizer.sanitize({
@@ -241,7 +241,6 @@ export class HormuudService {
   async sendOtpSms(phoneNumber: string, otpCode: string): Promise<boolean> {
     const message = `Koodhkaaga xaqiijinta waa ${otpCode}. Fadlan ha la wadaagin cidna. Wuu dhacayaa 10 daqiiqo gudahood.`;
 
-    // ✅ SAFE: Log without OTP code
     this.logger.log(
       `Sending OTP SMS to ${LogSanitizer.maskPhoneNumber(phoneNumber)}`,
     );
