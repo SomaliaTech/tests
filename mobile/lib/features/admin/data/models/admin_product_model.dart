@@ -11,6 +11,7 @@ class AdminProductModel extends AdminProductEntity {
     required super.stock,
     super.categoryId,
     super.categoryName,
+    super.isFeatured,
     super.brand,
     super.tags,
     required super.isActive,
@@ -36,6 +37,7 @@ class AdminProductModel extends AdminProductEntity {
       brand: json['brand'],
       tags: json['tags'],
       isActive: json['isActive'] ?? true,
+      isFeatured: json['isFeatured'] ?? false, // ✅ ADD THIS LINE
       images:
           (json['images'] as List<dynamic>?)
               ?.map((img) => AdminProductImageModel.fromJson(img))
@@ -54,7 +56,6 @@ class AdminProductModel extends AdminProductEntity {
           : DateTime.now(),
     );
   }
-
   // ✅ FIXED: Just return self since model extends entity
   AdminProductEntity toEntity() {
     return this;

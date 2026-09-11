@@ -36,12 +36,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
   final List<AdminProductImageEntity> _existingImages = [];
   final List<File> _newImages = [];
   final List<String> _deletedImageIds = [];
+
   bool _syncPriceToVariants = false;
-  // ✅ Updated: Use Map for editable existing variants
   final List<Map<String, dynamic>> _existingVariants = [];
   final List<Map<String, dynamic>> _newVariants = [];
   final List<String> _deletedVariantIds = [];
-
+  bool _isFeatured = false;
   AdminCategoryEntity? _selectedCategory;
   AdminCategoryEntity? _selectedSubcategory;
   bool _isActive = true;
@@ -56,7 +56,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   @override
   void initState() {
     super.initState();
-    print(
+    debugPrint(
       '🔍 [EditProduct] Initializing screen for product: ${widget.productId}',
     );
     context.read<AdminProductBloc>().add(FetchCategoriesTreeEvent());
@@ -66,7 +66,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   Future<void> _loadProductData() async {
-    print('🔍 [EditProduct] Loading product data...');
+    debugPrint('🔍 [EditProduct] Loading product data...');
     context.read<AdminProductBloc>().add(
       FetchAdminProductByIdEvent(widget.productId),
     );
@@ -84,7 +84,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   void _populateFields(AdminProductEntity product) {
-    print('🔍 [EditProduct] Populating fields...');
+    debugPrint('🔍 [EditProduct] Populating fields...');
 
     _nameController.text = product.name;
     _descriptionController.text = product.description ?? '';
@@ -94,7 +94,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _tagsController.text = product.tags ?? '';
     _isActive = product.isActive;
     _existingImages.addAll(product.images);
-
+    _isFeatured = product.isFeatured;
     // ✅ Convert existing variants to editable Maps
     _existingVariants.addAll(
       product.variants.map(
@@ -104,7 +104,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
           'colorName': v.colorName ?? '',
           'colorCode': v.colorCode ?? '#000000',
           'sizeId': v.sizeId,
-          'sizeName': v.sizeName ?? '', // ✅ Added sizeName
+          'sizeName': v.sizeName ?? '',
           'sizeValue': v.sizeValue ?? '',
           'sku': v.sku,
           'stock': v.stock,
@@ -116,23 +116,16 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _productData = product;
 
     if (_categoriesLoaded && !_categorySet) {
-      print('   ✅ Categories already loaded, setting category now');
+      debugPrint('   ✅ Categories already loaded, setting category now');
       _setCategoryFromProduct(product);
     } else {
-      print('   ⏳ Categories not loaded yet, will set later');
+      debugPrint('   ⏳ Categories not loaded yet, will set later');
     }
   }
 
   void _setCategoryFromProduct(AdminProductEntity product) {
-    if (product.categoryId == null) {
-      print('⚠️ [EditProduct] Product has no categoryId');
-      return;
-    }
-
-    if (_cachedCategories.isEmpty) {
-      print('⚠️ [EditProduct] No cached categories available');
-      return;
-    }
+    if (product.categoryId == null) return;
+    if (_cachedCategories.isEmpty) return;
 
     for (final parentCategory in _cachedCategories) {
       if (parentCategory.id == product.categoryId) {
@@ -155,8 +148,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
         }
       }
     }
-
-    print('❌ [EditProduct] Category not found in cached categories!');
   }
 
   Future<void> _pickImages() async {
@@ -176,24 +167,20 @@ class _EditProductScreenState extends State<EditProductScreen> {
     }
   }
 
-  // In _EditProductScreenState - this is already correct!
   void _removeExistingImage(int index) {
     final image = _existingImages[index];
     setState(() {
-      _existingImages.removeAt(index); // Remove from UI
-      _deletedImageIds.add(image.id); // Mark for deletion
+      _existingImages.removeAt(index);
+      _deletedImageIds.add(image.id);
     });
-    // ✅ DO NOT call any API here - wait for form submission
   }
 
   void _removeNewImage(int index) {
     setState(() => _newImages.removeAt(index));
   }
 
-  // ✅ Add new variants
   void _showAddVariantDialog() {
     final allExisting = [..._existingVariants, ..._newVariants];
-
     showDialog(
       context: context,
       builder: (context) => _AddVariantDialog(
@@ -207,16 +194,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  // ✅ Edit existing variant
   void _editExistingVariant(int index) {
     final allExisting = [..._existingVariants, ..._newVariants];
-
     showDialog(
       context: context,
       builder: (context) => _EditVariantDialog(
         variant: _existingVariants[index],
         index: index,
         existingVariants: allExisting,
+        isNew: false,
         onSave: (idx, updatedVariant) {
           setState(() {
             _existingVariants[idx] = updatedVariant;
@@ -226,10 +212,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  // ✅ Edit new variant
   void _editNewVariant(int index) {
     final allExisting = [..._existingVariants, ..._newVariants];
-
     showDialog(
       context: context,
       builder: (context) => _EditVariantDialog(
@@ -246,8 +230,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
   }
 
-  // ✅ Delete existing variant (mark for deletion)
-  // In _EditProductScreenState - this is already correct!
   void _removeExistingVariant(int index) {
     HapticFeedback.mediumImpact();
     final variant = _existingVariants[index];
@@ -255,14 +237,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
     setState(() {
       if (variantId != null) {
-        _deletedVariantIds.add(variantId); // Mark for deletion
+        _deletedVariantIds.add(variantId);
       }
-      _existingVariants.removeAt(index); // Remove from UI
+      _existingVariants.removeAt(index);
     });
-    // ✅ DO NOT call any API here - wait for form submission
   }
 
-  // ✅ Delete new variant
   void _removeNewVariant(int index) {
     HapticFeedback.mediumImpact();
     setState(() => _newVariants.removeAt(index));
@@ -281,7 +261,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
     HapticFeedback.mediumImpact();
     final categoryId = _selectedSubcategory?.id ?? _selectedCategory!.id;
-    final basePrice = double.parse(_priceController.text); // ✅ Get base price
+    final basePrice = double.parse(_priceController.text);
 
     // ✅ NEW: If toggle is on, force all variants to use the base price
     if (_syncPriceToVariants) {
@@ -296,17 +276,17 @@ class _EditProductScreenState extends State<EditProductScreen> {
     final updateData = {
       'name': _nameController.text.trim(),
       'description': _descriptionController.text.trim(),
-      'price': basePrice,
+      'price': double.parse(_priceController.text),
       'stock': int.parse(_stockController.text),
       'categoryId': categoryId,
       'brand': _brandController.text.trim(),
       'tags': _tagsController.text.trim(),
       'isActive': _isActive,
+      'isFeatured': _isFeatured, // ✅ ADD THIS
     };
-
     final updatedExistingVariants = _existingVariants.map((v) {
       final clean = Map<String, dynamic>.from(v);
-      // ✅ KEEP the variantId and map it to 'id' so the backend knows exactly which row to update!
+      // ✅ CRITICAL: Map 'variantId' to 'id' so the backend knows exactly which row to update!
       clean['id'] = clean['variantId'];
       return clean;
     }).toList();
@@ -329,7 +309,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
-        // In EditProductScreen - update the listener in the BlocConsumer
         listener: (context, state) {
           if (state is AdminCategoriesLoaded) {
             _cachedCategories = state.categories;
@@ -343,8 +322,6 @@ class _EditProductScreenState extends State<EditProductScreen> {
           } else if (state is AdminProductOperationSuccess) {
             HapticFeedback.mediumImpact();
             ToastHelper.showSuccess(context, state.message);
-
-            // ✅ Pop with result — let the PARENT screen handle refresh
             if (mounted) {
               Navigator.pop(context, true);
             }
@@ -357,11 +334,8 @@ class _EditProductScreenState extends State<EditProductScreen> {
           final isUpdating = state is AdminProductCreating;
 
           if (_isLoadingProduct) {
-            return const Scaffold(
-              backgroundColor: Color(0xFFF8F9FA),
-              body: Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryColor),
-              ),
+            return const Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryColor),
             );
           }
 
@@ -391,88 +365,16 @@ class _EditProductScreenState extends State<EditProductScreen> {
                               icon: Iconsax.info_circle,
                               child: Column(
                                 children: [
-                                  _buildSectionCard(
-                                    title: 'Basic Information',
-                                    icon: Iconsax.info_circle,
-                                    child: Column(
-                                      children: [
-                                        _buildTextField(
-                                          controller: _nameController,
-                                          label: 'Product Name',
-                                          hint: 'Enter product name',
-                                          icon: Iconsax.box_1,
-                                          validator: (value) {
-                                            if (value == null || value.isEmpty)
-                                              return 'Product name is required';
-                                            return null;
-                                          },
-                                        ),
-                                        const SizedBox(height: 16),
-                                        _buildTextField(
-                                          controller: _descriptionController,
-                                          label: 'Description',
-                                          hint: 'Enter product description',
-                                          icon: Iconsax.document_text,
-                                          maxLines: 4,
-                                        ),
-                                        const SizedBox(height: 16),
-
-                                        // ✅ Price & Stock Row
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: _buildTextField(
-                                                controller: _priceController,
-                                                label: 'Base Price',
-                                                hint: '0.00',
-                                                icon: Iconsax.money_tick,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                validator: (value) {
-                                                  if (value == null ||
-                                                      value.isEmpty)
-                                                    return 'Price is required';
-                                                  if (double.tryParse(value) ==
-                                                      null)
-                                                    return 'Invalid price';
-                                                  return null;
-                                                },
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16),
-                                            Expanded(
-                                              child: _buildTextField(
-                                                controller: _stockController,
-                                                label: 'Base Stock',
-                                                hint: '0',
-                                                icon: Iconsax.box,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                validator: (value) {
-                                                  if (value == null ||
-                                                      value.isEmpty)
-                                                    return 'Stock is required';
-                                                  if (int.tryParse(value) ==
-                                                      null)
-                                                    return 'Invalid stock';
-                                                  return null;
-                                                },
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-
-                                        // ✅ NEW: Sync Price Toggle
-                                        const SizedBox(height: 16),
-                                        _buildSwitchTile(
-                                          label: 'Apply Single price to all',
-                                          value: _syncPriceToVariants,
-                                          onChanged: (value) => setState(
-                                            () => _syncPriceToVariants = value,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  _buildTextField(
+                                    controller: _nameController,
+                                    label: 'Product Name',
+                                    hint: 'Enter product name',
+                                    icon: Iconsax.box_1,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty)
+                                        return 'Product name is required';
+                                      return null;
+                                    },
                                   ),
                                   const SizedBox(height: 16),
                                   _buildTextField(
@@ -493,14 +395,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                           icon: Iconsax.money_tick,
                                           keyboardType: TextInputType.number,
                                           validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
+                                            if (value == null || value.isEmpty)
                                               return 'Price is required';
-                                            }
-                                            if (double.tryParse(value) ==
-                                                null) {
+                                            if (double.tryParse(value) == null)
                                               return 'Invalid price';
-                                            }
                                             return null;
                                           },
                                         ),
@@ -514,18 +412,23 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                           icon: Iconsax.box,
                                           keyboardType: TextInputType.number,
                                           validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
+                                            if (value == null || value.isEmpty)
                                               return 'Stock is required';
-                                            }
-                                            if (int.tryParse(value) == null) {
+                                            if (int.tryParse(value) == null)
                                               return 'Invalid stock';
-                                            }
                                             return null;
                                           },
                                         ),
                                       ),
                                     ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _buildSwitchTile(
+                                    label: 'Apply Single price to all variants',
+                                    value: _syncPriceToVariants,
+                                    onChanged: (value) => setState(
+                                      () => _syncPriceToVariants = value,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -581,6 +484,16 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                     value: _isActive,
                                     onChanged: (value) =>
                                         setState(() => _isActive = value),
+                                  ),
+                                  const SizedBox(
+                                    height: 12,
+                                  ), // ✅ ADD THIS SPACING
+                                  // ✅ ADD THIS NEW SWITCH
+                                  _buildSwitchTile(
+                                    label: 'Featured / Hot Product 🔥',
+                                    value: _isFeatured,
+                                    onChanged: (value) =>
+                                        setState(() => _isFeatured = value),
                                   ),
                                 ],
                               ),
@@ -1364,7 +1277,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
 }
 
 // ============================================
-// EDITABLE VARIANT CARD (with Edit & Delete)
+// EDITABLE VARIANT CARD
 // ============================================
 class _EditableVariantCard extends StatelessWidget {
   final Map<String, dynamic> variantData;
@@ -1416,7 +1329,6 @@ class _EditableVariantCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Top Row: Color, Name, Size, Edit, Delete
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1512,7 +1424,6 @@ class _EditableVariantCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Edit button
               GestureDetector(
                 onTap: onEdit,
                 child: Container(
@@ -1529,7 +1440,6 @@ class _EditableVariantCard extends StatelessWidget {
                   ),
                 ),
               ),
-              // Delete button
               GestureDetector(
                 onTap: onDelete,
                 child: Container(
@@ -1550,7 +1460,6 @@ class _EditableVariantCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1, color: Color(0xFFF3F4F6)),
           const SizedBox(height: 12),
-          // Bottom Row: Stock and Price
           Row(
             children: [
               Expanded(
@@ -1674,13 +1583,9 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
       code: widget.variant['colorCode'] ?? '#000000',
     );
 
-    // ✅ FIXED: Added required 'name' parameter
     _selectedSize = SizeEntity(
       id: widget.variant['sizeId'] ?? '',
-      name:
-          widget.variant['sizeName'] ??
-          widget.variant['sizeValue'] ??
-          '', // Use sizeName if available, otherwise use sizeValue
+      name: widget.variant['sizeName'] ?? widget.variant['sizeValue'] ?? '',
       value: widget.variant['sizeValue'] ?? '',
     );
 
@@ -1718,7 +1623,7 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
     updatedVariant['colorName'] = _selectedColor.name;
     updatedVariant['colorCode'] = _selectedColor.code;
     updatedVariant['sizeId'] = _selectedSize.id;
-    updatedVariant['sizeName'] = _selectedSize.name; // ✅ Added sizeName
+    updatedVariant['sizeName'] = _selectedSize.name;
     updatedVariant['sizeValue'] = _selectedSize.value;
     updatedVariant['sku'] = _skuController.text.isNotEmpty
         ? _skuController.text.trim()
@@ -1762,7 +1667,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header
                 Row(
                   children: [
                     Container(
@@ -1805,8 +1709,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Preview
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -1885,8 +1787,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Colors
                 _buildSectionLabel('Change Color', Iconsax.colorfilter),
                 const SizedBox(height: 12),
                 BlocBuilder<AdminProductBloc, AdminProductState>(
@@ -1910,8 +1810,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   },
                 ),
                 const SizedBox(height: 20),
-
-                // Sizes
                 _buildSectionLabel('Change Size', Iconsax.ruler),
                 const SizedBox(height: 12),
                 BlocBuilder<AdminProductBloc, AdminProductState>(
@@ -1935,8 +1833,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   },
                 ),
                 const SizedBox(height: 20),
-
-                // SKU
                 _buildSectionLabel('SKU', Iconsax.barcode),
                 const SizedBox(height: 8),
                 _buildDialogTextField(
@@ -1945,8 +1841,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   icon: Iconsax.barcode,
                 ),
                 const SizedBox(height: 16),
-
-                // Stock
                 _buildSectionLabel('Stock', Iconsax.box_1),
                 const SizedBox(height: 8),
                 _buildDialogTextField(
@@ -1956,8 +1850,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-
-                // Price
                 _buildSectionLabel('Price', Iconsax.money_tick),
                 const SizedBox(height: 8),
                 _buildDialogTextField(
@@ -1969,8 +1861,6 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                   ),
                 ),
                 const SizedBox(height: 24),
-
-                // Buttons
                 Row(
                   children: [
                     Expanded(
@@ -2296,7 +2186,7 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
           'colorName': color.name,
           'colorCode': color.code,
           'sizeId': size.id,
-          'sizeName': size.name, // ✅ Added sizeName
+          'sizeName': size.name,
           'sizeValue': size.value,
           'sku': null,
           'stock': stock,

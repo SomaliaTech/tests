@@ -13,6 +13,7 @@ class AdminProductEntity extends Equatable {
   final String? brand;
   final String? tags;
   final bool isActive;
+  final bool isFeatured;
   final List<AdminProductImageEntity> images;
   final List<AdminProductVariantEntity> variants;
   final DateTime createdAt;
@@ -28,6 +29,7 @@ class AdminProductEntity extends Equatable {
     required this.stock,
     this.categoryId,
     this.categoryName,
+    this.isFeatured = false,
     this.brand,
     this.tags,
     required this.isActive,

@@ -27,7 +27,6 @@ import {
   ApiParam,
   ApiBody,
   ApiConsumes,
-  ApiResponse,
 } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AdminService } from './admin.service';
@@ -36,8 +35,15 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { SuperAdminGuard } from '../auth/guards/super-admin.guard';
 import { PermissionGuard, Permissions } from '../auth/guards/permission.guard';
 import { Permission } from './enums/permissions.enum';
-import { CreateProductAdminDto } from './dto/create-proudct-admin-dto';
+import {
+  CreateProductAdminDto,
+  UpdateProductAdminDto,
+} from './dto/create-proudct-admin-dto';
 import { LogSanitizer } from '../common/utils/log-sanitizer.util';
+
+interface RequestWithUser {
+  user: { userId: string };
+}
 
 @ApiTags('admin')
 @Controller('admin')
@@ -51,19 +57,19 @@ export class AdminController {
     this.isProduction = process.env.NODE_ENV === 'production';
   }
 
-  private logInfo(message: string, data?: any) {
+  private logInfo(message: string, data?: unknown) {
     if (this.isProduction) return;
     const sanitizedData = data ? LogSanitizer.sanitize(data) : undefined;
     this.logger.log(message, sanitizedData);
   }
 
   // ==========================================
-  // ✅ MY PERMISSIONS
+  // MY PERMISSIONS
   // ==========================================
   @Get('me/permissions')
   @Permissions()
   @ApiOperation({ summary: 'Get my own permissions (any admin)' })
-  async getMyPermissions(@Request() req) {
+  async getMyPermissions(@Request() req: RequestWithUser) {
     const permissions = await this.adminService.getUserPermissions(
       req.user.userId,
     );
@@ -186,7 +192,7 @@ export class AdminController {
   @Get('dashboard/all')
   @ApiOperation({ summary: 'Get all dashboard data in one request' })
   async getAllDashboardData(
-    @Request() req,
+    @Request() req: RequestWithUser,
     @Query('period') period: string = 'week',
   ) {
     return this.adminService.getAllDashboardData(req.user.userId, period);
@@ -332,7 +338,7 @@ export class AdminController {
   @Permissions(Permission.USER_VIEW)
   @ApiOperation({ summary: 'Get all users with pagination' })
   async getAllUsers(
-    @Request() req,
+    @Request() req: RequestWithUser,
     @Query('search') search?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number = 20,
@@ -376,7 +382,6 @@ export class AdminController {
       marketId?: string;
     },
   ) {
-    // Safe logging
     this.logInfo('Creating user', {
       phoneNumber: LogSanitizer.maskPhoneNumber(userData.phoneNumber),
     });
@@ -633,7 +638,7 @@ export class AdminController {
         throw new BadRequestException('Invalid date format');
       }
       return this.adminService.getAnalyticsForCustomDates(dates);
-    } catch (error) {
+    } catch {
       throw new BadRequestException('Error parsing dates');
     }
   }
@@ -650,7 +655,7 @@ export class AdminController {
         throw new BadRequestException('Invalid date format');
       }
       return this.adminService.getRevenueForCustomDates(dates);
-    } catch (error) {
+    } catch {
       throw new BadRequestException('Error parsing dates');
     }
   }
@@ -689,6 +694,7 @@ export class AdminController {
   getProductById(@Param('productId', ParseUUIDPipe) productId: string) {
     return this.adminService.getProductById(productId);
   }
+
   @Post('products')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Permissions(Permission.PRODUCT_CREATE)
@@ -696,48 +702,49 @@ export class AdminController {
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(AnyFilesInterceptor())
   async createProduct(
-    @Body() body: any,
+    @Body() body: { data?: string | Record<string, unknown> },
     @UploadedFiles() files?: Array<Express.Multer.File>,
   ) {
-    let createProductDto: any = {};
+    let createProductDto: Partial<CreateProductAdminDto> = {};
     if (body?.data) {
       try {
-        createProductDto = JSON.parse(body.data);
+        createProductDto =
+          typeof body.data === 'string' ? JSON.parse(body.data) : body.data;
       } catch {
-        createProductDto = body.data;
+        createProductDto = body.data as Partial<CreateProductAdminDto>;
       }
     } else {
-      createProductDto = body;
+      createProductDto = body as Partial<CreateProductAdminDto>;
     }
 
+    const dtoName = createProductDto?.name as string | undefined;
+    const dtoCategoryId = createProductDto?.categoryId as string | undefined;
+
     this.logInfo('Creating product', {
-      productName: createProductDto?.name,
-      categoryId: createProductDto?.categoryId,
+      productName: dtoName,
+      categoryId: dtoCategoryId,
       fileCount: files?.length || 0,
     });
 
     let createdProductId: string | null = null;
-
     try {
-      // 1. Create the product in DB
-      const product = await this.adminService.createProduct(createProductDto);
+      const product = await this.adminService.createProduct(
+        createProductDto as CreateProductAdminDto,
+      );
       createdProductId = product.id;
 
-      // 2. Upload images (If this fails, it jumps to catch block)
       if (files && files.length > 0) {
         await this.adminService.uploadProductImages(product.id, files);
       }
-
       return this.adminService.getProductById(product.id);
-    } catch (error: any) {
-      // 🚨 ROLLBACK: If image upload failed, delete the orphaned product from DB
+    } catch (err: unknown) {
       if (createdProductId) {
         this.logger.warn(
           `⚠️ Rolling back product ${createdProductId} due to upload/creation failure`,
         );
         await this.adminService
           .deleteProduct(createdProductId)
-          .catch((e) =>
+          .catch((e: unknown) =>
             this.logger.error(
               `Failed to rollback product ${createdProductId}`,
               e,
@@ -745,7 +752,10 @@ export class AdminController {
           );
       }
 
-      // 🚨 Return a clean, user-friendly error instead of a raw 500
+      const error = err as {
+        message?: string;
+        response?: { message?: string | string[] };
+      };
       let message = 'Failed to create product. Please try again.';
       const errMsg = error?.message || '';
 
@@ -766,10 +776,10 @@ export class AdminController {
       } else if (errMsg) {
         message = errMsg;
       }
-
       throw new BadRequestException(message);
     }
   }
+
   @Put('products/:productId')
   @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Permissions(Permission.PRODUCT_UPDATE)
@@ -779,29 +789,32 @@ export class AdminController {
   @UseInterceptors(AnyFilesInterceptor())
   async updateProduct(
     @Param('productId', ParseUUIDPipe) productId: string,
-    @Body() body: any,
+    @Body() body: { data?: string | Record<string, unknown> },
     @UploadedFiles() files?: Array<Express.Multer.File>,
   ) {
-    let updateData: any = {};
-
+    let updateData: Record<string, unknown> = {};
     if (body?.data) {
       try {
-        updateData = JSON.parse(body.data);
+        updateData =
+          typeof body.data === 'string' ? JSON.parse(body.data) : body.data;
       } catch {
-        updateData = body.data;
+        updateData = body.data as Record<string, unknown>;
       }
     } else {
-      updateData = body;
+      updateData = body as Record<string, unknown>;
     }
 
-    // Safe logging
     this.logInfo('Updating product', {
       productId,
       keys: Object.keys(updateData),
       fileCount: files?.length || 0,
     });
 
-    return this.adminService.updateProduct(productId, updateData, files || []);
+    return this.adminService.updateProduct(
+      productId,
+      updateData as UpdateProductAdminDto,
+      files || [],
+    );
   }
 
   @Delete('products/:productId')

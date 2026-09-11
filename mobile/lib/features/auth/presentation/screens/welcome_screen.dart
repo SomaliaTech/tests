@@ -61,8 +61,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 '⚠️ Cached FB token has wrong audience ($aud), forcing fresh login...',
               );
               await FacebookAuth.instance.logOut();
-
-              // ✅ FIX: Give iOS keychain 500ms to clear before triggering fresh login
               await Future.delayed(const Duration(milliseconds: 500));
             } else {
               if (!mounted) return;
@@ -74,8 +72,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               '⚠️ Failed to decode cached FB token, forcing fresh login: $e',
             );
             await FacebookAuth.instance.logOut();
-
-            // ✅ FIX: Give iOS keychain 500ms to clear before triggering fresh login
             await Future.delayed(const Duration(milliseconds: 500));
           }
         } else {
@@ -95,9 +91,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         alignment: Alignment.topCenter,
       );
 
+      // ✅ FIX: nativeWithFallback tries the Native Facebook App first.
+      // If the app isn't installed, it gracefully falls back to the webview.
       final LoginResult result = await FacebookAuth.instance.login(
         permissions: ['email', 'public_profile'],
-        loginBehavior: LoginBehavior.webOnly,
+        loginBehavior: LoginBehavior.nativeWithFallback,
       );
 
       if (result.status == LoginStatus.success) {

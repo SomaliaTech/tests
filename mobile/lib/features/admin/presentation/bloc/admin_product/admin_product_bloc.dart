@@ -65,10 +65,8 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       await repository.createProduct(productData, images: event.images);
       emit(const AdminProductOperationSuccess('Product created successfully'));
 
-      // ❌ REMOVE THIS:
-      // Future.delayed(const Duration(milliseconds: 300), () {
-      //   add(FetchAllAdminProductsEvent());
-      // });
+      // ✅ FIX: Silently refresh the product list so the new product appears immediately
+      add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
       debugPrint('❌ [Bloc] Create product error: $e');
       emit(AdminProductsError(e.toString()));
@@ -80,7 +78,7 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     Emitter<AdminProductState> emit,
   ) async {
     try {
-      // ✅ NO loading state emitted — products stay visible
+      // ✅ NO loading state emitted — products stay visible, no annoying spinner
       final products = await repository.getAllProducts();
       emit(AdminProductsLoaded(products));
     } catch (e) {
@@ -98,10 +96,8 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       await repository.deleteProduct(event.productId);
       emit(const AdminProductOperationSuccess('Product deleted successfully'));
 
-      // ❌ REMOVE THIS:
-      // Future.delayed(const Duration(milliseconds: 300), () {
-      //   add(FetchAllAdminProductsEvent());
-      // });
+      // ✅ FIX: Silently refresh the list after deletion
+      add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
       debugPrint('❌ [AdminProductBloc] Error deleting product: $e');
       emit(AdminProductsError(e.toString()));
@@ -128,10 +124,8 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
 
       emit(const AdminProductOperationSuccess('Product updated successfully'));
 
-      // ❌ REMOVE THIS:
-      // Future.delayed(const Duration(milliseconds: 300), () {
-      //   add(FetchAllAdminProductsEvent());
-      // });
+      // ✅ FIX: Silently refresh the list after update
+      add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
       debugPrint('❌ [Bloc] Update product error: $e');
       emit(AdminProductsError(e.toString()));

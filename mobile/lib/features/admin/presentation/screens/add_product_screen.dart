@@ -15,7 +15,6 @@ import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_prod
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
-
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
 }
@@ -28,16 +27,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _stockController = TextEditingController();
   final _brandController = TextEditingController();
   final _tagsController = TextEditingController();
-
   final ImagePicker _imagePicker = ImagePicker();
   final List<File> _selectedImages = [];
 
   AdminCategoryEntity? _selectedCategory;
   AdminCategoryEntity? _selectedSubcategory;
   bool _isActive = true;
-
   final List<Map<String, dynamic>> _variants = [];
 
+  // ✅ CRITICAL FIX: Local lock to prevent double-clicks instantly
+  bool _isSubmitting = false;
+  bool _isFeatured = false; // ✅ ADD THIS
   @override
   void initState() {
     super.initState();
@@ -70,26 +70,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ToastHelper.showError(context, 'Failed to pick images: $e');
-      }
+      if (mounted) ToastHelper.showError(context, 'Failed to pick images: $e');
     }
   }
 
-  void _removeImage(int index) {
-    setState(() => _selectedImages.removeAt(index));
-  }
+  void _removeImage(int index) =>
+      setState(() => _selectedImages.removeAt(index));
 
   void _showAddVariantDialog() {
     showDialog(
       context: context,
       builder: (context) => _AddVariantDialog(
         existingVariants: _variants,
-        onAdd: (newVariants) {
-          setState(() {
-            _variants.addAll(newVariants);
-          });
-        },
+        onAdd: (newVariants) => setState(() => _variants.addAll(newVariants)),
       ),
     );
   }
@@ -99,47 +92,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _variants.removeAt(index));
   }
 
-  // Replace the existing _editVariant method with this:
-  // Update this method in _AddProductScreenState
   void _editVariant(int index) {
     showDialog(
       context: context,
       builder: (context) => _EditVariantDialog(
         variant: _variants[index],
         index: index,
-        existingVariants: _variants, // ✅ Pass the full list to check duplicates
-        onSave: (index, updatedVariant) {
-          setState(() {
-            _variants[index] = updatedVariant;
-          });
-          debugPrint('✅ Variant $index updated:');
-          debugPrint(
-            '   - Color: ${updatedVariant['colorName']} (${updatedVariant['colorId']})',
-          );
-          debugPrint(
-            '   - Size: ${updatedVariant['sizeValue']} (${updatedVariant['sizeId']})',
-          );
-          debugPrint('   - SKU: ${updatedVariant['sku']}');
-          debugPrint('   - Stock: ${updatedVariant['stock']}');
-          debugPrint('   - Price: ${updatedVariant['price']}');
-        },
+        existingVariants: _variants,
+        onSave: (i, updatedVariant) =>
+            setState(() => _variants[i] = updatedVariant),
       ),
     );
   }
 
   void _submitForm() {
+    // 🚨 PREVENT DOUBLE CLICKS
+    if (_isSubmitting) return;
+
     if (!_formKey.currentState!.validate()) {
       ToastHelper.showError(context, 'Please fill all required fields');
       return;
     }
-
     if (_selectedCategory == null) {
       ToastHelper.showWarning(context, 'Please select a category');
       return;
     }
 
-    final categoryId = _selectedSubcategory?.id ?? _selectedCategory!.id;
+    // 🚨 LOCK THE UI IMMEDIATELY
+    setState(() => _isSubmitting = true);
+    _showLoadingDialog();
 
+    final categoryId = _selectedSubcategory?.id ?? _selectedCategory!.id;
     final productData = {
       'name': _nameController.text.trim(),
       'description': _descriptionController.text.trim(),
@@ -149,34 +132,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
       'brand': _brandController.text.trim(),
       'tags': _tagsController.text.trim(),
       'isActive': _isActive,
+      'isFeatured': _isFeatured, // ✅ ADD THIS
     };
-
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('📤 [AddProduct] SUBMITTING PRODUCT');
-    debugPrint('═══════════════════════════════════════════════════');
-    debugPrint('📦 Product Data:');
-    debugPrint('   - Name: ${productData['name']}');
-    debugPrint('   - Description: ${productData['description']}');
-    debugPrint('   - Price: ${productData['price']}');
-    debugPrint('   - Stock: ${productData['stock']}');
-    debugPrint('   - Category ID: ${productData['categoryId']}');
-    debugPrint('   - Brand: ${productData['brand']}');
-    debugPrint('   - Tags: ${productData['tags']}');
-    debugPrint('   - Is Active: ${productData['isActive']}');
-    debugPrint('');
-    debugPrint('🖼️ Images: ${_selectedImages.length} selected');
-    debugPrint('');
-    debugPrint('🎨 Variants: ${_variants.length} total');
-    for (int i = 0; i < _variants.length; i++) {
-      final v = _variants[i];
-      debugPrint('   Variant $i:');
-      debugPrint('     - Color: ${v['colorName']} (${v['colorId']})');
-      debugPrint('     - Size: ${v['sizeValue']} (${v['sizeId']})');
-      debugPrint('     - SKU: ${v['sku']}');
-      debugPrint('     - Stock: ${v['stock']}');
-      debugPrint('     - Price: ${v['price']}');
-    }
-    debugPrint('═══════════════════════════════════════════════════');
 
     context.read<AdminProductBloc>().add(
       CreateAdminProductEvent(
@@ -187,6 +144,55 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              children: [
+                const CircularProgressIndicator(color: AppTheme.primaryColor),
+                const SizedBox(width: 24),
+                const Expanded(
+                  child: Text(
+                    'Creating product...\nPlease wait, uploading images.',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ✅ Translates scary backend errors into friendly messages
+  String _getFriendlyErrorMessage(String errorMsg) {
+    final lower = errorMsg.toLowerCase();
+    if (lower.contains("500") ||
+        lower.contains("fetch failed") ||
+        lower.contains("supabase") ||
+        lower.contains("network")) {
+      return "Image upload failed. Please check your internet connection and try again.";
+    } else if (lower.contains("slug") || lower.contains("already exists")) {
+      return "A product with a similar name already exists. Please change the name slightly.";
+    } else if (lower.contains("category")) {
+      return "Please select a valid category.";
+    } else if (lower.contains("timeout")) {
+      return "The request took too long. Please check your internet and try again.";
+    }
+    return "Something went wrong. Please try again.";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -194,17 +200,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
           if (state is AdminProductOperationSuccess) {
-            debugPrint('✅ [AddProduct] Product created successfully!');
+            if (Navigator.canPop(context))
+              Navigator.pop(context); // Close loading dialog
+            setState(() => _isSubmitting = false);
             ToastHelper.showSuccess(context, state.message);
-            Navigator.pop(context);
+            Navigator.pop(context); // Close AddProductScreen
           } else if (state is AdminProductsError) {
-            debugPrint('❌ [AddProduct] Error: ${state.message}');
-            ToastHelper.showError(context, state.message);
+            if (Navigator.canPop(context))
+              Navigator.pop(context); // Close loading dialog
+            setState(() => _isSubmitting = false);
+            ToastHelper.showError(
+              context,
+              _getFriendlyErrorMessage(state.message),
+            );
           }
         },
         builder: (context, state) {
-          final isCreating = state is AdminProductCreating;
-
           return Stack(
             children: [
               CustomScrollView(
@@ -218,15 +229,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Images
                             _buildSectionCard(
                               title: 'Product Images',
                               icon: Iconsax.image,
                               child: _buildImageUploadSection(),
                             ),
-                            const SizedBox(height: 16),
 
-                            // Basic Info
+                            const SizedBox(height: 16),
                             _buildSectionCard(
                               title: 'Basic Information',
                               icon: Iconsax.info_circle,
@@ -237,12 +246,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                     label: 'Product Name',
                                     hint: 'Enter product name',
                                     icon: Iconsax.box_1,
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Product name is required';
-                                      }
-                                      return null;
-                                    },
+                                    validator: (v) => v == null || v.isEmpty
+                                        ? 'Required'
+                                        : null,
                                   ),
                                   const SizedBox(height: 16),
                                   _buildTextField(
@@ -262,17 +268,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                           hint: '0.00',
                                           icon: Iconsax.money_tick,
                                           keyboardType: TextInputType.number,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Price is required';
-                                            }
-                                            if (double.tryParse(value) ==
-                                                null) {
-                                              return 'Invalid price';
-                                            }
-                                            return null;
-                                          },
+                                          validator: (v) =>
+                                              v == null ||
+                                                  v.isEmpty ||
+                                                  double.tryParse(v) == null
+                                              ? 'Invalid price'
+                                              : null,
                                         ),
                                       ),
                                       const SizedBox(width: 16),
@@ -283,16 +284,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                           hint: '0',
                                           icon: Iconsax.box,
                                           keyboardType: TextInputType.number,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Stock is required';
-                                            }
-                                            if (int.tryParse(value) == null) {
-                                              return 'Invalid stock';
-                                            }
-                                            return null;
-                                          },
+                                          validator: (v) =>
+                                              v == null ||
+                                                  v.isEmpty ||
+                                                  int.tryParse(v) == null
+                                              ? 'Invalid stock'
+                                              : null,
                                         ),
                                       ),
                                     ],
@@ -301,8 +298,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
-                            // Category
                             _buildSectionCard(
                               title: 'Category',
                               icon: Iconsax.category,
@@ -315,7 +310,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                         current is AdminCategoriesLoading ||
                                         current is AdminCategoriesLoaded,
                                     builder: (context, state) {
-                                      if (state is AdminCategoriesLoading) {
+                                      if (state is AdminCategoriesLoading)
                                         return const Center(
                                           child: Padding(
                                             padding: EdgeInsets.all(20),
@@ -324,13 +319,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             ),
                                           ),
                                         );
-                                      }
                                       if (state is AdminCategoriesLoaded) {
-                                        if (state.categories.isEmpty) {
+                                        if (state.categories.isEmpty)
                                           return _buildWarningBox(
                                             'No categories available. Please add categories first.',
                                           );
-                                        }
                                         return Column(
                                           children: [
                                             _buildCategoryDropdown(
@@ -338,12 +331,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                               categories: state.categories,
                                               selectedCategory:
                                                   _selectedCategory,
-                                              onChanged: (category) {
-                                                setState(() {
-                                                  _selectedCategory = category;
-                                                  _selectedSubcategory = null;
-                                                });
-                                              },
+                                              onChanged: (c) => setState(() {
+                                                _selectedCategory = c;
+                                                _selectedSubcategory = null;
+                                              }),
                                             ),
                                             if (_selectedCategory != null &&
                                                 _selectedCategory!
@@ -356,12 +347,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                                     _selectedCategory!.children,
                                                 selectedCategory:
                                                     _selectedSubcategory,
-                                                onChanged: (category) {
-                                                  setState(() {
-                                                    _selectedSubcategory =
-                                                        category;
-                                                  });
-                                                },
+                                                onChanged: (c) => setState(
+                                                  () =>
+                                                      _selectedSubcategory = c,
+                                                ),
                                               ),
                                             ],
                                           ],
@@ -372,8 +361,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   ),
                             ),
                             const SizedBox(height: 16),
-
-                            // Variants Section
                             _buildSectionCard(
                               title: 'Variants',
                               subtitle:
@@ -382,8 +369,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                               child: _buildVariantsSection(),
                             ),
                             const SizedBox(height: 16),
-
-                            // Additional Info
                             _buildSectionCard(
                               title: 'Additional Information',
                               icon: Iconsax.setting_2,
@@ -406,15 +391,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                   _buildSwitchTile(
                                     label: 'Active',
                                     value: _isActive,
-                                    onChanged: (value) =>
-                                        setState(() => _isActive = value),
+                                    onChanged: (v) =>
+                                        setState(() => _isActive = v),
+                                  ),
+                                  const SizedBox(height: 12), // ✅ ADD THIS
+                                  // ✅ ADD THIS NEW SWITCH
+                                  _buildSwitchTile(
+                                    label: 'Featured / Hot Product 🔥',
+                                    value: _isFeatured,
+                                    onChanged: (v) =>
+                                        setState(() => _isFeatured = v),
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 24),
 
-                            _buildSubmitButton(isCreating: isCreating),
+                            const SizedBox(height: 24),
+                            _buildSubmitButton(),
                             const SizedBox(height: 32),
                           ],
                         ),
@@ -423,56 +416,64 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                 ],
               ),
-
-              // Loading overlay
-              if (isCreating)
-                Container(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(
-                            color: AppTheme.primaryColor,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Creating Product...',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1F2937),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Uploading images and variants',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        // ✅ Uses local lock AND bloc state
+        onPressed: (_isSubmitting) ? null : _submitForm,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 8,
+          shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+        ),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: _isSubmitting
+                ? const SizedBox(
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Iconsax.box_add, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Create Product',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -826,60 +827,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
             },
           ),
       ],
-    );
-  }
-
-  Widget _buildSubmitButton({required bool isCreating}) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: isCreating ? null : _submitForm,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 8,
-          shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
-        ),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF2ED573), Color(0xFF1ABC9C)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Center(
-            child: isCreating
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Iconsax.box_add, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Create Product',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ),
-      ),
     );
   }
 
