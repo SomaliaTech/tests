@@ -13,6 +13,7 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   BadRequestException,
+  Delete,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -141,7 +142,15 @@ export class AuthController {
   async getMe(@Request() req) {
     return this.authService.getMe(req.user.userId);
   }
-
+  @Delete('account')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Soft-delete account (60-day recovery window)',
+  })
+  async deleteAccount(@Request() req) {
+    return this.authService.deleteAccount(req.user.userId);
+  }
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')

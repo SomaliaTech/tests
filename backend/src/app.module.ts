@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler'; // Keep module for specific guards
 // ❌ REMOVED: ThrottlerGuard from imports (no longer global)
-
+import { ScheduleModule } from '@nestjs/schedule';
 import { ProductsModule } from './products/products.module';
 import { CategoriesModule } from './categories/categories.module';
 import { AuthModule } from './auth/auth.module';
@@ -22,7 +22,7 @@ import { PermissionGuard } from './auth/guards/permission.guard';
 import { PaymentModule } from './payment/payment.module';
 import { BannersModule } from './banners/banners.module';
 import { RedisModule } from './redis/redis.module';
-
+import { AccountCleanupService } from './auth/account-cleanup.service';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -38,7 +38,7 @@ import { RedisModule } from './redis/redis.module';
         { name: 'payment', ttl: 60000, limit: 10 },
       ],
     }),
-
+    ScheduleModule.forRoot(),
     RedisModule,
     DrizzleModule,
     SupabaseModule,
@@ -56,11 +56,6 @@ import { RedisModule } from './redis/redis.module';
     BannersModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    PermissionGuard,
-    // ❌ CRITICAL FIX: REMOVED ThrottlerGuard from APP_GUARD
-    // This ensures logged-in users are NEVER rate limited globally.
-  ],
+  providers: [AppService, PermissionGuard, AccountCleanupService],
 })
 export class AppModule {}

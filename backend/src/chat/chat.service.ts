@@ -284,6 +284,17 @@ export class ChatService {
     return admins.filter((admin) => admin.id !== userId);
   }
 
+  async ensureUserOffline(userId: string): Promise<void> {
+    try {
+      const user = await this.getUserById(userId, { forceRefresh: true });
+      if (user && user.isOnline) {
+        await this.updateUserStatus(userId, false);
+      }
+    } catch (error) {
+      // Silent fail
+    }
+  }
+
   // ==========================================
   // CONVERSATION MANAGEMENT
   // ==========================================

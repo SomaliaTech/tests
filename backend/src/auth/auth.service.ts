@@ -25,48 +25,19 @@ import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 import axios from 'axios';
 import * as crypto from 'crypto';
 
-interface User {
-  id: string;
-  phoneNumber: string;
-  email: string | null;
-  name: string | null;
-  profileImage: string | null;
-  marketId: string | null;
-  isVerified: boolean | null;
-  isAdmin: boolean | null;
-  isSuperAdmin: boolean | null;
-  otpCode: string | null;
-  otpExpiresAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  isActive: boolean;
-  isOnline: boolean;
-  lastSeen: Date | null;
-}
-
 interface UpdateUserData {
   name?: string;
   marketId?: string;
   phoneNumber?: string;
   profileImage?: string;
-  isVerified?: boolean;
-  isActive?: boolean;
-  updatedAt: Date;
-}
-
-interface UpdateUserData {
-  name?: string;
-  marketId?: string;
-  phoneNumber?: string;
-  profileImage?: string;
-  email?: string; // ✅ ADD THIS
+  email?: string;
   isVerified?: boolean;
   isActive?: boolean;
   updatedAt: Date;
 }
 
 interface OtpCacheData {
-  otpHash: string; // ✅ Store hash instead of plain OTP
+  otpHash: string;
   phoneNumber: string;
   attempts: number;
 }
@@ -82,6 +53,7 @@ export class AuthService {
   ];
   private readonly MAX_OTP_ATTEMPTS = 5;
   private readonly OTP_TTL_SECONDS = 600; // 10 minutes
+  private readonly DELETION_GRACE_DAYS = 15;
 
   constructor(
     private jwtService: JwtService,
@@ -102,7 +74,6 @@ export class AuthService {
   // ==========================================
   // PHONE NUMBER VALIDATION
   // ==========================================
-
   private normalizePhoneNumber(phoneNumber: string): string {
     const cleanedPhone = phoneNumber.trim().replace(/\s+/g, '');
     let digitsOnly = cleanedPhone.replace(/\D/g, '');
@@ -138,7 +109,6 @@ export class AuthService {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // ✅ Hash OTP with phone number as salt
     const hashedOtp = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)
@@ -151,8 +121,6 @@ export class AuthService {
       attempts: 0,
     };
 
-    console.log('otp', otpCode);
-
     try {
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
@@ -162,7 +130,6 @@ export class AuthService {
         `OTP stored for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
 
-      // ✅ Safe dev-only debug (never in prod, never raw)
       if (
         !this.isProduction &&
         this.configService.get('ALLOW_DEBUG_OTP') === 'true'
@@ -207,7 +174,7 @@ export class AuthService {
   }
 
   // ==========================================
-  // OTP VERIFY - WITH HASH CHECK
+  // OTP VERIFY - WITH HASH CHECK + AUTO RESTORE
   // ==========================================
   async verifyOtp(phoneNumber: string, otpCode: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
@@ -240,7 +207,6 @@ export class AuthService {
       );
     }
 
-    // ✅ Hash the input OTP and compare
     const hashedInput = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)
@@ -252,7 +218,6 @@ export class AuthService {
         ex: this.OTP_TTL_SECONDS,
       });
 
-      // ✅ Safe logging
       this.logger.warn(
         `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS} for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
@@ -260,7 +225,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid OTP code');
     }
 
-    // ✅ OTP is valid - delete it and proceed
     await this.redis.del(redisKey);
 
     const userResult = await this.drizzle.db
@@ -272,6 +236,12 @@ export class AuthService {
     let currentUser: typeof users.$inferSelect;
 
     if (userResult.length > 0) {
+      // ✅ Guard: block if permanently past deletion date
+      this.assertNotPermanentlyDeleted(userResult[0]);
+
+      // ✅ Auto-restore if scheduled for deletion
+      await this.restoreAccountIfDeleted(userResult[0].id);
+
       const updatedResult = await this.drizzle.db
         .update(users)
         .set({
@@ -300,6 +270,7 @@ export class AuthService {
         otpCode: null,
         otpExpiresAt: null,
         lastSeen: null,
+        deletedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -342,9 +313,8 @@ export class AuthService {
   }
 
   // ==========================================
-  // GOOGLE SIGN-IN WITH FULL TOKEN VERIFICATION
+  // GOOGLE SIGN-IN + AUTO RESTORE
   // ==========================================
-
   async googleSignIn(dto: GoogleAuthDto) {
     try {
       const payload = await this.verifyGoogleToken(dto.idToken);
@@ -360,10 +330,9 @@ export class AuthService {
         .limit(1);
 
       if (userResult.length === 0) {
-        // New Google user
         const newUser = {
           id: uuidv4(),
-          phoneNumber: '', // Empty for Google users
+          phoneNumber: null,
           email: verifiedEmail,
           name: verifiedName,
           profileImage: verifiedPicture,
@@ -372,16 +341,29 @@ export class AuthService {
           isSuperAdmin: false,
           isActive: true,
           isOnline: false,
-          marketId: null, // No market yet
+          marketId: null,
           otpCode: null,
           otpExpiresAt: null,
           lastSeen: null,
+          deletedAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
 
         await this.drizzle.db.insert(users).values(newUser);
         userResult = [newUser as typeof users.$inferSelect];
+      } else {
+        // ✅ Guard + restore
+        this.assertNotPermanentlyDeleted(userResult[0]);
+        await this.restoreAccountIfDeleted(userResult[0].id);
+
+        // Refetch
+        const fresh = await this.drizzle.db
+          .select()
+          .from(users)
+          .where(eq(users.id, userResult[0].id))
+          .limit(1);
+        userResult = fresh;
       }
 
       const currentUser = userResult[0];
@@ -399,7 +381,6 @@ export class AuthService {
         currentUser.isSuperAdmin ?? false,
       );
 
-      // ✅ Safe logging
       this.logger.log(
         `Google sign-in successful for ${LogSanitizer.maskEmail(verifiedEmail)}`,
       );
@@ -428,18 +409,13 @@ export class AuthService {
     }
   }
 
-  // src/auth/auth.service.ts
-
   // ==========================================
-  // FACEBOOK SIGN-IN (supports Classic + iOS Limited Login JWT)
+  // FACEBOOK SIGN-IN + AUTO RESTORE
   // ==========================================
-
   async facebookSignIn(dto: FacebookAuthDto) {
     this.logger.log('Facebook sign in called');
 
     try {
-      // ✅ iOS SDK now returns a JWT (Limited Login): "eyJhbGciOiJSUzI1NiIs..."
-      // ✅ Android SDK returns classic token: "EAAB..."
       const isLimitedLoginJwt =
         dto.accessToken.startsWith('eyJ') &&
         dto.accessToken.split('.').length === 3;
@@ -453,7 +429,6 @@ export class AuthService {
       const email = fbUser.email || null;
       const profileImage = fbUser.picture?.data?.url || null;
 
-      // Check if user exists
       let userResult = await this.drizzle.db
         .select()
         .from(users)
@@ -485,6 +460,7 @@ export class AuthService {
           otpCode: null,
           otpExpiresAt: null,
           lastSeen: null,
+          deletedAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -492,6 +468,10 @@ export class AuthService {
         await this.drizzle.db.insert(users).values(newUser);
         userResult = [newUser as typeof users.$inferSelect];
       } else {
+        // ✅ Guard + restore
+        this.assertNotPermanentlyDeleted(userResult[0]);
+        await this.restoreAccountIfDeleted(userResult[0].id);
+
         await this.drizzle.db
           .update(users)
           .set({
@@ -502,7 +482,6 @@ export class AuthService {
           })
           .where(eq(users.id, userResult[0].id));
 
-        // ✅ Re-fetch so we use the updated values below
         userResult = await this.drizzle.db
           .select()
           .from(users)
@@ -571,11 +550,7 @@ export class AuthService {
   }
 
   // ==========================================
-  // ✅ NEW: iOS "Limited Login" JWT verification
-  // ==========================================
-
-  // ==========================================
-  // CLASSIC FACEBOOK GRAPH API VERIFICATION (Android/Web)
+  // FACEBOOK VERIFICATION HELPERS
   // ==========================================
   private async verifyFacebookToken(
     accessToken: string,
@@ -593,18 +568,18 @@ export class AuthService {
         return response.data;
       } catch (error) {
         if (attempt === maxRetries) throw error;
-        // Wait before retry
         await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
       }
     }
   }
+
   private facebookJwksCache: { keys: any[]; fetchedAt: number } | null = null;
 
   private async getFacebookJwks(): Promise<any[]> {
     const now = Date.now();
     if (
       this.facebookJwksCache &&
-      now - this.facebookJwksCache.fetchedAt < 60 * 60 * 1000 // cache 1h
+      now - this.facebookJwksCache.fetchedAt < 60 * 60 * 1000
     ) {
       return this.facebookJwksCache.keys;
     }
@@ -621,6 +596,7 @@ export class AuthService {
     const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
     return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
   }
+
   private async verifyFacebookLimitedLoginToken(idToken: string): Promise<{
     id: string;
     name: string | null;
@@ -635,17 +611,15 @@ export class AuthService {
     const header = this.decodeJwtPart(parts[0]);
     const payload = this.decodeJwtPart(parts[1]);
 
-    // 1️⃣ Claim checks
     if (payload.iss && !String(payload.iss).includes('facebook.com')) {
       throw new UnauthorizedException('Invalid Facebook token issuer');
     }
 
-    // ✅ FIX: Accept BOTH App IDs (iOS and Android might be using different ones)
     const validAppIds = [
-      '869167092793903', // Your main Android/Backend ID
-      '476493349999779', // The ID iOS is currently using
+      '869167092793903',
+      '476493349999779',
       this.configService.get<string>('FACEBOOK_APP_ID'),
-    ].filter((id): id is string => !!id); // Remove undefined/null
+    ].filter((id): id is string => !!id);
 
     if (payload.aud && !validAppIds.includes(payload.aud)) {
       this.logger.warn(
@@ -662,7 +636,6 @@ export class AuthService {
       throw new UnauthorizedException('Facebook token missing user id');
     }
 
-    // 2️⃣ Verify RS256 signature with Facebook's public keys
     try {
       const keys = await this.getFacebookJwks();
       const jwk = keys.find((k) => k.kid === header.kid);
@@ -691,7 +664,6 @@ export class AuthService {
       throw new UnauthorizedException('Failed to verify Facebook token');
     }
 
-    // 3️⃣ Extract claims (Limited Login puts user data INSIDE the JWT)
     const pictureUrl =
       typeof payload.picture === 'string'
         ? payload.picture
@@ -704,9 +676,10 @@ export class AuthService {
       picture: pictureUrl ? { data: { url: pictureUrl } } : null,
     };
   }
-  /**
-   * ✅ Verify Google ID Token and return TokenPayload
-   */
+
+  // ==========================================
+  // GOOGLE TOKEN VERIFICATION
+  // ==========================================
   private async verifyGoogleToken(idToken: string): Promise<TokenPayload> {
     try {
       if (!idToken || idToken.length < 20) {
@@ -830,7 +803,6 @@ export class AuthService {
           ? cleanedPhone
           : `+${internationalPhone}`;
 
-        // ✅ Check if phone already exists
         const existingPhone = await this.drizzle.db
           .select()
           .from(users)
@@ -935,7 +907,6 @@ export class AuthService {
   // ==========================================
   // GET CURRENT USER
   // ==========================================
-
   async getMe(userId: string) {
     const result = await this.drizzle.db
       .select()
@@ -948,6 +919,8 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    this.assertNotPermanentlyDeleted(user);
 
     const hasProfile = !!(
       user.phoneNumber &&
@@ -979,7 +952,6 @@ export class AuthService {
     marketId?: string,
     email?: string,
   ) {
-    // ✅ Add email parameter
     const oldUserResult = await this.drizzle.db
       .select()
       .from(users)
@@ -987,6 +959,12 @@ export class AuthService {
       .limit(1);
 
     const oldUser = oldUserResult[0];
+
+    if (!oldUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.assertNotPermanentlyDeleted(oldUser);
 
     const updateData: UpdateUserData = { updatedAt: new Date() };
     const changes: string[] = [];
@@ -999,14 +977,11 @@ export class AuthService {
       updateData.marketId = marketId;
       changes.push('market');
     }
-
-    // ✅ ADD THIS: Handle email updates
     if (email && email !== oldUser.email) {
       updateData.email = email;
       changes.push('email');
     }
 
-    // If only 'updatedAt' is in the object, it means nothing actually changed
     if (Object.keys(updateData).length === 1) {
       return {
         message: 'No changes made',
@@ -1057,7 +1032,6 @@ export class AuthService {
   // ==========================================
   // UPLOAD PROFILE IMAGE
   // ==========================================
-
   async uploadProfileImage(userId: string, base64Image: string) {
     try {
       const result = await this.supabaseService.uploadBase64(
@@ -1104,19 +1078,126 @@ export class AuthService {
   }
 
   // ==========================================
-  // TOKEN GENERATION - REMOVE PII
+  // ✅ SOFT DELETE ACCOUNT (60-day recovery)
+  // ==========================================
+  async deleteAccount(userId: string) {
+    const result = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = result[0];
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.deletedAt) {
+      return {
+        message: 'Account is already scheduled for deletion',
+        scheduledDeletionDate: user.deletedAt.toISOString(),
+      };
+    }
+
+    const now = new Date();
+    const deletionDate = new Date(
+      now.getTime() + this.DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    await this.drizzle.db
+      .update(users)
+      .set({
+        deletedAt: deletionDate,
+        isOnline: false,
+        updatedAt: now,
+      })
+      .where(eq(users.id, userId));
+
+    this.logger.log(
+      `Account scheduled for deletion: userId=${LogSanitizer.maskValue(userId)}, deleteAt=${deletionDate.toISOString()}`,
+    );
+
+    try {
+      await this.notificationsService.createSystemNotification(
+        userId,
+        'Account Deletion Scheduled',
+        `Your account will be permanently deleted on ${deletionDate.toDateString()}. Log back in before then to cancel.`,
+      );
+    } catch (e) {
+      this.logger.warn('Failed to create deletion notification');
+    }
+
+    return {
+      message: `Account scheduled for deletion on ${deletionDate.toDateString()}. You have ${this.DELETION_GRACE_DAYS} days to log back in and restore it.`,
+      scheduledDeletionDate: deletionDate.toISOString(),
+    };
+  }
+
+  // ==========================================
+  // ✅ AUTO-RESTORE HELPER
+  // ==========================================
+  private async restoreAccountIfDeleted(userId: string): Promise<boolean> {
+    const result = await this.drizzle.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = result[0];
+    if (!user || !user.deletedAt) return false;
+
+    if (user.deletedAt.getTime() <= Date.now()) {
+      this.logger.warn(
+        `User ${LogSanitizer.maskValue(userId)} attempted to log in after deletion date — refusing restore`,
+      );
+      throw new UnauthorizedException(
+        'Your account has been permanently deleted and cannot be restored.',
+      );
+    }
+
+    await this.drizzle.db
+      .update(users)
+      .set({
+        deletedAt: null,
+        isActive: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    this.logger.log(
+      `Account restored for userId=${LogSanitizer.maskValue(userId)}`,
+    );
+
+    return true;
+  }
+
+  // ==========================================
+  // ✅ GUARD: refuse if deletion date has passed
+  // ==========================================
+  private assertNotPermanentlyDeleted(user: {
+    deletedAt?: Date | null;
+    id: string;
+  }) {
+    if (user.deletedAt && user.deletedAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException(
+        'Your account has been permanently deleted.',
+      );
+    }
+  }
+
+  // ==========================================
+  // TOKEN GENERATION
   // ==========================================
   private generateToken(
     userId: string,
     isAdmin?: boolean,
     isSuperAdmin?: boolean,
   ): string {
-    const expiresIn = 90 * 24 * 60 * 60; // 90 days (3 months)
+    const expiresIn = 90 * 24 * 60 * 60; // 90 days
 
     return this.jwtService.sign(
       {
         sub: userId,
-        // ❌ REMOVE: phoneNumber - don't put PII in JWT
         isAdmin: isAdmin ?? false,
         isSuperAdmin: isSuperAdmin ?? false,
       },

@@ -1,7 +1,6 @@
+// lib/features/profile/presentation/bloc/profile_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/core/services/storage/storage_service.dart'; // ✅ Add this
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
-import 'package:mobile/features/profile/domain/entities/profile.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/profile/domain/usecases/delete_account.dart';
 import 'package:mobile/features/profile/domain/usecases/get_profile.dart';
 import 'package:mobile/features/profile/domain/usecases/update_profile.dart';
@@ -14,14 +13,14 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
   final UpdateProfile updateProfile;
   final UploadProfileImage uploadProfileImage;
   final DeleteAccount deleteAccount;
-  final StorageService storageService; // ✅ Add this field
+  final StorageService storageService;
 
   ProfileBloc({
     required this.getProfile,
     required this.updateProfile,
     required this.uploadProfileImage,
     required this.deleteAccount,
-    required this.storageService, // ✅ Add this parameter
+    required this.storageService,
   }) : super(ProfileInitial()) {
     on<LoadProfileEvent>(_onLoadProfile);
     on<UpdateProfileEvent>(_onUpdateProfile);
@@ -29,7 +28,6 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     on<DeleteAccountEvent>(_onDeleteAccount);
   }
 
-  // In profile_bloc.dart - _onLoadProfile
   Future<void> _onLoadProfile(
     LoadProfileEvent event,
     Emitter<ProfileState> emit,
@@ -37,14 +35,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     emit(ProfileLoading());
     final result = await getProfile();
 
-    // ✅ Use fold synchronously, not with async callback
-    result.fold((failure) => emit(ProfileError(failure.message)), (profile) {
-      // ✅ Save admin status synchronously (fire and forget)
-      storageService.saveIsAdmin(profile.isAdmin);
-      storageService.saveIsSuperAdmin(profile.isSuperAdmin);
-
-      emit(ProfileLoaded(profile));
-    });
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(ProfileError(failure.message));
+      },
+      (profile) async {
+        await storageService.saveIsAdmin(profile.isAdmin);
+        await storageService.saveIsSuperAdmin(profile.isSuperAdmin);
+        if (!emit.isDone) emit(ProfileLoaded(profile));
+      },
+    );
   }
 
   Future<void> _onUpdateProfile(
@@ -59,14 +59,16 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       marketId: event.marketId,
     );
 
-    result.fold((failure) => emit(ProfileError(failure.message)), (
-      updatedProfile,
-    ) {
-      // ✅ Save admin status when profile is updated
-      storageService.saveIsAdmin(updatedProfile.isAdmin);
-      storageService.saveIsSuperAdmin(updatedProfile.isSuperAdmin);
-      emit(ProfileUpdated(updatedProfile));
-    });
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(ProfileError(failure.message));
+      },
+      (updatedProfile) async {
+        await storageService.saveIsAdmin(updatedProfile.isAdmin);
+        await storageService.saveIsSuperAdmin(updatedProfile.isSuperAdmin);
+        if (!emit.isDone) emit(ProfileUpdated(updatedProfile));
+      },
+    );
   }
 
   Future<void> _onUploadProfileImage(
@@ -74,21 +76,35 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
     Emitter<ProfileState> emit,
   ) async {
     final result = await uploadProfileImage(event.base64Image);
-    result.fold((failure) => emit(ProfileError(failure.message)), (imageUrl) {
-      emit(ProfileImageUploaded(imageUrl));
-      add(LoadProfileEvent());
-    });
+
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(ProfileError(failure.message));
+      },
+      (imageUrl) async {
+        if (!emit.isDone) emit(ProfileImageUploaded(imageUrl));
+        add(LoadProfileEvent());
+      },
+    );
   }
 
+  // ✅ FIXED: await the fold, guard emits, no async-inside-sync-fold
   Future<void> _onDeleteAccount(
     DeleteAccountEvent event,
     Emitter<ProfileState> emit,
   ) async {
     emit(ProfileLoading());
+
     final result = await deleteAccount();
-    result.fold(
-      (failure) => emit(ProfileError(failure.message)),
-      (_) => emit(AccountDeleted()),
+
+    await result.fold(
+      (failure) async {
+        if (!emit.isDone) emit(ProfileError(failure.message));
+      },
+      (_) async {
+        await storageService.clearAuthData();
+        if (!emit.isDone) emit(AccountDeleted());
+      },
     );
   }
 }

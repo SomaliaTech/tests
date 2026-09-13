@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/error/error_handler.dart';
+import 'package:mobile/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:mobile/features/profile/domain/entities/market.dart';
 import 'package:mobile/features/profile/domain/entities/profile.dart';
 import 'package:mobile/features/profile/domain/usecases/get_markets.dart';
@@ -180,7 +181,7 @@ class _ProfileViewState extends State<ProfileView> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text(
-              'Cancel',
+              'Jooji',
               style: TextStyle(color: Color(0xFF6B7280)),
             ),
           ),
@@ -198,7 +199,7 @@ class _ProfileViewState extends State<ProfileView> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
             child: const Text(
-              'Delete',
+              'Tirtir',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -246,6 +247,14 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 
+  // ✅ FIXED: same navigation pattern as logout in settings_screen.dart
+  void _navigateToWelcomeAfterDelete() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -261,19 +270,38 @@ class _ProfileViewState extends State<ProfileView> {
 
             toastification.show(
               context: context,
-              title: const Text('Success'),
-              description: const Text('Profile updated successfully!'),
+              title: const Text('Guul'),
+              description: const Text(
+                'Profile-kaaga si guul leh ayaa loo cusbooneysiiyay!',
+              ),
               type: ToastificationType.success,
               style: ToastificationStyle.fillColored,
               autoCloseDuration: const Duration(seconds: 3),
             );
           } else if (state is AccountDeleted) {
-            Navigator.pushReplacementNamed(context, '/');
+            toastification.show(
+              context: context,
+              title: const Text('Akoonka waa la tirtiray'),
+              description: const Text(
+                'Dib u soo gal 15 maalmood gudahood si aad u soo celiso akoonkaaga.',
+              ),
+              type: ToastificationType.info,
+              style: ToastificationStyle.fillColored,
+              autoCloseDuration: const Duration(seconds: 5),
+              alignment: Alignment.topCenter,
+            );
+
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+              (route) => false,
+            );
           } else if (state is ProfileImageUploaded) {
             toastification.show(
               context: context,
-              title: const Text('Success'),
-              description: const Text('Profile image updated!'),
+              title: const Text('Guul'),
+              description: const Text(
+                'Sawirka profile-ka waa la cusbooneysiiyay!',
+              ),
               type: ToastificationType.success,
               style: ToastificationStyle.fillColored,
               autoCloseDuration: const Duration(seconds: 2),
@@ -285,7 +313,6 @@ class _ProfileViewState extends State<ProfileView> {
             _currentMarketId = state.profile.marketId;
             _profileLoaded = true;
 
-            // ✅ Debug: Check if Google user
             debugPrint(
               '📱 Profile loaded - Phone: "${state.profile.phoneNumber}"',
             );
@@ -345,8 +372,12 @@ class _ProfileViewState extends State<ProfileView> {
                               onWhatsAppPressed: _openWhatsApp,
                               onDeletePressed: () {
                                 _showConfirmationDialog(
-                                  'Delete Account',
-                                  'Are you sure? This action cannot be undone and all your data will be permanently lost.',
+                                  'Tirtir Akoonka',
+                                  'Ma hubtaa? Akoonkaaga waa la tirtiri doonaa. '
+                                      'Waxaad haysataa 15 maalmood in aad dib u '
+                                      'soo galiso akoonkaaga. Kadib 15 maalmood, '
+                                      'xogtaada si joogto ah ayaa loo tirtiri doonaa '
+                                      'lamana soo celin karo.',
                                   () {
                                     context.read<ProfileBloc>().add(
                                       DeleteAccountEvent(),
@@ -427,7 +458,7 @@ class _ProfileViewState extends State<ProfileView> {
                 context.read<ProfileBloc>().add(LoadProfileEvent());
               },
               icon: const Icon(Iconsax.refresh, size: 18),
-              label: const Text('Try Again'),
+              label: const Text('Isku day mar kale'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2ED573),
                 foregroundColor: Colors.white,
@@ -461,12 +492,12 @@ class _ProfileViewState extends State<ProfileView> {
   String _getErrorTitle(String message) {
     final errorStr = message.toLowerCase();
     if (errorStr.contains('internet') || errorStr.contains('network')) {
-      return 'No Connection';
+      return 'Xiriir la\'aan';
     }
-    if (errorStr.contains('timeout')) return 'Request Timed Out';
+    if (errorStr.contains('timeout')) return 'Waqtiga wuu dhammaaday';
     if (errorStr.contains('login') || errorStr.contains('session')) {
-      return 'Login Required';
+      return 'Gelitaan loo baahan yahay';
     }
-    return 'Unable to Load Profile';
+    return 'Lama soo qaadi karo profile-ka';
   }
 }
