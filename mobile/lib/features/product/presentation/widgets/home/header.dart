@@ -17,8 +17,9 @@ import 'package:mobile/features/notifications/presentation/screens/notifications
 
 class Header extends StatefulWidget {
   final Function(String)? onSearch;
+  final TextEditingController? searchController;
 
-  const Header({super.key, this.onSearch});
+  const Header({super.key, this.onSearch, this.searchController});
 
   @override
   State<Header> createState() => _HeaderState();
@@ -66,7 +67,6 @@ class _HeaderState extends State<Header> {
   Widget build(BuildContext context) {
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, authState) {
-        // ✅ Load notifications when auth state becomes authenticated
         if (!_hasLoadedNotifications &&
             (authState is Authenticated ||
                 authState is OtpVerified ||
@@ -118,16 +118,19 @@ class _HeaderState extends State<Header> {
                       ],
                     ),
                     Row(
-                      children: [
-                        const _NotificationIcon(),
-                        const SizedBox(width: 5),
-                        const _CartIcon(),
+                      children: const [
+                        _NotificationIcon(),
+                        SizedBox(width: 5),
+                        _CartIcon(),
                       ],
                     ),
                   ],
                 ),
                 const SizedBox(height: 15),
-                _SearchBar(onSearch: widget.onSearch),
+                _SearchBar(
+                  onSearch: widget.onSearch,
+                  controller: widget.searchController,
+                ),
               ],
             ),
           ),
@@ -163,8 +166,6 @@ class _NotificationIcon extends StatelessWidget {
           );
         }
 
-        // ✅ DON'T dispatch LoadNotifications here
-        // Let the Header's initState handle it
         return BlocBuilder<NotificationsBloc, NotificationsState>(
           builder: (context, state) {
             int unreadCount = 0;
@@ -226,7 +227,6 @@ class _NotificationIcon extends StatelessWidget {
   }
 }
 
-// ✅ Cart Icon - No flickering
 class _CartIcon extends StatelessWidget {
   const _CartIcon();
 
@@ -292,22 +292,34 @@ class _CartIcon extends StatelessWidget {
   }
 }
 
-// ✅ Search Bar - Keep as is
 class _SearchBar extends StatefulWidget {
   final Function(String)? onSearch;
+  final TextEditingController? controller;
 
-  const _SearchBar({this.onSearch});
+  const _SearchBar({this.onSearch, this.controller});
 
   @override
   State<_SearchBar> createState() => _SearchBarState();
 }
 
 class _SearchBarState extends State<_SearchBar> {
-  final TextEditingController _controller = TextEditingController();
+  late final TextEditingController _controller;
+  bool _ownsController = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.controller != null) {
+      _controller = widget.controller!;
+    } else {
+      _controller = TextEditingController();
+      _ownsController = true;
+    }
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
@@ -320,6 +332,7 @@ class _SearchBarState extends State<_SearchBar> {
 
   void _clearSearch() {
     _controller.clear();
+    setState(() {});
     if (widget.onSearch != null) {
       widget.onSearch!('');
     }
@@ -341,7 +354,9 @@ class _SearchBarState extends State<_SearchBar> {
           Expanded(
             child: TextField(
               controller: _controller,
+              onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _performSearch(),
+              textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: "Search product here",
                 hintStyle: TextStyle(color: Colors.grey[400]),

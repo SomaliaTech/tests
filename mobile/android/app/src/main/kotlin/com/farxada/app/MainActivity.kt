@@ -1,4 +1,4 @@
-package com.yourcompany.farxada
+package com.farxada.app
 
 import io.flutter.embedding.android.FlutterActivity
 

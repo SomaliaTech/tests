@@ -67,7 +67,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '375449913411',
     projectId: 'faraxda',
     storageBucket: 'faraxda.firebasestorage.app',
-    iosBundleId: 'com.yourcompany.farxada',
+    iosBundleId: 'com.farxada.app',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
@@ -76,6 +76,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '375449913411',
     projectId: 'faraxda',
     storageBucket: 'faraxda.firebasestorage.app',
-    iosBundleId: 'com.example.mobile',
+    iosBundleId: 'com.farxada.app',
   );
 }

@@ -17,15 +17,14 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final GetProductsByCategory getProductsByCategory;
   final SearchProducts searchProducts;
   final GetProductById getProductById;
-  final GetLatestProducts getLatestProducts; // ✅ Added field
+  final GetLatestProducts getLatestProducts;
 
   ProductBloc({
     required this.getCategories,
     required this.getSubcategories,
     required this.getFeaturedProducts,
     required this.getProductsByCategory,
-    required this.getLatestProducts, // ✅ Added to constructor
-
+    required this.getLatestProducts,
     required this.searchProducts,
     required this.getProductById,
   }) : super(ProductInitial()) {
@@ -38,7 +37,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     on<GetLatestProductsEvent>(_onGetLatestProducts);
   }
 
-  // ✅ Helper to create user-friendly error messages
   String _getFriendlyErrorMessage(String originalError) {
     final error = originalError.toLowerCase();
 
@@ -68,7 +66,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     return 'Something went wrong. Please try again.';
   }
 
-  // 🚀 Categories - Show cached first, skip loading if data exists
   Future<void> _onGetCategories(
     GetCategoriesEvent event,
     Emitter<ProductState> emit,
@@ -116,7 +113,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       }
     }
 
-    // Assuming you created the GetLatestProducts usecase
     final result = await getLatestProducts(limit: event.limit ?? 10);
     if (emit.isDone) return;
 
@@ -127,12 +123,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     }, (products) => emit(LatestProductsLoaded(products)));
   }
 
-  // In ProductBloc, update _onGetFeaturedProducts
   Future<void> _onGetFeaturedProducts(
     GetFeaturedProductsEvent event,
     Emitter<ProductState> emit,
   ) async {
-    // ✅ If force refresh, always show loading
     if (event.forceRefresh) {
       emit(FeaturedProductsLoading());
     } else {
@@ -152,7 +146,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     }, (products) => emit(FeaturedProductsLoaded(products)));
   }
 
-  // 🚀 Products by Category - Show cached first
   Future<void> _onGetProductsByCategory(
     GetProductsByCategoryEvent event,
     Emitter<ProductState> emit,
@@ -172,14 +165,22 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     }, (products) => emit(ProductsLoaded(products)));
   }
 
-  // Search - Always show loading (no cache for search)
+  // ✅ Search — skip API call when query is empty
   Future<void> _onSearchProducts(
     SearchProductsEvent event,
     Emitter<ProductState> emit,
   ) async {
+    final query = event.query?.trim() ?? '';
+
+    if (query.isEmpty) {
+      emit(const ProductsLoaded([]));
+      return;
+    }
+
     emit(ProductLoading());
+
     final result = await searchProducts(
-      query: event.query,
+      query: query,
       minPrice: event.minPrice,
       maxPrice: event.maxPrice,
       categoryId: event.categoryId,
@@ -194,7 +195,6 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     );
   }
 
-  // 🚀 Product Detail - Show cached first
   Future<void> _onGetProductById(
     GetProductByIdEvent event,
     Emitter<ProductState> emit,

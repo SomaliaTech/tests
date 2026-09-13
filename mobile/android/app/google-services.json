@@ -7,9 +7,28 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:375449913411:android:66264e7b69cecc3ab0ecf6",
+        "mobilesdk_app_id": "1:375449913411:android:318952ef38f87011b0ecf6",
         "android_client_info": {
-          "package_name": "com.yourcompany.farxada"
+          "package_name": "com.farxada.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCS8N2bSuE9KgVbDajdhi15QgwMkRIeuJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:375449913411:android:59e019a5f3ec5727b0ecf6",
+        "android_client_info": {
+          "package_name": "com.farxadaApp"
         }
       },
       "oauth_client": [],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -801,37 +802,46 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
   }
 
   Future<String?> _uploadImage(XFile image) async {
-    try {
-      final storageService = GetIt.instance<StorageService>();
-      final token = await storageService.getAuthToken();
+    final storageService = GetIt.instance<StorageService>();
+    final token = await storageService.getAuthToken();
+    if (token == null) return null;
 
-      if (token == null) return null;
+    final uri = Uri.parse('${ApiConstants.baseUrl}/chat/upload-media');
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}/chat/upload-media');
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final request = http.MultipartRequest('POST', uri)
+          ..headers['Authorization'] = 'Bearer $token'
+          ..files.add(
+            await http.MultipartFile.fromPath(
+              'file',
+              image.path,
+              filename: image.name.isNotEmpty ? image.name : 'image.jpg',
+            ),
+          );
 
-      final request = http.MultipartRequest('POST', uri)
-        ..headers['Authorization'] = 'Bearer $token'
-        ..files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            image.path,
-            filename: image.name,
-          ),
+        final streamed = await request.send().timeout(
+          const Duration(seconds: 30),
         );
+        final response = await http.Response.fromStream(streamed);
 
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        return data['url'] as String?;
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          return data['url'] as String?;
+        }
+        debugPrint('⚠️ Upload HTTP ${response.statusCode}: ${response.body}');
+        if ([401, 403, 413].contains(response.statusCode))
+          return null; // no retry point
+      } on SocketException catch (e) {
+        debugPrint('⚠️ Upload attempt $attempt: server unreachable ($e)');
+      } on TimeoutException catch (_) {
+        debugPrint('⚠️ Upload attempt $attempt timed out');
+      } catch (e) {
+        debugPrint('⚠️ Upload attempt $attempt failed: $e');
       }
-
-      return null;
-    } catch (e) {
-      debugPrint('❌ [ChatBloc] Upload error: $e');
-      return null;
+      if (attempt < 3) await Future.delayed(Duration(seconds: attempt));
     }
+    return null;
   }
 
   Future<void> _onPickAndSendImage(
