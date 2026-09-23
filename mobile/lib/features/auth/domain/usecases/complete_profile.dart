@@ -1,6 +1,4 @@
 // lib/features/auth/domain/usecases/complete_profile.dart
-import 'package:fpdart/fpdart.dart';
-import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../entities/user.dart';
 import '../repositories/auth_repository.dart';

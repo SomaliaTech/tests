@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/core/utils/error_handler.dart
 import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
@@ -15,7 +16,7 @@ class ErrorHandler {
     // ✅ Don't show toast if server is down (avoids spam)
     if (!showToast || ServerStatusService().isServerDown) {
       // Use Flutter's built-in debugPrint
-      debugPrint('🔇 Suppressed toast (server down): $message');
+      if (kDebugMode) debugPrint('🔇 Suppressed toast (server down): $message');
       return;
     }
 

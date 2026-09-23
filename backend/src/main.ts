@@ -9,23 +9,32 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
+  // app.useGlobalPipes(
+  //   new ValidationPipe({
+  //     whitelist: true,
+  //     forbidNonWhitelisted: true,
+  //     transform: true,
+  //     exceptionFactory: (errors) => {
+  //       console.error('❌ Validation errors:', JSON.stringify(errors, null, 2));
+  //       return new BadRequestException(
+  //         errors.map((error) => ({
+  //           field: error.property,
+  //           constraints: error.constraints,
+  //         })),
+  //       );
+  //     },
+  //   }),
+  // );
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
+      whitelist: true, // ⚠️ This strips undeclared props
+      forbidNonWhitelisted: false, // ⚠️ Should be false, not true
       transform: true,
-      exceptionFactory: (errors) => {
-        console.error('❌ Validation errors:', JSON.stringify(errors, null, 2));
-        return new BadRequestException(
-          errors.map((error) => ({
-            field: error.property,
-            constraints: error.constraints,
-          })),
-        );
+      transformOptions: {
+        enableImplicitConversion: true,
       },
     }),
   );
-
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',')

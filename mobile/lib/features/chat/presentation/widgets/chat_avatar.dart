@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -26,7 +27,7 @@ class ChatAvatar extends StatelessWidget {
     // This is the fallback widget shown while loading or on error
     final fallbackWidget = CircleAvatar(
       radius: radius,
-      backgroundColor: bgColor.withOpacity(0.15),
+      backgroundColor: bgColor.withValues(alpha: 0.15),
       child: Text(
         initials,
         style: TextStyle(
@@ -58,7 +59,7 @@ class ChatAvatar extends StatelessWidget {
           placeholder: (context, url) => fallbackWidget,
           // Show colored initials if image fails (corrupted cache, 404, etc.)
           errorWidget: (context, url, error) {
-            debugPrint('❌ Avatar load failed for $url: $error');
+            if (kDebugMode) debugPrint('❌ Avatar load failed for $url: $error');
             return fallbackWidget;
           },
           // Optimize cache size for avatars

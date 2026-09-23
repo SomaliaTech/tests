@@ -5,6 +5,7 @@ import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/admin_stats_model.dart';
 import 'package:mobile/features/admin/data/models/admin_order_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminRemoteDataSource {
   Future<AdminStatsModel> getDashboardStats();
@@ -84,11 +85,13 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
         } else if (decoded.containsKey('items') && decoded['items'] is List) {
           jsonList = decoded['items'];
         } else {
-          print('⚠️ Unknown response format keys: ${decoded.keys}');
+          if (kDebugMode)
+            debugPrint('⚠️ Unknown response format keys: ${decoded.keys}');
           return [];
         }
       } else {
-        print('⚠️ Unexpected response type: ${decoded.runtimeType}');
+        if (kDebugMode)
+          debugPrint('⚠️ Unexpected response type: ${decoded.runtimeType}');
         return [];
       }
 
@@ -103,10 +106,10 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
     final token = await _getToken();
     final url = '${ApiConstants.baseUrl}/admin/orders/$orderId/status';
 
-    print('🔄 [ADMIN] Updating order status...');
-    print('📍 URL: $url');
-    print('📦 Order ID: $orderId');
-    print('🎯 New Status: $newStatus');
+    if (kDebugMode) debugPrint('🔄 [ADMIN] Updating order status...');
+    if (kDebugMode) debugPrint('📍 URL: $url');
+    if (kDebugMode) debugPrint('📦 Order ID: $orderId');
+    if (kDebugMode) debugPrint('🎯 New Status: $newStatus');
 
     final response = await client.put(
       Uri.parse(url),
@@ -117,14 +120,16 @@ class AdminRemoteDataSourceImpl implements AdminRemoteDataSource {
       body: json.encode({'status': newStatus}),
     );
 
-    print('📡 Response Status Code: ${response.statusCode}');
-    print('📥 Response Body: ${response.body}');
+    if (kDebugMode)
+      debugPrint('📡 Response Status Code: ${response.statusCode}');
+    if (kDebugMode) debugPrint('📥 Response Body: ${response.body}');
 
     if (response.statusCode == 200) {
-      print('✅ [ADMIN] Order status updated successfully');
+      if (kDebugMode) debugPrint('✅ [ADMIN] Order status updated successfully');
     } else {
-      print('❌ [ADMIN] Failed to update status: ${response.statusCode}');
-      print('❌ Error details: ${response.body}');
+      if (kDebugMode)
+        debugPrint('❌ [ADMIN] Failed to update status: ${response.statusCode}');
+      if (kDebugMode) debugPrint('❌ Error details: ${response.body}');
       throw ServerException('Failed to update status: ${response.statusCode}');
     }
   }

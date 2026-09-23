@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class ProfileRemoteDataSource {
   Future<Map<String, dynamic>> getProfile(String token);
@@ -53,8 +54,9 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
       if (email != null) requestBody['email'] = email;
       if (marketId != null) requestBody['marketId'] = marketId;
 
-      print('📤 PATCH request to: ${ApiConstants.baseUrl}/auth/profile');
-      print('📤 Body: $requestBody');
+      if (kDebugMode)
+        debugPrint('📤 PATCH request to: ${ApiConstants.baseUrl}/auth/profile');
+      if (kDebugMode) debugPrint('📤 Body: $requestBody');
 
       final response = await client.patch(
         Uri.parse('${ApiConstants.baseUrl}/auth/profile'),
@@ -65,8 +67,8 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         body: json.encode(requestBody),
       );
 
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response body: ${response.body}');
+      if (kDebugMode) debugPrint('📥 Response status: ${response.statusCode}');
+      if (kDebugMode) debugPrint('📥 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -76,7 +78,7 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
         );
       }
     } catch (e) {
-      print('❌ Network error: $e');
+      if (kDebugMode) debugPrint('❌ Network error: $e');
       throw ServerException('Network error: $e');
     }
   }

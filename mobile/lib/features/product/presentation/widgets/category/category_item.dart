@@ -28,7 +28,7 @@ class CategoryItem extends StatelessWidget {
             width: 65,
             height: 65,
             decoration: BoxDecoration(
-              color: Colors.green.withOpacity(0.09),
+              color: Colors.green.withValues(alpha: 0.09),
               shape: BoxShape.circle,
             ),
             child: Icon(

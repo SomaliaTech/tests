@@ -259,7 +259,7 @@ class EditUserPermissionsSection extends StatelessWidget {
                         onAdminToggle(value);
                       }
                     : null,
-                activeColor: Colors.white,
+                activeThumbColor: Colors.white,
                 activeTrackColor: const Color(0xFF7C3AED),
                 inactiveThumbColor: Colors.white,
                 inactiveTrackColor: Colors.grey.shade300,
@@ -369,7 +369,7 @@ class EditUserPermissionsSection extends StatelessWidget {
                       canChange: canAssignRoles && !isSuperAdmin,
                       onChanged: (value) => onToggleRole(role.id, value),
                     );
-                  }).toList(),
+                  }),
                 ],
               );
             },

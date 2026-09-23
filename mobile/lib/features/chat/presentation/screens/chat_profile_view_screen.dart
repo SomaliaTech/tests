@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/chat/presentation/screens/profile_view_screen.dart
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
@@ -68,7 +69,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         });
       }
     } catch (e) {
-      debugPrint('❌ Error loading mute status: $e');
+      if (kDebugMode) debugPrint('❌ Error loading mute status: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -115,7 +116,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         await _loadUserInfoFromSearch(token);
       }
     } catch (e) {
-      debugPrint('❌ Error loading user info: $e');
+      if (kDebugMode) debugPrint('❌ Error loading user info: $e');
       await _loadUserInfoFromFallback();
     }
   }
@@ -159,7 +160,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
       }
       _setDefaultUserInfo();
     } catch (e) {
-      debugPrint('❌ Error loading user info from search: $e');
+      if (kDebugMode) debugPrint('❌ Error loading user info from search: $e');
       _setDefaultUserInfo();
     }
   }
@@ -215,7 +216,9 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
       }
       _setDefaultUserInfo();
     } catch (e) {
-      debugPrint('❌ Error loading user info from conversations: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error loading user info from conversations: $e');
+      }
       _setDefaultUserInfo();
     }
   }
@@ -265,7 +268,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         });
       }
     } catch (e) {
-      debugPrint('❌ Error loading shared media counts: $e');
+      if (kDebugMode) debugPrint('❌ Error loading shared media counts: $e');
       if (mounted) {
         setState(() {
           _isLoadingMedia = false;
@@ -387,7 +390,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                                     BoxShadow(
                                       color: const Color(
                                         0xFF2ED573,
-                                      ).withOpacity(0.4),
+                                      ).withValues(alpha: 0.4),
                                       blurRadius: 8,
                                       spreadRadius: 2,
                                     ),
@@ -416,7 +419,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: widget.isOnline
-                              ? const Color(0xFF2ED573).withOpacity(0.1)
+                              ? const Color(0xFF2ED573).withValues(alpha: 0.1)
                               : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -507,7 +510,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                             : Switch(
                                 value: _isMuted,
                                 onChanged: _toggleMute,
-                                activeColor: const Color(0xFF2ED573),
+                                activeThumbColor: const Color(0xFF2ED573),
                               ),
                       ),
                     ],
@@ -551,7 +554,9 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         elevation: 8,
-                        shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+                        shadowColor: const Color(
+                          0xFF2ED573,
+                        ).withValues(alpha: 0.4),
                       ),
                     ),
                   ),
@@ -581,7 +586,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: color, size: 24),
@@ -622,12 +627,12 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
           end: Alignment.bottomRight,
           colors: [
             const Color(0xFF2ED573),
-            const Color(0xFF2ED573).withOpacity(0.7),
+            const Color(0xFF2ED573).withValues(alpha: 0.7),
           ],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2ED573).withOpacity(0.3),
+            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -648,7 +653,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
     if (!hasImage) return fallbackWidget;
 
     return CachedNetworkImage(
-      imageUrl: imageToShow!,
+      imageUrl: imageToShow,
       imageBuilder: (context, imageProvider) => Container(
         width: 140,
         height: 140,
@@ -657,7 +662,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
           image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -683,7 +688,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         ),
       ),
       errorWidget: (context, url, error) {
-        debugPrint('❌ Failed to load profile avatar: $url');
+        if (kDebugMode) debugPrint('❌ Failed to load profile avatar: $url');
         return fallbackWidget;
       },
     );
@@ -700,7 +705,7 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -771,7 +776,9 @@ class _ChatProfileViewScreenState extends State<ChatProfileViewScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (iconColor ?? Colors.grey.shade600).withOpacity(0.1),
+                color: (iconColor ?? Colors.grey.shade600).withValues(
+                  alpha: 0.1,
+                ),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
@@ -904,7 +911,7 @@ class _FullScreenProfileImage extends StatelessWidget {
                         end: Alignment.bottomRight,
                         colors: [
                           const Color(0xFF2ED573),
-                          const Color(0xFF2ED573).withOpacity(0.7),
+                          const Color(0xFF2ED573).withValues(alpha: 0.7),
                         ],
                       ),
                     ),

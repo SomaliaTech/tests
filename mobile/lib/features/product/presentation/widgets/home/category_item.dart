@@ -36,7 +36,7 @@ class CategoryItem extends StatelessWidget {
                 // ✅ Add border if image exists
                 border: category.hasIcon
                     ? Border.all(
-                        color: Colors.green.withOpacity(0.3),
+                        color: Colors.green.withValues(alpha: 0.3),
                         width: 1.5,
                       )
                     : null,

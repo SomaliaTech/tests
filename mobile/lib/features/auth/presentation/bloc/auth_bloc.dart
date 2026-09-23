@@ -86,17 +86,19 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     _isGoogleSignInProgress = true;
 
     try {
+      // ✅ CORRECT client IDs (from Google Cloud Console)
       final String clientId = Platform.isIOS
-          ? "159665748516-q57ehiuvg427bluh15gdj701disc746r.apps.googleusercontent.com"
-          : "159665748516-9kan2pvb50ap4uvdc3djkpr9g73p0nt5.apps.googleusercontent.com";
+          ? "344221955618-c0sh2bkh1s0uoo4dkjmcdfsupjvm262j.apps.googleusercontent.com" // ✅ iOS client
+          : "344221955618-9f6qefop43l00p475v6cli0s3i4gg5rk.apps.googleusercontent.com"; // ✅ Android client
 
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
         clientId: clientId,
+        // ✅ On Android, this MUST be the Web client ID (not Android)
+        // On iOS, this is ignored — iOS uses `clientId` above
         serverClientId:
-            "159665748516-bffn5l47e89cmjs2bl1nsif7q2k79u3v.apps.googleusercontent.com",
+            "344221955618-muee8lsboovn5813athfqmrrcoblsqcs.apps.googleusercontent.com", // ✅ Web client
       );
-
       try {
         await googleSignIn.signOut();
       } catch (e) {

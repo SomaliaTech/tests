@@ -235,7 +235,7 @@ class _MessageBubble extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${senderName} • ${_formatTime(message.createdAt)}',
+                    '$senderName • ${_formatTime(message.createdAt)}',
                     style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey[600],

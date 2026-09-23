@@ -1,5 +1,6 @@
 // lib/core/services/server_status_service.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 class ServerStatusService {
   static final ServerStatusService _instance = ServerStatusService._internal();
@@ -18,7 +19,8 @@ class ServerStatusService {
     if (!_isServerDown) {
       _isServerDown = true;
       _serverStatusController.add(true);
-      print('🔴 Server marked as DOWN'); // ✅ Use print instead
+      if (kDebugMode)
+        debugPrint('🔴 Server marked as DOWN'); // ✅ Use print instead
     }
   }
 
@@ -26,7 +28,8 @@ class ServerStatusService {
     if (_isServerDown) {
       _isServerDown = false;
       _serverStatusController.add(false);
-      print('🟢 Server marked as UP'); // ✅ Use print instead
+      if (kDebugMode)
+        debugPrint('🟢 Server marked as UP'); // ✅ Use print instead
     }
   }
 }

@@ -11,6 +11,7 @@ import 'package:mobile/features/product/presentation/blocs/address_event.dart';
 import 'package:mobile/features/product/presentation/blocs/address_state.dart';
 import '../../../../../core/services/injection_container.dart';
 import 'add_address_form.dart';
+import 'package:flutter/foundation.dart';
 
 class AddressSelectionModal extends StatefulWidget {
   final Function(Address) onAddressSelected;
@@ -230,7 +231,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           ),
           borderRadius: BorderRadius.circular(12),
           color: address.isDefault
-              ? const Color(0xFF2ED573).withOpacity(0.05)
+              ? const Color(0xFF2ED573).withValues(alpha: 0.05)
               : Colors.white,
         ),
         child: Row(
@@ -239,7 +240,7 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: const Color(0xFF2ED573).withOpacity(0.1),
+                color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -273,7 +274,9 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2ED573).withOpacity(0.1),
+                            color: const Color(
+                              0xFF2ED573,
+                            ).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -342,10 +345,11 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
   }
 
   void _showAddAddressForm() {
-    print('📝 Opening AddAddressForm');
-    print('📍 Markets available: ${widget.availableMarkets?.length}');
-    print('🛒 Product: ${widget.product?.id}');
-    print('🛍️ Cart Items: ${widget.cartItems?.length}');
+    if (kDebugMode) debugPrint('📝 Opening AddAddressForm');
+    if (kDebugMode)
+      debugPrint('📍 Markets available: ${widget.availableMarkets?.length}');
+    if (kDebugMode) debugPrint('🛒 Product: ${widget.product?.id}');
+    if (kDebugMode) debugPrint('🛍️ Cart Items: ${widget.cartItems?.length}');
 
     showModalBottomSheet(
       context: context,
@@ -367,7 +371,8 @@ class _AddressSelectionModalState extends State<AddressSelectionModal> {
           quantity: widget.quantity,
           cartItems: widget.cartItems,
           onAddressAdded: (address) {
-            print('✅ Address added callback: ${address.fullAddress}');
+            if (kDebugMode)
+              debugPrint('✅ Address added callback: ${address.fullAddress}');
           },
         ),
       ),

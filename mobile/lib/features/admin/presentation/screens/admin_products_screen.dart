@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/screens/admin_products_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -73,11 +74,13 @@ class _AdminProductsScreenState extends State<AdminProductsScreen>
         _canUpdate = _hasPermission(permissions, 'product:update');
         _canDelete = _hasPermission(permissions, 'product:delete');
       });
-      debugPrint('🔐 [AdminProducts] canCreate: $_canCreate');
-      debugPrint('🔐 [AdminProducts] canUpdate: $_canUpdate');
-      debugPrint('🔐 [AdminProducts] canDelete: $_canDelete');
+      if (kDebugMode) debugPrint('🔐 [AdminProducts] canCreate: $_canCreate');
+      if (kDebugMode) debugPrint('🔐 [AdminProducts] canUpdate: $_canUpdate');
+      if (kDebugMode) debugPrint('🔐 [AdminProducts] canDelete: $_canDelete');
     } catch (e) {
-      debugPrint('❌ [AdminProducts] Failed to load permissions: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [AdminProducts] Failed to load permissions: $e');
+      }
       if (!mounted) return;
       setState(() {
         _canCreate = false;
@@ -115,50 +118,72 @@ class _AdminProductsScreenState extends State<AdminProductsScreen>
   }
 
   Future<void> _refreshProducts() async {
-    debugPrint('🔄 [AdminProducts] Refreshing products...');
+    if (kDebugMode) debugPrint('🔄 [AdminProducts] Refreshing products...');
     context.read<AdminProductBloc>().add(FetchAllAdminProductsEvent());
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
   // ✅ FIX: Silent refresh — doesn't emit loading state, keeps products visible
   void _silentRefreshProducts() {
-    debugPrint('🔄 [AdminProducts] Silent refresh (no loading state)...');
+    if (kDebugMode) {
+      debugPrint('🔄 [AdminProducts] Silent refresh (no loading state)...');
+    }
     context.read<AdminProductBloc>().add(SilentFetchAllAdminProductsEvent());
   }
 
   Future<void> _navigateToEdit(String productId) async {
-    debugPrint('📝 [AdminProducts] Navigating to edit screen for: $productId');
+    if (kDebugMode) {
+      debugPrint(
+        '📝 [AdminProducts] Navigating to edit screen for: $productId',
+      );
+    }
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => EditProductScreen(productId: productId),
       ),
     );
-    debugPrint('↩️ [AdminProducts] Returned from edit with result: $result');
+    if (kDebugMode) {
+      debugPrint('↩️ [AdminProducts] Returned from edit with result: $result');
+    }
     if (result == true && mounted) {
-      debugPrint(
-        '🔄 [AdminProducts] Product updated, silent refreshing list...',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '🔄 [AdminProducts] Product updated, silent refreshing list...',
+        );
+      }
       // ✅ FIX: Use silent refresh — no loading flash, products stay visible
       _silentRefreshProducts();
     } else {
-      debugPrint('⚠️ [AdminProducts] Edit was cancelled or failed');
+      if (kDebugMode) {
+        debugPrint('⚠️ [AdminProducts] Edit was cancelled or failed');
+      }
     }
   }
 
   Future<void> _navigateToAdd() async {
-    debugPrint('📝 [AdminProducts] Navigating to add product screen');
+    if (kDebugMode) {
+      debugPrint('📝 [AdminProducts] Navigating to add product screen');
+    }
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const AddProductScreen()),
     );
-    debugPrint('↩️ [AdminProducts] Returned from add with result: $result');
+    if (kDebugMode) {
+      debugPrint('↩️ [AdminProducts] Returned from add with result: $result');
+    }
     if (result == true && mounted) {
-      debugPrint('🔄 [AdminProducts] Product added, silent refreshing list...');
+      if (kDebugMode) {
+        debugPrint(
+          '🔄 [AdminProducts] Product added, silent refreshing list...',
+        );
+      }
       // ✅ FIX: Use silent refresh
       _silentRefreshProducts();
     } else {
-      debugPrint('⚠️ [AdminProducts] Add was cancelled or failed');
+      if (kDebugMode) {
+        debugPrint('⚠️ [AdminProducts] Add was cancelled or failed');
+      }
     }
   }
 

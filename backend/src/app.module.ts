@@ -23,6 +23,8 @@ import { PaymentModule } from './payment/payment.module';
 import { BannersModule } from './banners/banners.module';
 import { RedisModule } from './redis/redis.module';
 import { AccountCleanupService } from './auth/account-cleanup.service';
+import { AffiliateModule } from './affiliate/affiliate.module';
+import { SupportModule } from './support/support.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -54,6 +56,8 @@ import { AccountCleanupService } from './auth/account-cleanup.service';
     FaqModule,
     PaymentModule,
     BannersModule,
+    AffiliateModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService, PermissionGuard, AccountCleanupService],

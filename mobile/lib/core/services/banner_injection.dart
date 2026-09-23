@@ -14,20 +14,21 @@ import '../../features/product/domain/usecases/banner/update_banner.dart';
 import '../../features/product/domain/usecases/banner/delete_banner.dart';
 import '../../features/product/domain/usecases/banner/toggle_banner_status.dart';
 import 'connectivity_service.dart'; // ✅ ADD THIS IMPORT
+import 'package:flutter/foundation.dart';
 
 void registerBannerDependencies(GetIt sl) {
-  print('📦 Registering Banner Dependencies...');
+  if (kDebugMode) debugPrint('📦 Registering Banner Dependencies...');
 
   // Data Sources
   sl.registerLazySingleton<BannerRemoteDataSource>(
     () => BannerRemoteDataSourceImpl(client: sl(), storageService: sl()),
   );
-  print('✅ BannerRemoteDataSource registered');
+  if (kDebugMode) debugPrint('✅ BannerRemoteDataSource registered');
 
   sl.registerLazySingleton<BannerLocalDataSource>(
     () => BannerLocalDataSourceImpl(),
   );
-  print('✅ BannerLocalDataSource registered');
+  if (kDebugMode) debugPrint('✅ BannerLocalDataSource registered');
 
   // Repository
   sl.registerLazySingleton<BannerRepository>(
@@ -37,7 +38,7 @@ void registerBannerDependencies(GetIt sl) {
       networkInfo: sl(),
     ),
   );
-  print('✅ BannerRepository registered');
+  if (kDebugMode) debugPrint('✅ BannerRepository registered');
 
   // Use Cases
   sl.registerLazySingleton(() => GetActiveBanners(sl()));
@@ -46,7 +47,7 @@ void registerBannerDependencies(GetIt sl) {
   sl.registerLazySingleton(() => UpdateBanner(sl()));
   sl.registerLazySingleton(() => DeleteBanner(sl()));
   sl.registerLazySingleton(() => ToggleBannerStatus(sl()));
-  print('✅ Banner Use Cases registered');
+  if (kDebugMode) debugPrint('✅ Banner Use Cases registered');
 
   // BLoCs - ✅ Get ConnectivityService from GetIt
   sl.registerFactory(
@@ -65,5 +66,5 @@ void registerBannerDependencies(GetIt sl) {
       toggleBannerStatus: sl(),
     ),
   );
-  print('✅ Banner BLoCs registered');
+  if (kDebugMode) debugPrint('✅ Banner BLoCs registered');
 }

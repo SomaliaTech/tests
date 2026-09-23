@@ -1,9 +1,13 @@
 import 'package:get_it/get_it.dart';
 import 'package:mobile/features/support/data/datasources/faq_remote_data_source.dart';
+import 'package:mobile/features/support/data/datasources/support_remote_data_source.dart';
 import 'package:mobile/features/support/data/repositories/faq_repository_impl.dart';
+import 'package:mobile/features/support/data/repositories/support_repository_impl.dart';
 import 'package:mobile/features/support/domain/repositories/faq_repository.dart';
+import 'package:mobile/features/support/domain/repositories/support_repository.dart';
 import 'package:mobile/features/support/domain/usecases/get_active_faqs.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
+import 'package:mobile/features/support/presentation/bloc/support_settings/support_settings_bloc.dart';
 
 void registerSupportDependencies(GetIt sl) {
   // Data sources
@@ -21,4 +25,14 @@ void registerSupportDependencies(GetIt sl) {
 
   // BLoC
   sl.registerFactory(() => FaqBloc(getActiveFaqs: sl()));
+
+  sl.registerLazySingleton<SupportRemoteDataSource>(
+    () => SupportRemoteDataSourceImpl(client: sl(), storageService: sl()),
+  );
+
+  sl.registerLazySingleton<SupportRepository>(
+    () => SupportRepositoryImpl(remote: sl()),
+  );
+
+  sl.registerFactory(() => SupportSettingsBloc(repository: sl()));
 }

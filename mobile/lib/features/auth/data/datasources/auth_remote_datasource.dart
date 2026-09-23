@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AuthRemoteDataSource {
   Future<Map<String, dynamic>> sendOtp(String phoneNumber);
@@ -87,7 +88,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('✅ Send OTP Success: $data');
+        if (kDebugMode) debugPrint('✅ Send OTP Success: $data');
         return data;
       } else {
         // Parse error message from backend
@@ -138,7 +139,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     final Map<String, dynamic> body = {
       'name': name,
       'marketId': marketId,
-      if (profileImageUrl != null) 'profileImage': profileImageUrl,
+      'profileImage': ?profileImageUrl,
       if (phoneNumber != null && phoneNumber.isNotEmpty)
         'phoneNumber': phoneNumber,
     };
@@ -193,7 +194,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         headers: {'Authorization': 'Bearer $token'},
       );
       if (response.statusCode == 200) {
-        print("user ${response.body}");
+        if (kDebugMode) debugPrint("user ${response.body}");
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
         throw UnauthorizedException('Token expired or invalid');

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -58,7 +59,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
         _canDelete = has('market:delete');
       });
     } catch (e) {
-      debugPrint('❌ [Markets] Permission load failed: $e');
+      if (kDebugMode) debugPrint('❌ [Markets] Permission load failed: $e');
     }
   }
 
@@ -82,7 +83,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   }
 
   void _showDeleteConfirmation(MarketEntity market) {
-    final hasUsers = market.userCount != null && market.userCount! > 0;
+    final hasUsers = market.userCount > 0;
 
     showDialog(
       context: context,
@@ -93,7 +94,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Iconsax.warning_2, color: Colors.red, size: 20),
@@ -120,9 +121,11 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.1),
+                  color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -168,7 +171,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                 );
               },
               style: TextButton.styleFrom(
-                backgroundColor: Colors.red.withOpacity(0.1),
+                backgroundColor: Colors.red.withValues(alpha: 0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -318,7 +321,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
   }
 
   Widget _buildMarketCard(MarketEntity market) {
-    final hasUsers = market.userCount != null && market.userCount! > 0;
+    final hasUsers = market.userCount > 0;
     final hasMinOrder =
         market.freeDeliveryMinQuantity != null &&
         market.freeDeliveryMinQuantity! > 0;
@@ -331,7 +334,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -347,8 +350,8 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: market.isActive
-                      ? AppTheme.primaryColor.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
+                      ? AppTheme.primaryColor.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -374,8 +377,8 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: market.isActive
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
+                      ? Colors.green.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -444,7 +447,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: Colors.purple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -557,9 +560,9 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,7 +575,7 @@ class _AdminMarketsScreenState extends State<AdminMarketsScreen> {
                 label,
                 style: TextStyle(
                   fontSize: 10,
-                  color: color.withOpacity(0.8),
+                  color: color.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -701,7 +704,7 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -735,8 +738,9 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
                     icon: Iconsax.buildings,
                     enabled: !_isSubmitting,
                     validator: (value) {
-                      if (value == null || value.isEmpty)
+                      if (value == null || value.isEmpty) {
                         return 'Market name is required';
+                      }
                       return null;
                     },
                     onChanged: (value) {
@@ -772,10 +776,12 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
                     ),
                     enabled: !_isSubmitting,
                     validator: (value) {
-                      if (value == null || value.isEmpty)
+                      if (value == null || value.isEmpty) {
                         return 'Delivery price is required';
-                      if (double.tryParse(value) == null)
+                      }
+                      if (double.tryParse(value) == null) {
                         return 'Invalid number';
+                      }
                       return null;
                     },
                   ),
@@ -802,10 +808,12 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
                           keyboardType: TextInputType.number,
                           enabled: !_isSubmitting,
                           validator: (value) {
-                            if (value == null || value.isEmpty)
+                            if (value == null || value.isEmpty) {
                               return 'Required';
-                            if (int.tryParse(value) == null)
+                            }
+                            if (int.tryParse(value) == null) {
                               return 'Invalid number';
+                            }
                             return null;
                           },
                         ),
@@ -931,7 +939,7 @@ class _AddEditMarketDialogState extends State<_AddEditMarketDialog> {
           decoration: BoxDecoration(
             color: const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
           ),
           child: TextFormField(
             controller: controller,

@@ -169,16 +169,12 @@ export class OrdersController {
   ) {
     return this.ordersService.getOrders(req.user.userId, status, page, limit);
   }
-
   @Get(':id')
-  @UseGuards(OwnershipGuard)
-  @Throttle({ default: { limit: 20, ttl: 60000 } })
-  @ApiOperation({ summary: 'Get order by ID' })
-  @ApiParam({ name: 'id', description: 'Order UUID' })
-  async getOrderById(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } }) // ✅ 60 req/min
+  async getOrderById(@Param('id') id: string, @Request() req) {
     return this.ordersService.getOrderById(id, req.user.userId);
   }
-
   @Put(':id/status')
   @UseGuards(PermissionGuard)
   @Permissions(Permission.ORDER_UPDATE)

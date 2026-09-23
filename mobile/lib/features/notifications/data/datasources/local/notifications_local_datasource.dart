@@ -34,7 +34,7 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached notifications: $e');
+      if (kDebugMode) debugPrint('❌ Error reading cached notifications: $e');
     }
     return [];
   }
@@ -53,7 +53,7 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
           .toList();
       await _box.put(_notificationsKey, json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching notifications: $e');
+      if (kDebugMode) debugPrint('❌ Error caching notifications: $e');
     }
   }
 
@@ -64,9 +64,9 @@ class NotificationsLocalDataSourceImpl implements NotificationsLocalDataSource {
         await Hive.openBox<String>(_boxName);
       }
       await _box.clear();
-      debugPrint('🗑️ Notifications cache cleared');
+      if (kDebugMode) debugPrint('🗑️ Notifications cache cleared');
     } catch (e) {
-      debugPrint('❌ Error clearing cache: $e');
+      if (kDebugMode) debugPrint('❌ Error clearing cache: $e');
     }
   }
 

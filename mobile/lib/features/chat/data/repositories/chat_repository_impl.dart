@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/chat/data/repositories/chat_repository_impl.dart
 import 'dart:async';
 
@@ -68,7 +69,7 @@ class ChatRepositoryImpl implements ChatRepository {
       // ✅ ADD THIS: Notify listeners that cache was updated
       _conversationUpdateController.add(mergedConversations);
     } catch (e) {
-      debugPrint('Background conversation refresh failed: $e');
+      if (kDebugMode) debugPrint('Background conversation refresh failed: $e');
     }
   }
 
@@ -127,7 +128,9 @@ class ChatRepositoryImpl implements ChatRepository {
       }
     } catch (e) {
       // Silently fail - we already showed cached data
-      debugPrint('Background message refresh failed for $partnerId: $e');
+      if (kDebugMode) {
+        debugPrint('Background message refresh failed for $partnerId: $e');
+      }
     }
   }
 
@@ -265,7 +268,7 @@ class ChatRepositoryImpl implements ChatRepository {
         await localDataSource.updateConversation(updatedConv);
       }
     } catch (e) {
-      debugPrint('Failed to update conversation cache: $e');
+      if (kDebugMode) debugPrint('Failed to update conversation cache: $e');
     }
   }
 
@@ -390,9 +393,9 @@ class ChatRepositoryImpl implements ChatRepository {
 
   // Add import for debugPrint
   static void debugPrint(String message) {
-    // if (kDebugMode) {
-    // }
-    print(message);
+    if (kDebugMode) {
+      if (kDebugMode) debugPrint(message);
+    }
   }
 
   void dispose() {

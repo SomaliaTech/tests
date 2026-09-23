@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/product/presentation/widgets/checkout/checkout_address_section.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -76,7 +77,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
           }
         }
       } catch (e) {
-        debugPrint('Could not read auth state: $e');
+        if (kDebugMode) debugPrint('Could not read auth state: $e');
       }
     });
   }
@@ -192,7 +193,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
       );
       if (!isValid) {
         setState(() {
-          _phoneError = 'Waa inuu ku bilaabmaa ${_providerPrefixDisplay}';
+          _phoneError = 'Waa inuu ku bilaabmaa $_providerPrefixDisplay';
         });
         return;
       }
@@ -284,7 +285,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ED573).withOpacity(0.1),
+                    color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -345,15 +346,17 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                       ),
                       decoration: BoxDecoration(
                         color:
-                            _currentPaymentMethod?.color.withOpacity(0.1) ??
-                            Colors.grey.withOpacity(0.1),
+                            _currentPaymentMethod?.color.withValues(
+                              alpha: 0.1,
+                            ) ??
+                            Colors.grey.withValues(alpha: 0.1),
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(10),
                           bottomLeft: Radius.circular(10),
                         ),
                         border: Border(
                           right: BorderSide(
-                            color: Colors.grey.withOpacity(0.3),
+                            color: Colors.grey.withValues(alpha: 0.3),
                             width: 1,
                           ),
                         ),
@@ -465,7 +468,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                           ? 'Ugu yaraan 7 lambar ayaa loo baahan yahay'
                           : isPhoneValid
                           ? '✓ Lambar sax ah'
-                          : '⚠️ Waa inuu ku bilaabmaa ${_providerPrefixDisplay}',
+                          : '⚠️ Waa inuu ku bilaabmaa $_providerPrefixDisplay',
                       style: TextStyle(
                         fontSize: 10,
                         color: phoneLength < 7
@@ -497,13 +500,13 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isPhoneValid && hasMinDigits
-                        ? const Color(0xFF2ED573).withOpacity(0.05)
-                        : Colors.orange.withOpacity(0.05),
+                        ? const Color(0xFF2ED573).withValues(alpha: 0.05)
+                        : Colors.orange.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isPhoneValid && hasMinDigits
-                          ? const Color(0xFF2ED573).withOpacity(0.2)
-                          : Colors.orange.withOpacity(0.2),
+                          ? const Color(0xFF2ED573).withValues(alpha: 0.2)
+                          : Colors.orange.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Row(
@@ -526,7 +529,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                               ? 'Fadlan geli lambarka $_providerName'
                               : phoneLength < 7
                               ? '⚠️ Fadlan geli ugu yaraan 7 lambar'
-                              : '⚠️ Waa inuu ku bilaabmaa ${_providerPrefixDisplay}',
+                              : '⚠️ Waa inuu ku bilaabmaa $_providerPrefixDisplay',
                           style: TextStyle(
                             fontSize: 12,
                             color: isPhoneValid && hasMinDigits
@@ -551,13 +554,13 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color:
-                  _currentPaymentMethod?.color.withOpacity(0.05) ??
-                  Colors.grey.withOpacity(0.05),
+                  _currentPaymentMethod?.color.withValues(alpha: 0.05) ??
+                  Colors.grey.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color:
-                    _currentPaymentMethod?.color.withOpacity(0.2) ??
-                    Colors.grey.withOpacity(0.2),
+                    _currentPaymentMethod?.color.withValues(alpha: 0.2) ??
+                    Colors.grey.withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -566,8 +569,8 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color:
-                        _currentPaymentMethod?.color.withOpacity(0.15) ??
-                        Colors.grey.withOpacity(0.15),
+                        _currentPaymentMethod?.color.withValues(alpha: 0.15) ??
+                        Colors.grey.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -621,7 +624,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -635,7 +638,7 @@ class CheckoutAddressSectionState extends State<CheckoutAddressSection> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: iconColor, size: 18),

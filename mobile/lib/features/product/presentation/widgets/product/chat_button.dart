@@ -13,9 +13,11 @@ class ChatWithAdminButton extends StatelessWidget {
         width: 50,
         height: 50,
         decoration: BoxDecoration(
-          color: const Color(0xFF2ED573).withOpacity(0.1),
+          color: const Color(0xFF2ED573).withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.3)),
+          border: Border.all(
+            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+          ),
         ),
         child: const Icon(Iconsax.message, color: Color(0xFF2ED573), size: 24),
       ),

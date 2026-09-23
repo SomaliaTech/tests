@@ -13,9 +13,10 @@ import 'package:mobile/features/notifications/domain/usecases/get_notifications.
 import 'package:mobile/features/notifications/domain/usecases/mark_all_as_read.dart';
 import 'package:mobile/features/notifications/domain/usecases/mark_as_read.dart';
 import 'package:mobile/features/notifications/presentation/bloc/notifications_bloc.dart';
+import 'package:flutter/foundation.dart';
 
 void registerNotificationDependencies(GetIt sl) {
-  print('📦 Registering Notification Dependencies...');
+  if (kDebugMode) debugPrint('📦 Registering Notification Dependencies...');
 
   // Local Data Source
   if (!sl.isRegistered<NotificationsLocalDataSource>()) {
@@ -80,5 +81,5 @@ void registerNotificationDependencies(GetIt sl) {
     );
   }
 
-  print('✅ Notification Dependencies Registered');
+  if (kDebugMode) debugPrint('✅ Notification Dependencies Registered');
 }

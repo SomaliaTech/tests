@@ -82,7 +82,7 @@ class BannerActionLinkSelector extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: displayColor.withOpacity(0.1),
+                    color: displayColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(displayIcon, color: displayColor, size: 20),
@@ -296,7 +296,7 @@ class BannerActionLinkSelector extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 22),
@@ -371,20 +371,22 @@ class BannerActionLinkSelector extends StatelessWidget {
               Expanded(
                 child: BlocBuilder<AdminProductBloc, AdminProductState>(
                   builder: (context, state) {
-                    if (state is AdminProductsLoading)
+                    if (state is AdminProductsLoading) {
                       return const Center(
                         child: CircularProgressIndicator(
                           color: Color(0xFF2ED573),
                         ),
                       );
+                    }
                     if (state is AdminProductsLoaded) {
-                      if (state.products.isEmpty)
+                      if (state.products.isEmpty) {
                         return const Center(
                           child: Text(
                             'No products found.',
                             style: TextStyle(color: Colors.grey),
                           ),
                         );
+                      }
                       return ListView.builder(
                         controller: scrollController,
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -395,13 +397,14 @@ class BannerActionLinkSelector extends StatelessWidget {
                         ),
                       );
                     }
-                    if (state is AdminProductsError)
+                    if (state is AdminProductsError) {
                       return Center(
                         child: Text(
                           'Error: ${state.message}',
                           style: const TextStyle(color: Colors.red),
                         ),
                       );
+                    }
                     return const SizedBox.shrink();
                   },
                 ),
@@ -524,20 +527,22 @@ class BannerActionLinkSelector extends StatelessWidget {
               Expanded(
                 child: BlocBuilder<AdminProductBloc, AdminProductState>(
                   builder: (context, state) {
-                    if (state is AdminCategoriesLoading)
+                    if (state is AdminCategoriesLoading) {
                       return const Center(
                         child: CircularProgressIndicator(
                           color: Color(0xFF2ED573),
                         ),
                       );
+                    }
                     if (state is AdminCategoriesLoaded) {
-                      if (state.categories.isEmpty)
+                      if (state.categories.isEmpty) {
                         return const Center(
                           child: Text(
                             'No categories found.',
                             style: TextStyle(color: Colors.grey),
                           ),
                         );
+                      }
                       return ListView.builder(
                         controller: scrollController,
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -548,13 +553,14 @@ class BannerActionLinkSelector extends StatelessWidget {
                         ),
                       );
                     }
-                    if (state is AdminCategoriesError)
+                    if (state is AdminCategoriesError) {
                       return Center(
                         child: Text(
                           'Error: ${state.message}',
                           style: const TextStyle(color: Colors.red),
                         ),
                       );
+                    }
                     return const SizedBox.shrink();
                   },
                 ),
@@ -589,7 +595,7 @@ class BannerActionLinkSelector extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
+                color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -682,8 +688,9 @@ class BannerActionLinkSelector extends StatelessWidget {
       }
     } catch (_) {}
     try {
-      if (p.imageUrls != null && p.imageUrls.isNotEmpty)
+      if (p.imageUrls != null && p.imageUrls.isNotEmpty) {
         return p.imageUrls.first.toString();
+      }
     } catch (_) {}
     return null;
   }

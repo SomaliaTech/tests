@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/cart/domain/usecases/add_to_cart.dart';
@@ -46,10 +46,12 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   ) async {
     final currentState = state;
 
-    debugPrint('🛒 CartBloc._onAddToCart: ${event.item.name}');
-    debugPrint('🛒 productId: ${event.item.productId}');
-    debugPrint('🛒 productVariantId: ${event.item.productVariantId}');
-    debugPrint('🛒 quantity: ${event.item.quantity}');
+    if (kDebugMode) debugPrint('🛒 CartBloc._onAddToCart: ${event.item.name}');
+    if (kDebugMode) debugPrint('🛒 productId: ${event.item.productId}');
+    if (kDebugMode) {
+      debugPrint('🛒 productVariantId: ${event.item.productVariantId}');
+    }
+    if (kDebugMode) debugPrint('🛒 quantity: ${event.item.quantity}');
 
     // ✅ Optimistic update with PROPER merge logic
     if (currentState is CartLoaded) {
@@ -64,12 +66,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
         updatedItems[existingIndex] = existingItem.copyWith(
           quantity: existingItem.quantity + event.item.quantity,
         );
-        debugPrint(
-          '🛒 Merged with existing item: ${existingItem.name}, new qty: ${updatedItems[existingIndex].quantity}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '🛒 Merged with existing item: ${existingItem.name}, new qty: ${updatedItems[existingIndex].quantity}',
+          );
+        }
       } else {
         updatedItems = [...currentState.items, event.item];
-        debugPrint('🛒 Added new item: ${event.item.name}');
+        if (kDebugMode) debugPrint('🛒 Added new item: ${event.item.name}');
       }
       _emitCartLoaded(updatedItems, emit);
     }
@@ -78,12 +82,12 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
     result.fold(
       (failure) {
-        debugPrint('❌ Add to cart FAILED: ${failure.message}');
+        if (kDebugMode) debugPrint('❌ Add to cart FAILED: ${failure.message}');
         emit(CartError(failure.message));
         add(LoadCartEvent());
       },
       (_) {
-        debugPrint('✅ Add to cart SUCCESS');
+        if (kDebugMode) debugPrint('✅ Add to cart SUCCESS');
         add(LoadCartEvent());
       },
     );

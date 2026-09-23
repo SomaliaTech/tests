@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/chat/presentation/screens/conversations_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -59,7 +60,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
       final diff = now.difference(_lastConversationLoad!);
 
       if (diff.inSeconds < 5) {
-        debugPrint('⏳ Skipping conversation reload, too soon');
+        if (kDebugMode) debugPrint('⏳ Skipping conversation reload, too soon');
         return;
       }
     }
@@ -185,7 +186,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
@@ -211,7 +212,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withValues(alpha: 0.02),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -365,7 +366,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -405,7 +406,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(_getErrorIcon(message), size: 48, color: Colors.red),
@@ -497,7 +498,7 @@ class _ConversationCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),

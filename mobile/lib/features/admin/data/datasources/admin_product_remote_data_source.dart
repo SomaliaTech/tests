@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/data/datasources/admin_product_remote_data_source_impl.dart
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
@@ -107,7 +107,11 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
     request.headers['Authorization'] = headers['Authorization']!;
     request.fields['data'] = json.encode(productData);
 
-    debugPrint('📤 [DataSource] Creating product with ${images.length} images');
+    if (kDebugMode) {
+      debugPrint(
+        '📤 [DataSource] Creating product with ${images.length} images',
+      );
+    }
 
     for (int i = 0; i < images.length; i++) {
       final image = images[i];
@@ -125,14 +129,16 @@ class AdminProductRemoteDataSourceImpl implements AdminProductRemoteDataSource {
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
-    debugPrint('📡 Create Response Status: ${response.statusCode}');
+    if (kDebugMode) {
+      debugPrint('📡 Create Response Status: ${response.statusCode}');
+    }
 
     if (response.statusCode == 201 || response.statusCode == 200) {
       final data = json.decode(response.body);
       return data['id'] ?? data['product']?['id'] ?? '';
     } else {
-      debugPrint('❌ Create failed: ${response.statusCode}');
-      debugPrint('   Response: ${response.body}');
+      if (kDebugMode) debugPrint('❌ Create failed: ${response.statusCode}');
+      if (kDebugMode) debugPrint('   Response: ${response.body}');
       throw ServerException('Failed to create product: ${response.statusCode}');
     }
   }

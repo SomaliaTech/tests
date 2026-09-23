@@ -8,11 +8,16 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// ─────────────────────────────────────────────────────────────
+// Load key.properties from android/
+// ─────────────────────────────────────────────────────────────
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+} else {
+    println("⚠️  key.properties not found at ${keystorePropertiesFile.absolutePath}")
 }
 
 android {
@@ -38,26 +43,43 @@ android {
         versionName = flutter.versionName
         multiDexEnabled = true
 
-        manifestPlaceholders["applicationName"] = "android.app.Application"
-        manifestPlaceholders["facebookClientToken"] = "417cad25aacd2d0615bda33621a37e68"
+        // ❌ REMOVED: manifestPlaceholders["applicationName"]
+        //    → Flutter injects this automatically. Overriding it breaks plugin registration.
+        // ❌ REMOVED: manifestPlaceholders["facebookClientToken"]
+        //    → Handled via AndroidManifest.xml using @string/facebook_client_token.
     }
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String?
-            keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = keystoreProperties["storeFile"]?.let { file(it as String) }
-            storePassword = keystoreProperties["storePassword"] as String?
+            if (!keystorePropertiesFile.exists()) {
+                throw GradleException(
+                    "❌ key.properties not found at ${keystorePropertiesFile.absolutePath}\n" +
+                    "   Create it with: storeFile, storePassword, keyAlias, keyPassword"
+                )
+            }
+
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String
+            keyAlias = keystoreProperties["keyAlias"] as String
+            keyPassword = keystoreProperties["keyPassword"] as String
+
+            println("🔑 Release keystore: ${storeFile?.absolutePath}")
+            println("🔑 Release keystore exists: ${storeFile?.exists()}")
         }
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+
+            // Keep false for first release. Enable + add proguard-rules.pro later.
             isMinifyEnabled = false
             isShrinkResources = false
+            // proguardFiles(
+            //     getDefaultProguardFile("proguard-android-optimize.txt"),
+            //     "proguard-rules.pro"
+            // )
         }
-
         debug {
             signingConfig = signingConfigs.getByName("debug")
         }

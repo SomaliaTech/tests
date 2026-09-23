@@ -4,9 +4,10 @@ import 'package:mobile/features/tracking/data/repositories/tracking_repository_i
 import 'package:mobile/features/tracking/domain/repositories/tracking_repository.dart';
 import 'package:mobile/features/tracking/domain/usecases/get_tracking_info.dart';
 import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
+import 'package:flutter/foundation.dart';
 
 void trackingRegisterDependencies(GetIt sl) {
-  print('📦 Registering Tracking Dependencies...');
+  if (kDebugMode) debugPrint('📦 Registering Tracking Dependencies...');
 
   // Data Sources
   if (!sl.isRegistered<TrackingRemoteDataSource>()) {
@@ -37,5 +38,5 @@ void trackingRegisterDependencies(GetIt sl) {
     sl.registerFactory(() => TrackingBloc(getTrackingInfo: sl()));
   }
 
-  print('✅ Tracking Dependencies Registered');
+  if (kDebugMode) debugPrint('✅ Tracking Dependencies Registered');
 }

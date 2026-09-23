@@ -5,13 +5,14 @@ import 'package:mobile/features/profile/data/repositories/market_repository_impl
 import 'package:mobile/features/profile/domain/repositories/market_repository.dart';
 import 'package:mobile/features/product/domain/usecases/get_markets.dart';
 import 'package:mobile/features/product/presentation/blocs/market_bloc/market_bloc.dart';
+import 'package:flutter/foundation.dart';
 
 void registerMarketDependencies(GetIt sl) {
-  print('🔄 Registering Market Dependencies...');
+  if (kDebugMode) debugPrint('🔄 Registering Market Dependencies...');
 
   // Data Sources
   if (!sl.isRegistered<MarketRemoteDataSource>()) {
-    print('📦 Registering MarketRemoteDataSource...');
+    if (kDebugMode) debugPrint('📦 Registering MarketRemoteDataSource...');
     sl.registerLazySingleton<MarketRemoteDataSource>(
       () => MarketRemoteDataSourceImpl(client: sl()),
     );
@@ -19,7 +20,7 @@ void registerMarketDependencies(GetIt sl) {
 
   // Repositories
   if (!sl.isRegistered<MarketRepository>()) {
-    print('📦 Registering MarketRepository...');
+    if (kDebugMode) debugPrint('📦 Registering MarketRepository...');
     sl.registerLazySingleton<MarketRepository>(
       () => MarketRepositoryImpl(remoteDataSource: sl()),
     );
@@ -27,15 +28,15 @@ void registerMarketDependencies(GetIt sl) {
 
   // Use Cases
   if (!sl.isRegistered<GetMarkets>()) {
-    print('📦 Registering GetMarkets...');
+    if (kDebugMode) debugPrint('📦 Registering GetMarkets...');
     sl.registerLazySingleton(() => GetMarkets(sl()));
   }
 
   // BLoCs - Use registerFactory for BLoCs
   if (!sl.isRegistered<MarketBloc>()) {
-    print('📦 Registering MarketBloc...');
+    if (kDebugMode) debugPrint('📦 Registering MarketBloc...');
     sl.registerFactory(() => MarketBloc(getMarkets: sl()));
   }
 
-  print('✅ Market Dependencies Registered Successfully');
+  if (kDebugMode) debugPrint('✅ Market Dependencies Registered Successfully');
 }

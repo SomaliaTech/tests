@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/widgets/banner_form/banner_image_upload.dart
 
 import 'dart:io';
@@ -272,7 +273,7 @@ class BannerImageUpload extends StatelessWidget {
         await _uploadImage(File(image.path));
       }
     } catch (e) {
-      debugPrint('Failed to pick image: $e');
+      if (kDebugMode) debugPrint('Failed to pick image: $e');
     }
   }
 
@@ -308,7 +309,7 @@ class BannerImageUpload extends StatelessWidget {
         throw Exception('Upload failed');
       }
     } catch (e) {
-      debugPrint('Upload error: $e');
+      if (kDebugMode) debugPrint('Upload error: $e');
     }
   }
 }

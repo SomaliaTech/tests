@@ -108,7 +108,7 @@ export class AuthService {
   async sendOtp(phoneNumber: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
+    console.log('otp', otpCode);
     const hashedOtp = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)
@@ -686,9 +686,18 @@ export class AuthService {
         throw new UnauthorizedException('Invalid Google ID token format');
       }
 
+      // const ticket = await this.googleClient.verifyIdToken({
+      //   idToken,
+      //   audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
+      // });
+
       const ticket = await this.googleClient.verifyIdToken({
         idToken,
-        audience: this.configService.get<string>('GOOGLE_CLIENT_ID'),
+        audience: [
+          '344221955618-muee8lsboovn5813athfqmrrcoblsqcs.apps.googleusercontent.com', // web
+          '344221955618-9f6qefop43l00p475v6cli0s3i4gg5rk.apps.googleusercontent.com', // android
+          '344221955618-c0sh2bkh1s0uoo4dkjmcdfsupjvm262j.apps.googleusercontent.com', // ios
+        ],
       });
 
       const payload = ticket.getPayload();

@@ -4,6 +4,7 @@ import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/product/data/models/banner_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class BannerRemoteDataSource {
   Future<List<BannerModel>> getActiveBanners();
@@ -58,7 +59,10 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         }
       }
 
-      print('⚠️ Could not extract list from map with keys: ${response.keys}');
+      if (kDebugMode)
+        debugPrint(
+          '⚠️ Could not extract list from map with keys: ${response.keys}',
+        );
     }
 
     return [];
@@ -88,14 +92,21 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         headers: {'Content-Type': 'application/json'},
       );
 
-      print('📦 [Banners] Active Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint(
+          '📦 [Banners] Active Response Status: ${response.statusCode}',
+        );
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
-        print('📦 [Banners] Active response type: ${decoded.runtimeType}');
+        if (kDebugMode)
+          debugPrint(
+            '📦 [Banners] Active response type: ${decoded.runtimeType}',
+          );
 
         final jsonList = _extractList(decoded, preferredKey: 'banners');
-        print('✅ [Banners] Found ${jsonList.length} active banners');
+        if (kDebugMode)
+          debugPrint('✅ [Banners] Found ${jsonList.length} active banners');
 
         return jsonList
             .map((json) => BannerModel.fromJson(json as Map<String, dynamic>))
@@ -104,7 +115,8 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         throw ServerException('Failed to load banners: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Banners] Error loading active banners: $e');
+      if (kDebugMode)
+        debugPrint('❌ [Banners] Error loading active banners: $e');
       if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }
@@ -122,19 +134,22 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         },
       );
 
-      print('📦 [Banners] All Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📦 [Banners] All Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
-        print('📦 [Banners] All response type: ${decoded.runtimeType}');
+        if (kDebugMode)
+          debugPrint('📦 [Banners] All response type: ${decoded.runtimeType}');
 
         // Debug: Print keys if it's a map
         if (decoded is Map) {
-          print('📦 [Banners] Map keys: ${decoded.keys}');
+          if (kDebugMode) debugPrint('📦 [Banners] Map keys: ${decoded.keys}');
         }
 
         final jsonList = _extractList(decoded, preferredKey: 'banners');
-        print('✅ [Banners] Found ${jsonList.length} banners');
+        if (kDebugMode)
+          debugPrint('✅ [Banners] Found ${jsonList.length} banners');
 
         return jsonList
             .map((json) => BannerModel.fromJson(json as Map<String, dynamic>))
@@ -143,7 +158,7 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         throw ServerException('Failed to load banners: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Banners] Error loading all banners: $e');
+      if (kDebugMode) debugPrint('❌ [Banners] Error loading all banners: $e');
       if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }
@@ -300,18 +315,22 @@ class BannerRemoteDataSourceImpl implements BannerRemoteDataSource {
         body: json.encode({'image': base64Image, 'fileName': fileName}),
       );
 
-      print('📦 [Banner Upload] Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint(
+          '📦 [Banner Upload] Response Status: ${response.statusCode}',
+        );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final decoded = json.decode(response.body);
-        print('✅ [Banner Upload] Image uploaded successfully');
+        if (kDebugMode)
+          debugPrint('✅ [Banner Upload] Image uploaded successfully');
         return decoded;
       } else {
-        print('❌ [Banner Upload] Error: ${response.body}');
+        if (kDebugMode) debugPrint('❌ [Banner Upload] Error: ${response.body}');
         throw ServerException('Failed to upload image: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Banner Upload] Exception: $e');
+      if (kDebugMode) debugPrint('❌ [Banner Upload] Exception: $e');
       if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
+import 'package:flutter/foundation.dart';
 
 class CartItemCard extends StatelessWidget {
   final CartItem item;
@@ -175,11 +176,18 @@ class CartItemCard extends StatelessWidget {
                               // Plus Button
                               GestureDetector(
                                 onTap: () {
-                                  print('🔵 Plus button tapped!');
-                                  print('🔵 canIncrease: ${item.canIncrease}');
-                                  print('🔵 quantity: ${item.quantity}');
-                                  print('🔵 maxStock: ${item.maxStock}');
-                                  print('🔵 inStock: ${item.inStock}');
+                                  if (kDebugMode)
+                                    debugPrint('🔵 Plus button tapped!');
+                                  if (kDebugMode)
+                                    debugPrint(
+                                      '🔵 canIncrease: ${item.canIncrease}',
+                                    );
+                                  if (kDebugMode)
+                                    debugPrint('🔵 quantity: ${item.quantity}');
+                                  if (kDebugMode)
+                                    debugPrint('🔵 maxStock: ${item.maxStock}');
+                                  if (kDebugMode)
+                                    debugPrint('🔵 inStock: ${item.inStock}');
 
                                   if (item.canIncrease) {
                                     HapticFeedback.lightImpact();

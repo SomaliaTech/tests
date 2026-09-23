@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/order/presentation/screens/order_details_screen.dart';
+import 'package:flutter/foundation.dart';
 
 class PaymentSuccessPage extends StatelessWidget {
   final String orderId;
@@ -20,7 +21,7 @@ class PaymentSuccessPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print("orderid: $orderId");
+    if (kDebugMode) debugPrint("orderid: $orderId");
     return Scaffold(
       body: Container(
         width: double.infinity,

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 // ✅ ADD 'message' to the enum
 enum NotificationType { order, promotion, system, payment, message }
@@ -169,7 +170,7 @@ class NotificationEntity extends Equatable {
         type = NotificationType.system;
         break;
       default:
-        print('⚠️ Unknown type: $typeValue');
+        if (kDebugMode) debugPrint('⚠️ Unknown type: $typeValue');
         type = NotificationType.system;
     }
 

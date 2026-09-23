@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/screens/edit_user/edit_user_screen.dart
 
 import 'dart:async';
@@ -134,7 +135,9 @@ class _EditUserScreenState extends State<EditUserScreen> {
 
         canToggleAdmin = isSuperAdmin;
       } catch (e) {
-        debugPrint('❌ [EditUser] PermissionService unavailable: $e');
+        if (kDebugMode) {
+          debugPrint('❌ [EditUser] PermissionService unavailable: $e');
+        }
       }
 
       if (!mounted) return;
@@ -145,7 +148,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
         _canAssignRoles = canAssignRoles;
       });
     } catch (e) {
-      debugPrint('❌ [EditUser] Failed to load access: $e');
+      if (kDebugMode) debugPrint('❌ [EditUser] Failed to load access: $e');
       if (!mounted) return;
       setState(() {
         _isCurrentUserSuperAdmin = false;
@@ -162,7 +165,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
       if (mounted) setState(() => _initialUserRoles = roles);
       return roles;
     } catch (e) {
-      debugPrint('❌ [EditUser] Failed to load user roles: $e');
+      if (kDebugMode) debugPrint('❌ [EditUser] Failed to load user roles: $e');
       return [];
     }
   }
@@ -281,12 +284,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
       // 2. Assign / remove roles
       if (rolesChanged) {
         for (final roleId in List<String>.from(_rolesToAdd)) {
-          debugPrint('📤 [EditUser] Assigning role: $roleId');
+          if (kDebugMode) debugPrint('📤 [EditUser] Assigning role: $roleId');
           await roleRepository.assignRoleToUser(widget.user.id, roleId);
         }
 
         for (final roleId in List<String>.from(_rolesToRemove)) {
-          debugPrint('📤 [EditUser] Removing role: $roleId');
+          if (kDebugMode) debugPrint('📤 [EditUser] Removing role: $roleId');
           try {
             await roleRepository.removeRoleFromUser(widget.user.id, roleId);
           } catch (e) {
@@ -308,7 +311,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
       _showToast('User updated successfully', true);
       Navigator.pop(context, true);
     } catch (e) {
-      debugPrint('❌ [EditUser] Save error: $e');
+      if (kDebugMode) debugPrint('❌ [EditUser] Save error: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
       _showToast(e.toString(), false);

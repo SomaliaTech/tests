@@ -40,7 +40,7 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached latest products: $e');
+      if (kDebugMode) debugPrint('❌ Error reading cached latest products: $e');
     }
     return [];
   }
@@ -52,7 +52,7 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
       final jsonList = products.map((p) => _productToJson(p)).toList();
       await _box.put(_latestKey, json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching latest products: $e');
+      if (kDebugMode) debugPrint('❌ Error caching latest products: $e');
     }
   }
 
@@ -67,7 +67,9 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached featured products: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached featured products: $e');
+      }
     }
     return [];
   }
@@ -78,7 +80,7 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
       final jsonList = products.map((p) => _productToJson(p)).toList();
       await _box.put(_featuredKey, json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching featured products: $e');
+      if (kDebugMode) debugPrint('❌ Error caching featured products: $e');
     }
   }
 
@@ -93,9 +95,11 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint(
-        '❌ Error reading cached products for category $categoryId: $e',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '❌ Error reading cached products for category $categoryId: $e',
+        );
+      }
     }
     return [];
   }
@@ -109,7 +113,9 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
       final jsonList = products.map((p) => _productToJson(p)).toList();
       await _box.put('category_products_$categoryId', json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching products for category $categoryId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error caching products for category $categoryId: $e');
+      }
     }
   }
 
@@ -122,7 +128,9 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
         return ProductModel.fromJson(jsonMap);
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached product $productId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached product $productId: $e');
+      }
     }
     return null;
   }
@@ -133,14 +141,14 @@ class ProductLocalDataSourceImpl implements ProductLocalDataSource {
       final jsonMap = _productToJson(product);
       await _box.put('product_${product.id}', json.encode(jsonMap));
     } catch (e) {
-      debugPrint('❌ Error caching product ${product.id}: $e');
+      if (kDebugMode) debugPrint('❌ Error caching product ${product.id}: $e');
     }
   }
 
   @override
   Future<void> clearCache() async {
     await _box.clear();
-    debugPrint('🗑️ Product cache cleared');
+    if (kDebugMode) debugPrint('🗑️ Product cache cleared');
   }
 
   Map<String, dynamic> _productToJson(Product product) {

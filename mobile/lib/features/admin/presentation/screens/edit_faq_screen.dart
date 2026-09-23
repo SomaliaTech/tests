@@ -357,7 +357,7 @@ class _EditFaqScreenState extends State<EditFaqScreen> {
                               onChanged: (value) {
                                 setState(() => _isActive = value);
                               },
-                              activeColor: Colors.white,
+                              activeThumbColor: Colors.white,
                               activeTrackColor: const Color(0xFF2ED573),
                               inactiveThumbColor: Colors.white,
                               inactiveTrackColor: Colors.grey.shade300,
@@ -430,7 +430,7 @@ class _EditFaqScreenState extends State<EditFaqScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -444,7 +444,7 @@ class _EditFaqScreenState extends State<EditFaqScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: AppTheme.primaryColor, size: 18),

@@ -8,9 +8,10 @@ import 'package:mobile/features/profile/domain/usecases/get_profile.dart';
 import 'package:mobile/features/profile/domain/usecases/update_profile.dart';
 import 'package:mobile/features/profile/domain/usecases/upload_profile_image.dart';
 import 'package:mobile/features/profile/presentation/bloc/profile_bloc.dart';
+import 'package:flutter/foundation.dart';
 
 void registerProfileDependencies(GetIt sl) {
-  print('📦 Registering Profile Dependencies...');
+  if (kDebugMode) debugPrint('📦 Registering Profile Dependencies...');
 
   // Data Sources
   if (!sl.isRegistered<ProfileRemoteDataSource>()) {
@@ -54,5 +55,5 @@ void registerProfileDependencies(GetIt sl) {
     );
   }
 
-  print('✅ Profile Dependencies Registered');
+  if (kDebugMode) debugPrint('✅ Profile Dependencies Registered');
 }

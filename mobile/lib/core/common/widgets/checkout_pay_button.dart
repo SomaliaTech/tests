@@ -91,7 +91,7 @@ class CheckoutPayButton extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -114,7 +114,7 @@ class CheckoutPayButton extends StatelessWidget {
                   backgroundColor: Colors.transparent,
                   foregroundColor: Colors.white,
                   shadowColor: canPay
-                      ? const Color(0xFF2ED573).withOpacity(0.4)
+                      ? const Color(0xFF2ED573).withValues(alpha: 0.4)
                       : Colors.transparent,
                   elevation: canPay ? 8 : 0,
                   padding: EdgeInsets.zero,

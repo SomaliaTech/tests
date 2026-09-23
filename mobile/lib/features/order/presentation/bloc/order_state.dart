@@ -1,6 +1,5 @@
 // lib/features/order/presentation/bloc/order_state.dart
 import 'package:equatable/equatable.dart';
-import 'package:mobile/features/order/domain/entities/order.dart';
 
 abstract class OrderState extends Equatable {
   const OrderState();

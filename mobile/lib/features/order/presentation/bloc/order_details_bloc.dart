@@ -3,10 +3,14 @@ import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/order/domain/usecases/get_order_details.dart';
 import 'order_details_event.dart';
 import 'order_details_state.dart';
+import 'package:flutter/foundation.dart';
 
 class OrderDetailsBloc extends Bloc<OrderDetailsEvent, OrderDetailsState> {
   final GetOrderDetails getOrderDetails;
   final StorageService storageService;
+
+  // ✅ Track last loaded order so we can skip duplicate loads
+  String? _lastLoadedOrderId;
 
   OrderDetailsBloc({
     required this.getOrderDetails,
@@ -20,15 +24,28 @@ class OrderDetailsBloc extends Bloc<OrderDetailsEvent, OrderDetailsState> {
     LoadOrderDetailsEvent event,
     Emitter<OrderDetailsState> emit,
   ) async {
+    // ✅ Skip if same order is already loaded or loading
+    if (_lastLoadedOrderId == event.orderId &&
+        (state is OrderDetailsLoaded || state is OrderDetailsLoading)) {
+      if (kDebugMode) {
+        debugPrint(
+          '⏭️ [OrderDetailsBloc] Skipping duplicate load for ${event.orderId}',
+        );
+      }
+      return;
+    }
+    _lastLoadedOrderId = event.orderId;
+
     emit(OrderDetailsLoading());
 
-    // ✅ Get admin status from storage
     final isAdmin = await storageService.getIsAdmin();
     final isSuperAdmin = await storageService.getIsSuperAdmin();
 
-    print(
-      '🔍 [OrderDetailsBloc] isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🔍 [OrderDetailsBloc] isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
+      );
+    }
 
     final result = await getOrderDetails(
       event.orderId,
@@ -36,10 +53,10 @@ class OrderDetailsBloc extends Bloc<OrderDetailsEvent, OrderDetailsState> {
       isSuperAdmin: isSuperAdmin,
     );
 
-    result.fold(
-      (failure) => emit(OrderDetailsError(failure.message)),
-      (order) => emit(OrderDetailsLoaded(order)),
-    );
+    result.fold((failure) {
+      _lastLoadedOrderId = null; // allow retry
+      emit(OrderDetailsError(failure.message));
+    }, (order) => emit(OrderDetailsLoaded(order)));
   }
 
   Future<void> _onRefreshOrderDetails(
@@ -55,9 +72,9 @@ class OrderDetailsBloc extends Bloc<OrderDetailsEvent, OrderDetailsState> {
       isSuperAdmin: isSuperAdmin,
     );
 
-    result.fold(
-      (failure) => emit(OrderDetailsError(failure.message)),
-      (order) => emit(OrderDetailsLoaded(order)),
-    );
+    result.fold((failure) => emit(OrderDetailsError(failure.message)), (order) {
+      _lastLoadedOrderId = event.orderId;
+      emit(OrderDetailsLoaded(order));
+    });
   }
 }

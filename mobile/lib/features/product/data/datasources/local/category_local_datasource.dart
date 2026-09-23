@@ -38,7 +38,7 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached categories: $e');
+      if (kDebugMode) debugPrint('❌ Error reading cached categories: $e');
     }
     return [];
   }
@@ -49,7 +49,7 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
       final jsonList = categories.map((c) => _categoryToJson(c)).toList();
       await _box.put(_categoriesKey, json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching categories: $e');
+      if (kDebugMode) debugPrint('❌ Error caching categories: $e');
     }
   }
 
@@ -64,7 +64,9 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached parent categories: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached parent categories: $e');
+      }
     }
     return [];
   }
@@ -75,7 +77,7 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
       final jsonList = categories.map((c) => _categoryToJson(c)).toList();
       await _box.put(_parentCategoriesKey, json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching parent categories: $e');
+      if (kDebugMode) debugPrint('❌ Error caching parent categories: $e');
     }
   }
 
@@ -90,7 +92,9 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached subcategories for $parentId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached subcategories for $parentId: $e');
+      }
     }
     return [];
   }
@@ -104,7 +108,9 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
       final jsonList = subcategories.map((c) => _categoryToJson(c)).toList();
       await _box.put('subcategories_$parentId', json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching subcategories for $parentId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error caching subcategories for $parentId: $e');
+      }
     }
   }
 
@@ -117,7 +123,9 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
         return CategoryModel.fromJson(jsonMap);
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached category $categoryId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached category $categoryId: $e');
+      }
     }
     return null;
   }
@@ -128,7 +136,7 @@ class CategoryLocalDataSourceImpl implements CategoryLocalDataSource {
       final jsonMap = _categoryToJson(category);
       await _box.put('category_${category.id}', json.encode(jsonMap));
     } catch (e) {
-      debugPrint('❌ Error caching category ${category.id}: $e');
+      if (kDebugMode) debugPrint('❌ Error caching category ${category.id}: $e');
     }
   }
 

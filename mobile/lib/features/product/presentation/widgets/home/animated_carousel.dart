@@ -207,7 +207,7 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -239,7 +239,7 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -284,7 +284,7 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
           color: item.backgroundColor ?? Colors.grey[300],
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -332,8 +332,8 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
                       end: Alignment.bottomCenter,
                       colors: [
                         Colors.transparent,
-                        Colors.black.withOpacity(0.15),
-                        Colors.black.withOpacity(0.75),
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.75),
                       ],
                       stops: const [0.0, 0.45, 1.0],
                     ),
@@ -391,7 +391,7 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
                           borderRadius: BorderRadius.circular(22),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha: 0.1),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -433,10 +433,15 @@ class _AnimatedCarouselState extends State<AnimatedCarousel> {
         width: isActive ? 24 : 8,
         height: 8,
         decoration: BoxDecoration(
-          color: isActive ? Colors.white : Colors.white.withOpacity(0.5),
+          color: isActive ? Colors.white : Colors.white.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(4),
           boxShadow: isActive
-              ? [BoxShadow(color: Colors.white.withOpacity(0.4), blurRadius: 4)]
+              ? [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    blurRadius: 4,
+                  ),
+                ]
               : null,
         ),
       ),

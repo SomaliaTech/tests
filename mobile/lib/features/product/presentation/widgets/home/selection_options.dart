@@ -70,7 +70,7 @@ class SelectionOptions extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: actualColor?.withOpacity(0.1),
+          color: actualColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(25),
           border: Border.all(
             color: isSelected ? const Color(0xFF2ED573) : Colors.transparent,

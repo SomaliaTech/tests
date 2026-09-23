@@ -5,6 +5,7 @@ import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/color_model.dart';
 import 'package:mobile/features/admin/data/models/size_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminColorSizeRemoteDataSource {
   Future<List<ColorModel>> getAllColors();
@@ -39,7 +40,7 @@ class AdminColorSizeRemoteDataSourceImpl
   // ==========================================
   @override
   Future<List<ColorModel>> getAllColors() async {
-    print('🔍 [AdminColors] Fetching all colors');
+    if (kDebugMode) debugPrint('🔍 [AdminColors] Fetching all colors');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/colors/all';
@@ -52,7 +53,8 @@ class AdminColorSizeRemoteDataSourceImpl
         },
       );
 
-      print('📡 [AdminColors] Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminColors] Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
@@ -61,14 +63,14 @@ class AdminColorSizeRemoteDataSourceImpl
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminColors] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminColors] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> createColor(Map<String, dynamic> data) async {
-    print('🔍 [AdminColors] Creating color: $data');
+    if (kDebugMode) debugPrint('🔍 [AdminColors] Creating color: $data');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/colors';
@@ -82,20 +84,21 @@ class AdminColorSizeRemoteDataSourceImpl
         body: json.encode(data),
       );
 
-      print('📡 [AdminColors] Create Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminColors] Create Response: ${response.statusCode}');
 
       if (response.statusCode != 201 && response.statusCode != 200) {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminColors] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminColors] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> updateColor(String colorId, Map<String, dynamic> data) async {
-    print('🔍 [AdminColors] Updating color: $colorId');
+    if (kDebugMode) debugPrint('🔍 [AdminColors] Updating color: $colorId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/colors/$colorId';
@@ -119,7 +122,7 @@ class AdminColorSizeRemoteDataSourceImpl
 
   @override
   Future<void> deleteColor(String colorId) async {
-    print('🔍 [AdminColors] Deleting color: $colorId');
+    if (kDebugMode) debugPrint('🔍 [AdminColors] Deleting color: $colorId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/colors/$colorId';
@@ -148,7 +151,7 @@ class AdminColorSizeRemoteDataSourceImpl
   // ==========================================
   @override
   Future<List<SizeModel>> getAllSizes() async {
-    print('🔍 [AdminSizes] Fetching all sizes');
+    if (kDebugMode) debugPrint('🔍 [AdminSizes] Fetching all sizes');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/sizes/all';
@@ -161,7 +164,8 @@ class AdminColorSizeRemoteDataSourceImpl
         },
       );
 
-      print('📡 [AdminSizes] Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminSizes] Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
@@ -170,14 +174,14 @@ class AdminColorSizeRemoteDataSourceImpl
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminSizes] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminSizes] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> createSize(Map<String, dynamic> data) async {
-    print('🔍 [AdminSizes] Creating size: $data');
+    if (kDebugMode) debugPrint('🔍 [AdminSizes] Creating size: $data');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/sizes';
@@ -191,20 +195,21 @@ class AdminColorSizeRemoteDataSourceImpl
         body: json.encode(data),
       );
 
-      print('📡 [AdminSizes] Create Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminSizes] Create Response: ${response.statusCode}');
 
       if (response.statusCode != 201 && response.statusCode != 200) {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminSizes] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminSizes] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> updateSize(String sizeId, Map<String, dynamic> data) async {
-    print('🔍 [AdminSizes] Updating size: $sizeId');
+    if (kDebugMode) debugPrint('🔍 [AdminSizes] Updating size: $sizeId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/sizes/$sizeId';
@@ -228,7 +233,7 @@ class AdminColorSizeRemoteDataSourceImpl
 
   @override
   Future<void> deleteSize(String sizeId) async {
-    print('🔍 [AdminSizes] Deleting size: $sizeId');
+    if (kDebugMode) debugPrint('🔍 [AdminSizes] Deleting size: $sizeId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/sizes/$sizeId';

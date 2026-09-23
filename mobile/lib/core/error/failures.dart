@@ -9,7 +9,7 @@ abstract class Failure extends Equatable {
 
 // 🚨 ADDED: Specific failure for invalid/expired tokens
 class UnauthorizedFailure extends Failure {
-  const UnauthorizedFailure([String message = 'Unauthorized']) : super(message);
+  const UnauthorizedFailure([super.message = 'Unauthorized']);
 }
 
 class ServerFailure extends Failure {

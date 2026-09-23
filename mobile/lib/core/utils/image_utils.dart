@@ -1,6 +1,4 @@
 // lib/core/utils/image_utils.dart
-import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -14,7 +12,7 @@ class ImageUtils {
 
       // Must have scheme and authority
       if (!uri.hasScheme || !uri.hasAuthority) {
-        debugPrint('❌ ImageUtils: Invalid URL format - $url');
+        if (kDebugMode) debugPrint('❌ ImageUtils: Invalid URL format - $url');
         return false;
       }
 
@@ -22,13 +20,15 @@ class ImageUtils {
       if (url.contains('supabase.co')) {
         // Supabase storage URLs should have proper path structure
         if (!url.contains('/storage/v1/object/public/')) {
-          debugPrint('⚠️ ImageUtils: Suspicious Supabase URL - $url');
+          if (kDebugMode) {
+            debugPrint('⚠️ ImageUtils: Suspicious Supabase URL - $url');
+          }
         }
       }
 
       return true;
     } catch (e) {
-      debugPrint('❌ ImageUtils: Error parsing URL - $e');
+      if (kDebugMode) debugPrint('❌ ImageUtils: Error parsing URL - $e');
       return false;
     }
   }
@@ -58,7 +58,9 @@ class ImageUtils {
     // Ensure proper Supabase storage path
     if (fixed.contains('supabase.co') &&
         !fixed.contains('/storage/v1/object/public/')) {
-      debugPrint('⚠️ ImageUtils: Attempting to fix Supabase URL: $url');
+      if (kDebugMode) {
+        debugPrint('⚠️ ImageUtils: Attempting to fix Supabase URL: $url');
+      }
       // This is a simplified fix - you may need to adjust based on your actual URL structure
     }
 

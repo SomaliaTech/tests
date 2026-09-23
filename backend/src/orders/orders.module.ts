@@ -1,20 +1,23 @@
+// src/orders/orders.module.ts
 import { Module, forwardRef } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
-import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { WaafiPayService } from 'src/payment/waafipay.service';
-import { OwnershipGuard } from './guards/ownership.guard';
+import { ChatModule } from '../chat/chat.module';
+import { PaymentModule } from '../payment/payment.module';
+import { AffiliateModule } from '../affiliate/affiliate.module';
 
 @Module({
   imports: [
     DrizzleModule,
-    forwardRef(() => ChatModule),
     forwardRef(() => NotificationsModule),
+    forwardRef(() => ChatModule),
+    forwardRef(() => PaymentModule), // 👈 wrap
+    forwardRef(() => AffiliateModule), // 👈 wrap
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, WaafiPayService, OwnershipGuard],
+  providers: [OrdersService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

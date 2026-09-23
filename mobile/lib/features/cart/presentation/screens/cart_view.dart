@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -111,7 +112,7 @@ class _CartViewState extends State<CartView> {
         }
       }
     } catch (e) {
-      debugPrint('Error loading markets in cart: $e');
+      if (kDebugMode) debugPrint('Error loading markets in cart: $e');
     }
   }
 
@@ -195,16 +196,20 @@ class _CartViewState extends State<CartView> {
     return items.where((item) {
       // Out of stock
       if (!item.inStock) {
-        debugPrint('🔴 Stock issue: ${item.name} - out of stock');
+        if (kDebugMode) {
+          debugPrint('🔴 Stock issue: ${item.name} - out of stock');
+        }
         return true;
       }
       // Check if quantity exceeds real maxStock (not default 999)
       if (item.maxStock > 0 &&
           item.maxStock < 500 &&
           item.quantity > item.maxStock) {
-        debugPrint(
-          '🔴 Stock issue: ${item.name} - qty ${item.quantity} > max ${item.maxStock}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '🔴 Stock issue: ${item.name} - qty ${item.quantity} > max ${item.maxStock}',
+          );
+        }
         return true;
       }
       return false;

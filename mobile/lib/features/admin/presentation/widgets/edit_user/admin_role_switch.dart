@@ -107,7 +107,7 @@ class AdminRoleSwitch extends StatelessWidget {
                 HapticFeedback.lightImpact();
                 onChanged(value);
               },
-              activeColor: Colors.white,
+              activeThumbColor: Colors.white,
               activeTrackColor: AppTheme.primaryColor,
               inactiveThumbColor: Colors.white,
               inactiveTrackColor: Colors.grey.shade300,

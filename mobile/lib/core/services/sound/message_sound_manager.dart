@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/core/services/sound/message_sound_manager.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -33,7 +34,9 @@ class MessageSoundManager {
     try {
       await _soundService.init();
     } catch (e) {
-      debugPrint('⚠️ Sound service init failed (non-critical): $e');
+      if (kDebugMode) {
+        debugPrint('⚠️ Sound service init failed (non-critical): $e');
+      }
     }
 
     _setupLifecycleListener();

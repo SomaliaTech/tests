@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 // lib/core/common/widgets/shared/phone_utils.dart
-import 'package:flutter/material.dart';
 import 'package:mobile/core/common/widgets/shared/payment_method.dart';
 
 class PhoneUtils {
@@ -23,10 +23,14 @@ class PhoneUtils {
 
   // Clean phone number: extract just the local part for Somali numbers
   static String cleanPhoneNumber(String phone) {
-    debugPrint('📱 [PhoneUtils] cleanPhoneNumber input: "$phone"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] cleanPhoneNumber input: "$phone"');
+    }
 
     if (phone.isEmpty) {
-      debugPrint('📱 [PhoneUtils] Phone is empty, returning empty');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] Phone is empty, returning empty');
+      }
       return '';
     }
 
@@ -36,7 +40,9 @@ class PhoneUtils {
     if (!isSomaliNumber(cleaned)) {
       // Remove all non-digit characters except + for international
       cleaned = cleaned.replaceAll(RegExp(r'[^\d+]'), '');
-      debugPrint('📱 [PhoneUtils] International number: "$cleaned"');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] International number: "$cleaned"');
+      }
       return cleaned;
     }
 
@@ -57,13 +63,17 @@ class PhoneUtils {
     // Remove all non-digit characters
     cleaned = cleaned.replaceAll(RegExp(r'[^0-9]'), '');
 
-    debugPrint('📱 [PhoneUtils] Somali number cleaned: "$cleaned"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] Somali number cleaned: "$cleaned"');
+    }
     return cleaned;
   }
 
   // Format phone for display
   static String formatPhoneForDisplay(String phone) {
-    debugPrint('📱 [PhoneUtils] formatPhoneForDisplay input: "$phone"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] formatPhoneForDisplay input: "$phone"');
+    }
 
     if (phone.isEmpty) {
       return '';
@@ -71,7 +81,9 @@ class PhoneUtils {
 
     // For international numbers, keep as is
     if (!isSomaliNumber(phone) && phone.length > 4) {
-      debugPrint('📱 [PhoneUtils] International, keeping as: "$phone"');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] International, keeping as: "$phone"');
+      }
       return phone;
     }
 
@@ -91,25 +103,33 @@ class PhoneUtils {
       formatted += digits;
     }
 
-    debugPrint('📱 [PhoneUtils] Somali formatted: "$formatted"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] Somali formatted: "$formatted"');
+    }
     return formatted;
   }
 
   // Get display phone for UI
   static String getDisplayPhone(String phone) {
-    debugPrint('📱 [PhoneUtils] getDisplayPhone input: "$phone"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] getDisplayPhone input: "$phone"');
+    }
     if (phone.isEmpty) {
       return '';
     }
 
     // For international numbers, return as is
     if (!isSomaliNumber(phone) && phone.length > 4) {
-      debugPrint('📱 [PhoneUtils] International, returning: "$phone"');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] International, returning: "$phone"');
+      }
       return phone;
     }
 
     final result = formatPhoneForDisplay(phone);
-    debugPrint('📱 [PhoneUtils] getDisplayPhone result: "$result"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] getDisplayPhone result: "$result"');
+    }
     return result;
   }
 
@@ -118,9 +138,11 @@ class PhoneUtils {
     // For very short inputs (less than 3 digits), check if prefix starts with it
     final digits = cleanPhoneNumber(phone);
 
-    debugPrint(
-      '📱 [PhoneUtils] matchesProvider - phone: "$phone", prefix: "$prefix", cleaned: "$digits"',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '📱 [PhoneUtils] matchesProvider - phone: "$phone", prefix: "$prefix", cleaned: "$digits"',
+      );
+    }
 
     if (digits.isEmpty) {
       return false;
@@ -132,21 +154,27 @@ class PhoneUtils {
     }
 
     final result = digits.startsWith(prefix);
-    debugPrint('📱 [PhoneUtils] matchesProvider result: $result');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] matchesProvider result: $result');
+    }
     return result;
   }
 
   // Detect provider from phone number (only for Somali numbers)
   static String? detectProvider(String phone, List<PaymentMethod> methods) {
     if (!isSomaliNumber(phone)) {
-      debugPrint('📱 [PhoneUtils] International number, no Somali provider');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] International number, no Somali provider');
+      }
       return null;
     }
 
     final digits = cleanPhoneNumber(phone);
-    debugPrint(
-      '📱 [PhoneUtils] detectProvider - phone: "$phone", cleaned: "$digits"',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '📱 [PhoneUtils] detectProvider - phone: "$phone", cleaned: "$digits"',
+      );
+    }
 
     if (digits.isEmpty) {
       return null;
@@ -155,23 +183,29 @@ class PhoneUtils {
     for (final method in methods) {
       if (digits.startsWith(method.prefix) ||
           method.prefix.startsWith(digits)) {
-        debugPrint(
-          '📱 [PhoneUtils] Detected provider: ${method.id} (${method.prefix})',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '📱 [PhoneUtils] Detected provider: ${method.id} (${method.prefix})',
+          );
+        }
         return method.id;
       }
     }
-    debugPrint('📱 [PhoneUtils] No provider detected');
+    if (kDebugMode) debugPrint('📱 [PhoneUtils] No provider detected');
     return null;
   }
 
   // Format phone for API
   static String formatPhoneForApi(String phone) {
-    debugPrint('📱 [PhoneUtils] formatPhoneForApi input: "$phone"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] formatPhoneForApi input: "$phone"');
+    }
 
     // For international numbers, return as is
     if (!isSomaliNumber(phone) && phone.length > 4) {
-      debugPrint('📱 [PhoneUtils] International, returning: "$phone"');
+      if (kDebugMode) {
+        debugPrint('📱 [PhoneUtils] International, returning: "$phone"');
+      }
       return phone;
     }
 
@@ -179,7 +213,9 @@ class PhoneUtils {
     final digits = cleanPhoneNumber(phone);
     if (digits.isEmpty) return '';
     final result = '+252$digits';
-    debugPrint('📱 [PhoneUtils] Somali formatPhoneForApi: "$result"');
+    if (kDebugMode) {
+      debugPrint('📱 [PhoneUtils] Somali formatPhoneForApi: "$result"');
+    }
     return result;
   }
 }

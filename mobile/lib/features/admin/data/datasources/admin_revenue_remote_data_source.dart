@@ -4,6 +4,7 @@ import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/admin_revenue_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminRevenueRemoteDataSource {
   Future<AdminRevenueSummaryModel> getRevenueSummary(String period);
@@ -34,7 +35,8 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
 
   @override
   Future<AdminRevenueSummaryModel> getRevenueSummary(String period) async {
-    print('🔍 [Revenue] Fetching summary for period: $period');
+    if (kDebugMode)
+      debugPrint('🔍 [Revenue] Fetching summary for period: $period');
     try {
       final token = await _getToken();
       final url =
@@ -48,7 +50,8 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         },
       );
 
-      print('📡 [Revenue] Summary Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [Revenue] Summary Response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         return AdminRevenueSummaryModel.fromJson(json.decode(response.body));
@@ -56,7 +59,7 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Revenue] Error: $e');
+      if (kDebugMode) debugPrint('❌ [Revenue] Error: $e');
       rethrow;
     }
   }
@@ -69,14 +72,14 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
     int limit = 50,
     int offset = 0,
   }) async {
-    print('🔍 [Revenue] Fetching all revenue records');
+    if (kDebugMode) debugPrint('🔍 [Revenue] Fetching all revenue records');
     try {
       final token = await _getToken();
       final uri = Uri.parse('${ApiConstants.baseUrl}/admin/revenue').replace(
         queryParameters: {
           if (search != null && search.isNotEmpty) 'search': search,
-          if (paymentMethod != null) 'paymentMethod': paymentMethod,
-          if (status != null) 'status': status,
+          'paymentMethod': ?paymentMethod,
+          'status': ?status,
           'limit': limit.toString(),
           'offset': offset.toString(),
         },
@@ -90,7 +93,8 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         },
       );
 
-      print('📡 [Revenue] List Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [Revenue] List Response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -104,14 +108,15 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Revenue] Error: $e');
+      if (kDebugMode) debugPrint('❌ [Revenue] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<AdminRevenueModel> getRevenueById(String orderId) async {
-    print('🔍 [Revenue] Fetching details for order: $orderId');
+    if (kDebugMode)
+      debugPrint('🔍 [Revenue] Fetching details for order: $orderId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/revenue/$orderId';
@@ -124,7 +129,8 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         },
       );
 
-      print('📡 [Revenue] Details Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [Revenue] Details Response: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         return AdminRevenueModel.fromJson(json.decode(response.body));
@@ -132,7 +138,7 @@ class AdminRevenueRemoteDataSourceImpl implements AdminRevenueRemoteDataSource {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [Revenue] Error: $e');
+      if (kDebugMode) debugPrint('❌ [Revenue] Error: $e');
       rethrow;
     }
   }

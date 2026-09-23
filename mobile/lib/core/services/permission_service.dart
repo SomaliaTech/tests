@@ -48,8 +48,12 @@ class PermissionService {
             },
           )
           .timeout(const Duration(seconds: 10));
-      debugPrint('🔐 [PermissionService] status: ${response.statusCode}');
-      debugPrint('🔐 [PermissionService] body: ${response.body}');
+      if (kDebugMode) {
+        debugPrint('🔐 [PermissionService] status: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        debugPrint('🔐 [PermissionService] body: ${response.body}');
+      }
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
 
@@ -58,13 +62,15 @@ class PermissionService {
         _permissions = List<String>.from(list ?? []);
         await storageService.savePermissions(_permissions);
       } else {
-        debugPrint(
-          '❌ [PermissionService] Failed: ${response.statusCode} ${response.body}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '❌ [PermissionService] Failed: ${response.statusCode} ${response.body}',
+          );
+        }
         _permissions = await storageService.getPermissions();
       }
     } catch (e) {
-      debugPrint('❌ [PermissionService] Error: $e');
+      if (kDebugMode) debugPrint('❌ [PermissionService] Error: $e');
       _permissions = await storageService.getPermissions();
     }
 

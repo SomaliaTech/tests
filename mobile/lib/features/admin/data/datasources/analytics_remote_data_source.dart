@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:mobile/core/constants/api_constants.dart';
@@ -37,7 +37,7 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         '${ApiConstants.baseUrl}/admin/analytics/all',
       ).replace(queryParameters: {'period': period});
 
-      debugPrint('🔍 [Analytics] GET $uri');
+      if (kDebugMode) debugPrint('🔍 [Analytics] GET $uri');
 
       final response = await client.get(
         uri,
@@ -47,7 +47,9 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         },
       );
 
-      debugPrint('📡 [Analytics] Response Status: ${response.statusCode}');
+      if (kDebugMode) {
+        debugPrint('📡 [Analytics] Response Status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         return AnalyticsDataModel.fromJson(json.decode(response.body));
@@ -57,7 +59,7 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         );
       }
     } catch (e) {
-      debugPrint('❌ [Analytics] Error: $e');
+      if (kDebugMode) debugPrint('❌ [Analytics] Error: $e');
       rethrow;
     }
   }
@@ -76,7 +78,7 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         '${ApiConstants.baseUrl}/admin/analytics/custom-dates',
       ).replace(queryParameters: {'dates': datesString});
 
-      debugPrint('🔍 [Analytics Custom Dates] GET $uri');
+      if (kDebugMode) debugPrint('🔍 [Analytics Custom Dates] GET $uri');
 
       final response = await client.get(
         uri,
@@ -86,9 +88,11 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         },
       );
 
-      debugPrint(
-        '📡 [Analytics Custom Dates] Response Status: ${response.statusCode}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '📡 [Analytics Custom Dates] Response Status: ${response.statusCode}',
+        );
+      }
 
       if (response.statusCode == 200) {
         return AnalyticsDataModel.fromJson(json.decode(response.body));
@@ -98,7 +102,7 @@ class AnalyticsRemoteDataSourceImpl implements AnalyticsRemoteDataSource {
         );
       }
     } catch (e) {
-      debugPrint('❌ [Analytics Custom Dates] Error: $e');
+      if (kDebugMode) debugPrint('❌ [Analytics Custom Dates] Error: $e');
       rethrow;
     }
   }

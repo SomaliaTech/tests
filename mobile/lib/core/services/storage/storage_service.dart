@@ -19,7 +19,8 @@ class StorageService {
   static const String _messageSoundKey = 'message_sound_enabled';
   static const String _permissionsKey = 'cached_permissions';
   static const String _lastActivityKey = 'last_activity_timestamp';
-
+  static const String _isAffiliateKey = 'is_affiliate';
+  static const String _affiliateStatusKey = 'affiliate_status';
   final FlutterSecureStorage _secureStorage;
 
   // ✅ In-memory cache to prevent read delays
@@ -39,7 +40,9 @@ class StorageService {
     // ✅ SKIP security checks in debug mode.
     // Emulators are detected as "not physical devices" and falsely flagged as rooted.
     if (kDebugMode) {
-      debugPrint('🟡 Debug mode: skipping device security check');
+      if (kDebugMode) {
+        debugPrint('🟡 Debug mode: skipping device security check');
+      }
       return true;
     }
 
@@ -51,13 +54,15 @@ class StorageService {
 
         // In release mode, block emulators if desired
         if (!androidInfo.isPhysicalDevice) {
-          debugPrint('⚠️ Android emulator detected in release/profile mode');
+          if (kDebugMode) {
+            debugPrint('⚠️ Android emulator detected in release/profile mode');
+          }
           return false;
         }
 
-        final bootloader = androidInfo.bootloader?.toLowerCase() ?? '';
-        final fingerprint = androidInfo.fingerprint?.toLowerCase() ?? '';
-        final hardware = androidInfo.hardware?.toLowerCase() ?? '';
+        final bootloader = androidInfo.bootloader.toLowerCase() ?? '';
+        final fingerprint = androidInfo.fingerprint.toLowerCase() ?? '';
+        final hardware = androidInfo.hardware.toLowerCase() ?? '';
 
         final isRooted =
             bootloader.contains('root') ||
@@ -65,7 +70,7 @@ class StorageService {
             hardware.contains('goldfish');
 
         if (isRooted) {
-          debugPrint('⚠️ Device appears to be rooted');
+          if (kDebugMode) debugPrint('⚠️ Device appears to be rooted');
           return false;
         }
         return true;
@@ -73,7 +78,9 @@ class StorageService {
         final iosInfo = await deviceInfo.iosInfo;
 
         if (!iosInfo.isPhysicalDevice) {
-          debugPrint('⚠️ iOS simulator detected in release/profile mode');
+          if (kDebugMode) {
+            debugPrint('⚠️ iOS simulator detected in release/profile mode');
+          }
           return false;
         }
 
@@ -82,7 +89,7 @@ class StorageService {
 
       return true;
     } catch (e) {
-      debugPrint('⚠️ Could not check device security: $e');
+      if (kDebugMode) debugPrint('⚠️ Could not check device security: $e');
       // ✅ Do not logout user just because security check failed
       return true;
     }
@@ -97,7 +104,7 @@ class StorageService {
     _lastActivity = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastActivityKey, _lastActivity!.toIso8601String());
-    debugPrint('🔄 Last activity updated: ${_lastActivity}');
+    if (kDebugMode) debugPrint('🔄 Last activity updated: $_lastActivity');
   }
 
   /// Get last activity timestamp
@@ -111,6 +118,40 @@ class StorageService {
       return _lastActivity;
     }
     return null;
+  }
+
+  // ==========================================
+  // ⭐ AFFILIATE STATUS (cached locally)
+  // ==========================================
+
+  Future<void> saveAffiliateStatus({
+    required bool isAffiliate,
+    required String status,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_isAffiliateKey, isAffiliate);
+    await prefs.setString(_affiliateStatusKey, status);
+    if (kDebugMode) {
+      debugPrint(
+        '💾 Affiliate cached: isAffiliate=$isAffiliate, status=$status',
+      );
+    }
+  }
+
+  Future<bool> getIsAffiliate() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_isAffiliateKey) ?? false;
+  }
+
+  Future<String?> getAffiliateStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_affiliateStatusKey);
+  }
+
+  Future<void> clearAffiliateStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_isAffiliateKey);
+    await prefs.remove(_affiliateStatusKey);
   }
 
   /// ✅ Check if session is expired (30 days timeout)
@@ -129,9 +170,13 @@ class StorageService {
     final isExpired = difference.inDays > 30;
 
     if (isExpired) {
-      debugPrint('⚠️ Session expired after ${difference.inDays} days');
+      if (kDebugMode) {
+        debugPrint('⚠️ Session expired after ${difference.inDays} days');
+      }
     } else {
-      debugPrint('✅ Session active (${difference.inDays} days old)');
+      if (kDebugMode) {
+        debugPrint('✅ Session active (${difference.inDays} days old)');
+      }
     }
 
     return isExpired;
@@ -142,7 +187,9 @@ class StorageService {
   // ==========================================
 
   Future<void> savePermissions(List<String> permissions) async {
-    debugPrint('💾 Saving permissions: ${permissions.length} permissions');
+    if (kDebugMode) {
+      debugPrint('💾 Saving permissions: ${permissions.length} permissions');
+    }
     _cachedPermissions = permissions;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_permissionsKey, permissions);
@@ -176,13 +223,15 @@ class StorageService {
 
   Future<void> saveAuthToken(String token) async {
     if (token.isEmpty) {
-      debugPrint('⚠️ Attempted to save empty token, ignoring');
+      if (kDebugMode) debugPrint('⚠️ Attempted to save empty token, ignoring');
       return;
     }
     _cachedToken = token;
     await _secureStorage.write(key: _tokenKey, value: token);
     await updateLastActivity();
-    debugPrint('✅ Auth token saved securely (length: ${token.length})');
+    if (kDebugMode) {
+      debugPrint('✅ Auth token saved securely (length: ${token.length})');
+    }
   }
 
   Future<String?> getAuthToken() async {
@@ -201,7 +250,7 @@ class StorageService {
   Future<void> clearAuthToken() async {
     _cachedToken = null;
     await _secureStorage.delete(key: _tokenKey);
-    debugPrint('🗑️ Auth token cleared from secure storage');
+    if (kDebugMode) debugPrint('🗑️ Auth token cleared from secure storage');
   }
 
   // ==========================================
@@ -243,7 +292,7 @@ class StorageService {
     if (token != null && token.isNotEmpty && isLoggedIn == 'true') {
       final isValid = await isValidToken();
       if (!isValid) {
-        debugPrint('⚠️ Token is expired, clearing auth data');
+        if (kDebugMode) debugPrint('⚠️ Token is expired, clearing auth data');
         await clearAuthData();
         return false;
       }
@@ -361,7 +410,9 @@ class StorageService {
   // ==========================================
 
   Future<void> clearAuthData() async {
-    debugPrint('🗑️ Clearing all auth data from secure storage...');
+    if (kDebugMode) {
+      debugPrint('🗑️ Clearing all auth data from secure storage...');
+    }
 
     _cachedToken = null;
     _cachedIsSuperAdmin = null;
@@ -378,12 +429,12 @@ class StorageService {
     await _secureStorage.delete(key: _userMarketIdKey);
     await _secureStorage.delete(key: _isAdminKey);
     await _secureStorage.delete(key: _isSuperAdminKey);
-
+    await clearAffiliateStatus();
     await clearPermissions();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lastActivityKey);
 
-    debugPrint('🗑️ All auth data cleared successfully');
+    if (kDebugMode) debugPrint('🗑️ All auth data cleared successfully');
   }
 
   // ==========================================
@@ -413,16 +464,16 @@ class StorageService {
         );
         final isValid = expiry.isAfter(DateTime.now());
         if (!isValid) {
-          debugPrint('⚠️ Token expired at: $expiry');
+          if (kDebugMode) debugPrint('⚠️ Token expired at: $expiry');
         } else {
-          debugPrint('✅ Token valid until: $expiry');
+          if (kDebugMode) debugPrint('✅ Token valid until: $expiry');
         }
         return isValid;
       }
 
       return true;
     } catch (e) {
-      debugPrint('⚠️ Token validation failed: $e');
+      if (kDebugMode) debugPrint('⚠️ Token validation failed: $e');
       return false;
     }
   }

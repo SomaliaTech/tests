@@ -21,8 +21,8 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
   Future<List<OrderHistory>> getOrders(String token) async {
     try {
       final url = '${ApiConstants.baseUrl}/orders';
-      debugPrint('🌐 Calling: $url');
-      debugPrint('🔑 Token: ${token.substring(0, 20)}...');
+      if (kDebugMode) debugPrint('🌐 Calling: $url');
+      if (kDebugMode) debugPrint('🔑 Token: ${token.substring(0, 20)}...');
 
       final response = await client.get(
         Uri.parse(url), // ✅ Make sure no trailing slash or spaces
@@ -32,7 +32,9 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
         },
       );
 
-      debugPrint('📦 Orders response status: ${response.statusCode}');
+      if (kDebugMode) {
+        debugPrint('📦 Orders response status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -58,11 +60,13 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
       } else if (response.statusCode == 401) {
         throw ServerException('Session expired. Please login again.');
       } else {
-        debugPrint('❌ Failed to load orders: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('❌ Failed to load orders: ${response.statusCode}');
+        }
         return []; // Return empty on error instead of throwing
       }
     } catch (e) {
-      debugPrint('❌ Network error: $e');
+      if (kDebugMode) debugPrint('❌ Network error: $e');
       return []; // Return empty on network error
     }
   }
@@ -70,7 +74,7 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
   @override
   Future<OrderHistory> getOrderById(String token, String orderId) async {
     try {
-      debugPrint('🔍 Fetching order: $orderId');
+      if (kDebugMode) debugPrint('🔍 Fetching order: $orderId');
 
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}/orders/$orderId'),
@@ -80,7 +84,9 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
         },
       );
 
-      debugPrint('📦 Order detail status: ${response.statusCode}');
+      if (kDebugMode) {
+        debugPrint('📦 Order detail status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -97,7 +103,7 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
           } else if (decoded.containsKey('id')) {
             orderJson = decoded;
           } else {
-            debugPrint('❌ Unknown order response format');
+            if (kDebugMode) debugPrint('❌ Unknown order response format');
             throw ServerException('Invalid order response format');
           }
 
@@ -117,7 +123,7 @@ class OrderHistoryRemoteDataSourceImpl implements OrderHistoryRemoteDataSource {
         );
       }
     } catch (e) {
-      debugPrint('❌ Error loading order $orderId: $e');
+      if (kDebugMode) debugPrint('❌ Error loading order $orderId: $e');
       if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }

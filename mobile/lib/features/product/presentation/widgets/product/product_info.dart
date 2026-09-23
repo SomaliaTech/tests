@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
 
 class ProductInfo extends StatelessWidget {

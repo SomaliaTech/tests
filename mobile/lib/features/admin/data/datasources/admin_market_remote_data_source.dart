@@ -4,6 +4,7 @@ import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/market_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminMarketRemoteDataSource {
   Future<List<MarketModel>> getAllMarkets();
@@ -31,7 +32,7 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
 
   @override
   Future<List<MarketModel>> getAllMarkets() async {
-    print('🔍 [AdminMarkets] Fetching all markets');
+    if (kDebugMode) debugPrint('🔍 [AdminMarkets] Fetching all markets');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/markets/all';
@@ -44,7 +45,8 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
         },
       );
 
-      print('📡 [AdminMarkets] Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminMarkets] Response Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -58,7 +60,8 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
         } else if (decoded is Map && decoded.containsKey('data')) {
           jsonList = decoded['data'];
         } else {
-          print('❌ [AdminMarkets] Unexpected response format: $decoded');
+          if (kDebugMode)
+            debugPrint('❌ [AdminMarkets] Unexpected response format: $decoded');
           return [];
         }
 
@@ -67,14 +70,14 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminMarkets] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminMarkets] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> createMarket(Map<String, dynamic> data) async {
-    print('🔍 [AdminMarkets] Creating market: $data');
+    if (kDebugMode) debugPrint('🔍 [AdminMarkets] Creating market: $data');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/markets';
@@ -88,20 +91,21 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
         body: json.encode(data),
       );
 
-      print('📡 [AdminMarkets] Create Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminMarkets] Create Response: ${response.statusCode}');
 
       if (response.statusCode != 201 && response.statusCode != 200) {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminMarkets] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminMarkets] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<void> updateMarket(String marketId, Map<String, dynamic> data) async {
-    print('🔍 [AdminMarkets] Updating market: $marketId');
+    if (kDebugMode) debugPrint('🔍 [AdminMarkets] Updating market: $marketId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/markets/$marketId';
@@ -136,14 +140,19 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
         headers: {'Authorization': 'Bearer $token'},
       );
 
-      print('📡 [AdminMarkets] Delete Response: ${response.statusCode}');
-      print('📦 [AdminMarkets] Delete Response body: ${response.body}');
+      if (kDebugMode)
+        debugPrint('📡 [AdminMarkets] Delete Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint('📦 [AdminMarkets] Delete Response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 204) {
         final data = json.decode(response.body);
         // ✅ Check if market was deactivated instead of deleted
         if (data['deactivated'] == true) {
-          print('⚠️ [AdminMarkets] Market deactivated instead of deleted');
+          if (kDebugMode)
+            debugPrint(
+              '⚠️ [AdminMarkets] Market deactivated instead of deleted',
+            );
           // Don't throw error, just return
           return;
         }
@@ -156,7 +165,7 @@ class AdminMarketRemoteDataSourceImpl implements AdminMarketRemoteDataSource {
       }
     } catch (e) {
       if (e is ServerException) rethrow;
-      print('❌ [AdminMarkets] Delete error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminMarkets] Delete error: $e');
       throw ServerException('Failed to delete market: $e');
     }
   }

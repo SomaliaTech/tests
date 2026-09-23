@@ -88,8 +88,8 @@ class CheckoutPaymentSection extends StatelessWidget {
                 gradient: isSelected
                     ? LinearGradient(
                         colors: [
-                          method.color.withOpacity(0.1),
-                          method.color.withOpacity(0.05),
+                          method.color.withValues(alpha: 0.1),
+                          method.color.withValues(alpha: 0.05),
                         ],
                       )
                     : null,
@@ -105,7 +105,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: method.color.withOpacity(0.15),
+                      color: method.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(method.icon, color: method.color, size: 20),
@@ -135,7 +135,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: method.color.withOpacity(0.15),
+                                  color: method.color.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
@@ -154,7 +154,7 @@ class CheckoutPaymentSection extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             color: isSelected
-                                ? method.color.withOpacity(0.7)
+                                ? method.color.withValues(alpha: 0.7)
                                 : const Color(0xFF6B7280),
                           ),
                         ),
@@ -221,9 +221,9 @@ class CheckoutPaymentSection extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.05),
+            color: Colors.blue.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
@@ -255,7 +255,7 @@ class CheckoutPaymentSection extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -269,7 +269,7 @@ class CheckoutPaymentSection extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: iconColor, size: 18),

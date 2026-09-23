@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -11,7 +12,6 @@ import 'package:toastification/toastification.dart';
 
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
-import 'package:mobile/core/theme/theme.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_event.dart';
@@ -725,7 +725,7 @@ class _BroadcastNotificationScreenState
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _selectedProductId == linkTarget
-              ? const Color(0xFF6C5CE7).withOpacity(0.1)
+              ? const Color(0xFF6C5CE7).withValues(alpha: 0.1)
               : const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -748,7 +748,9 @@ class _BroadcastNotificationScreenState
                         image: NetworkImage(imageUrl),
                         fit: BoxFit.cover,
                         onError: (exception, stackTrace) {
-                          debugPrint('❌ Failed to load image: $imageUrl');
+                          if (kDebugMode) {
+                            debugPrint('❌ Failed to load image: $imageUrl');
+                          }
                         },
                       )
                     : null,
@@ -937,7 +939,9 @@ class _BroadcastNotificationScreenState
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00B894).withOpacity(0.1),
+                              color: const Color(
+                                0xFF00B894,
+                              ).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
@@ -1014,7 +1018,7 @@ class _BroadcastNotificationScreenState
                     borderRadius: BorderRadius.circular(14),
                   ),
                   elevation: 4,
-                  shadowColor: const Color(0xFF6C5CE7).withOpacity(0.4),
+                  shadowColor: const Color(0xFF6C5CE7).withValues(alpha: 0.4),
                   minimumSize: const Size(double.infinity, 56),
                 ),
               ),
@@ -1061,7 +1065,7 @@ class _BroadcastNotificationScreenState
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6C5CE7).withOpacity(0.1),
+                    color: const Color(0xFF6C5CE7).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -1198,7 +1202,7 @@ class _BroadcastNotificationScreenState
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6C5CE7).withOpacity(0.1),
+                          color: const Color(0xFF6C5CE7).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(
@@ -1244,7 +1248,7 @@ class _BroadcastNotificationScreenState
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1258,7 +1262,7 @@ class _BroadcastNotificationScreenState
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6C5CE7).withOpacity(0.1),
+                  color: const Color(0xFF6C5CE7).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
@@ -1329,7 +1333,7 @@ class _BroadcastNotificationScreenState
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -1394,7 +1398,7 @@ class _BroadcastNotificationScreenState
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6C5CE7).withOpacity(0.3),
+            color: const Color(0xFF6C5CE7).withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -1405,7 +1409,7 @@ class _BroadcastNotificationScreenState
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Icon(
@@ -1483,7 +1487,7 @@ class _BroadcastNotificationScreenState
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: isSelected
-                  ? color.withOpacity(0.1)
+                  ? color.withValues(alpha: 0.1)
                   : const Color(0xFFF9FAFB),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
@@ -1496,7 +1500,7 @@ class _BroadcastNotificationScreenState
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: color, size: 20),
@@ -1548,7 +1552,7 @@ class _BroadcastNotificationScreenState
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1659,10 +1663,10 @@ class _BroadcastNotificationScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: value ? color.withOpacity(0.05) : const Color(0xFFF9FAFB),
+        color: value ? color.withValues(alpha: 0.05) : const Color(0xFFF9FAFB),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: value ? color.withOpacity(0.3) : const Color(0xFFE5E7EB),
+          color: value ? color.withValues(alpha: 0.3) : const Color(0xFFE5E7EB),
         ),
       ),
       child: Row(
@@ -1670,7 +1674,7 @@ class _BroadcastNotificationScreenState
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -1698,7 +1702,7 @@ class _BroadcastNotificationScreenState
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: color,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.grey.shade300,

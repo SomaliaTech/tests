@@ -55,14 +55,18 @@
 				<string>fb869167092793903</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.159665748516-q57ehiuvg427bluh15gdj701disc746r</string>
-			</array>
-		</dict>
+<dict>
+  <key>CFBundleTypeRole</key>
+  <string>Editor</string>
+  <key>CFBundleURLSchemes</key>
+  <array>
+    <!-- ✅ Reversed iOS client ID (from 344221955618-c0sh2bkh1s0uoo4dkjmcdfsupjvm262j) -->
+    <string>com.googleusercontent.apps.344221955618-c0sh2bkh1s0uoo4dkjmcdfsupjvm262j</string>
+  </array>
+
+  <key>GIDClientID</key>
+<string>344221955618-c0sh2bkh1s0uoo4dkjmcdfsupjvm262j.apps.googleusercontent.com</string>
+</dict>
 	</array>
 	<key>FacebookAppID</key>
 	<string>869167092793903</string>

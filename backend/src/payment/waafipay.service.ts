@@ -19,7 +19,20 @@ export interface PaymentRequest {
   referenceId: string;
   paymentMethod?: string;
 }
+export interface PayoutRequest {
+  amount: number;
+  phoneNumber: string;
+  referenceId: string;
+  description: string;
+}
 
+export interface PayoutResponse {
+  success: boolean;
+  message: string;
+  transactionId?: string;
+  referenceId?: string;
+  responseCode?: string;
+}
 export interface PaymentResponse {
   success: boolean;
   message: string;
@@ -118,6 +131,119 @@ export class WaafiPayService {
     return requestBody;
   }
 
+  /**
+   * Send money TO a mobile wallet (used for affiliate payouts).
+   * Uses WaafiPay's API_PURCHASE in "credit" mode, which debits the
+   * merchant account and credits the recipient's wallet.
+   */
+  async transferToWallet(data: PayoutRequest): Promise<PayoutResponse> {
+    try {
+      this.logger.log(
+        `💸 Initiating payout to ${LogSanitizer.maskPhoneNumber(data.phoneNumber)} | $${data.amount}`,
+      );
+
+      // Mock mode for local dev
+      const isMockMode =
+        this.configService.get<string>('WAAFI_MOCK_MODE') === 'true';
+      if (isMockMode) {
+        this.logger.warn('⚠️ MOCK MODE - Simulating successful payout');
+        return {
+          success: true,
+          message: 'Payout simulated (MOCK)',
+          transactionId: `MOCK-PAYOUT-${Date.now()}`,
+          referenceId: data.referenceId,
+          responseCode: '2001',
+        };
+      }
+
+      const formattedPhone = this.formatPhoneNumber(data.phoneNumber);
+
+      const requestBody = {
+        schemaVersion: '1.0',
+        requestId: data.referenceId,
+        timestamp: new Date().toISOString(),
+        channelName: 'WEB',
+        serviceName: 'API_PURCHASE', // 👈 same service, credit mode
+        serviceParams: {
+          merchantUid: this.config.merchantUId,
+          apiUserId: this.config.apiUId,
+          apiKey: this.config.apiKey,
+          paymentMethod: 'MWALLET_ACCOUNT',
+          payerInfo: {
+            // 👈 The recipient (affiliate)
+            accountNo: formattedPhone,
+          },
+          transactionInfo: {
+            referenceId: data.referenceId,
+            invoiceId: `PAYOUT-${Date.now()}`,
+            amount: data.amount.toFixed(2),
+            currency: 'USD',
+            description: data.description,
+            // 👈 The key: this tells WaafiPay to CREDIT the payer's wallet
+            creditType: 'CREDIT', // some WaafiPay accounts use this flag
+          },
+        },
+      };
+
+      // Sanitize logs
+      this.logger.debug(
+        `WaafiPay Payout Request: ${JSON.stringify(LogSanitizer.sanitize(requestBody))}`,
+      );
+
+      const response = await axios.post<WaafiPayApiResponse>(
+        `${this.config.baseUrl}/asm`,
+        requestBody,
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30000,
+        },
+      );
+
+      this.logger.debug(
+        `WaafiPay Payout Response: ${JSON.stringify(LogSanitizer.sanitize(response.data))}`,
+      );
+
+      const parsed = this.parseResponse(response.data);
+
+      if (parsed.success) {
+        this.logger.log(
+          `✅ Payout sent: $${data.amount} → ${LogSanitizer.maskPhoneNumber(data.phoneNumber)} | Txn: ${parsed.transactionId}`,
+        );
+      } else {
+        this.logger.error(
+          `❌ Payout failed: ${parsed.message} (code: ${parsed.responseCode})`,
+        );
+      }
+
+      return parsed;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<{
+          responseMsg?: string;
+          errorMsg?: string;
+        }>;
+        this.logger.error(
+          `Payout HTTP error: ${LogSanitizer.sanitize(axiosError.response?.data)}`,
+        );
+        return {
+          success: false,
+          message:
+            axiosError.response?.data?.responseMsg ||
+            axiosError.response?.data?.errorMsg ||
+            'Payout failed. Please try again.',
+        };
+      }
+
+      const msg =
+        error instanceof Error ? error.message : 'Unknown payout error';
+      this.logger.error(`Payout error: ${LogSanitizer.sanitizeString(msg)}`);
+      return {
+        success: false,
+        message: 'Payout failed due to an unknown error.',
+      };
+    }
+  }
+
   async initiatePayment(data: PaymentRequest): Promise<PaymentResponse> {
     try {
       this.logger.log(`Initiating payment for order: ${data.orderId}`);
@@ -199,7 +325,6 @@ export class WaafiPayService {
       };
     }
   }
-
   async checkPaymentStatus(referenceId: string): Promise<PaymentResponse> {
     try {
       const requestBody = {
@@ -250,7 +375,6 @@ export class WaafiPayService {
       };
     }
   }
-
   private parseResponse(data: WaafiPayApiResponse): PaymentResponse {
     const params = data?.serviceParams || data?.params || {};
     const responseCode = params?.responseCode || data?.responseCode || '';

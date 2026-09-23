@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/screens/admin_categories_screen.dart
 
 import 'dart:convert';
@@ -72,7 +73,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
         _isLoadingPermissions = false;
       });
     } catch (e) {
-      debugPrint('❌ [Categories] Permission load failed: $e');
+      if (kDebugMode) debugPrint('❌ [Categories] Permission load failed: $e');
       if (mounted) setState(() => _isLoadingPermissions = false);
     }
   }
@@ -237,7 +238,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),
@@ -326,7 +327,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -389,7 +390,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
+              color: Colors.blue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -471,7 +472,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
             fit: BoxFit.cover,
           ),
           border: Border.all(
-            color: AppTheme.primaryColor.withOpacity(0.2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -480,7 +481,7 @@ class _AdminCategoriesScreenState extends State<AdminCategoriesScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withOpacity(0.1),
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: const Icon(
@@ -631,8 +632,9 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
         'slug': _slugController.text.trim(),
         'description': _descriptionController.text.trim(),
       };
-      if (!isEditing && widget.parentCategory != null)
+      if (!isEditing && widget.parentCategory != null) {
         data['parentId'] = widget.parentCategory!.id;
+      }
       if (!_isSubcategory && _selectedIcon != null) {
         final base64Image = await _convertToBase64();
         if (base64Image != null) data['iconBase64'] = base64Image;
@@ -667,7 +669,7 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withOpacity(0.1),
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -721,12 +723,13 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Name is required' : null,
                   onChanged: (value) {
-                    if (!isEditing)
+                    if (!isEditing) {
                       setState(
                         () => _slugController.text = value
                             .toLowerCase()
                             .replaceAll(RegExp(r'[^a-z0-9]+'), '-'),
                       );
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -844,8 +847,8 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: hasIcon
-                    ? AppTheme.primaryColor.withOpacity(0.3)
-                    : Colors.grey.withOpacity(0.2),
+                    ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                    : Colors.grey.withValues(alpha: 0.2),
                 width: hasIcon ? 2 : 1,
               ),
             ),
@@ -905,7 +908,7 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.6),
+                              color: Colors.black.withValues(alpha: 0.6),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Text(
@@ -927,7 +930,7 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -975,7 +978,7 @@ class _AddEditCategoryDialogState extends State<_AddEditCategoryDialog> {
           decoration: BoxDecoration(
             color: const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
           ),
           child: TextFormField(
             controller: controller,

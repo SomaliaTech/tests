@@ -160,8 +160,8 @@ class ProductRemoteDataSourceImpl implements ProductRemoteDataSource {
               if (query != null && query.trim().isNotEmpty) 'q': query,
               if (minPrice != null) 'minPrice': minPrice.toString(),
               if (maxPrice != null) 'maxPrice': maxPrice.toString(),
-              if (categoryId != null) 'categoryId': categoryId,
-              if (sortBy != null) 'sortBy': sortBy,
+              'categoryId': ?categoryId,
+              'sortBy': ?sortBy,
             },
           );
 

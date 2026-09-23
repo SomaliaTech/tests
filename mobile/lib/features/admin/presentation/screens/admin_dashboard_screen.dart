@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,7 +19,6 @@ import 'package:mobile/features/admin/presentation/bloc/analytics/analytics_stat
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
-import 'package:mobile/features/admin/presentation/screens/admin_banners_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_categories_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_colors_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_faq_screen.dart';
@@ -101,7 +101,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (!mounted) return;
       setState(() {});
     } catch (e) {
-      debugPrint('Failed to load permissions: $e');
+      if (kDebugMode) debugPrint('Failed to load permissions: $e');
     }
 
     // ✅ 2. Only load what this role is allowed to see
@@ -193,7 +193,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         }
       });
     } catch (e) {
-      debugPrint('Socket service not available: $e');
+      if (kDebugMode) debugPrint('Socket service not available: $e');
     }
   }
 
@@ -263,7 +263,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
             // ❌ Do NOT redirect on 403 forbidden from dashboard widgets
             // That only means this role cannot see that section.
-            debugPrint('⚠️ [Dashboard] Error: ${state.message}');
+            if (kDebugMode) {
+              debugPrint('⚠️ [Dashboard] Error: ${state.message}');
+            }
           }
         },
         child: CustomScrollView(

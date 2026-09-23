@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/data/datasources/admin_role_remote_data_source.dart
 import 'dart:convert';
-import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
@@ -37,7 +37,7 @@ class AdminRoleRemoteDataSourceImpl implements AdminRoleRemoteDataSource {
   Future<List<RoleModel>> getAllRoles() async {
     try {
       final token = await _getToken();
-      debugPrint('🔑 [AdminRole] Fetching all roles...');
+      if (kDebugMode) debugPrint('🔑 [AdminRole] Fetching all roles...');
 
       final response = await client.get(
         Uri.parse('${ApiConstants.baseUrl}/admin/roles'),
@@ -47,10 +47,14 @@ class AdminRoleRemoteDataSourceImpl implements AdminRoleRemoteDataSource {
         },
       );
 
-      debugPrint('📡 [AdminRole] Response Status: ${response.statusCode}');
-      debugPrint(
-        '📡 [AdminRole] Response Body: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...',
-      );
+      if (kDebugMode) {
+        debugPrint('📡 [AdminRole] Response Status: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '📡 [AdminRole] Response Body: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...',
+        );
+      }
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -65,17 +69,21 @@ class AdminRoleRemoteDataSourceImpl implements AdminRoleRemoteDataSource {
         } else if (decoded is Map && decoded.containsKey('roles')) {
           jsonList = decoded['roles'];
         } else {
-          debugPrint('❌ [AdminRole] Unexpected response format: $decoded');
+          if (kDebugMode) {
+            debugPrint('❌ [AdminRole] Unexpected response format: $decoded');
+          }
           return [];
         }
 
-        debugPrint('✅ [AdminRole] Found ${jsonList.length} roles');
+        if (kDebugMode) {
+          debugPrint('✅ [AdminRole] Found ${jsonList.length} roles');
+        }
         return jsonList.map((json) => RoleModel.fromJson(json)).toList();
       } else {
         throw ServerException('Failed to load roles: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ [AdminRole] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRole] Error: $e');
       rethrow;
     }
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -36,9 +37,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final existingToken = await FacebookAuth.instance.accessToken;
 
       if (existingToken != null) {
-        debugPrint(
-          '📘 Using existing FB token: ${existingToken.tokenString.substring(0, 20)}...',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '📘 Using existing FB token: ${existingToken.tokenString.substring(0, 20)}...',
+          );
+        }
 
         final tokenString = existingToken.tokenString;
         if (tokenString.startsWith('eyJ') &&
@@ -57,9 +60,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             final aud = payload['aud'] as String?;
 
             if (aud != null && aud != '869167092793903') {
-              debugPrint(
-                '⚠️ Cached FB token has wrong audience ($aud), forcing fresh login...',
-              );
+              if (kDebugMode) {
+                debugPrint(
+                  '⚠️ Cached FB token has wrong audience ($aud), forcing fresh login...',
+                );
+              }
               await FacebookAuth.instance.logOut();
               await Future.delayed(const Duration(milliseconds: 500));
             } else {
@@ -68,9 +73,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               return;
             }
           } catch (e) {
-            debugPrint(
-              '⚠️ Failed to decode cached FB token, forcing fresh login: $e',
-            );
+            if (kDebugMode) {
+              debugPrint(
+                '⚠️ Failed to decode cached FB token, forcing fresh login: $e',
+              );
+            }
             await FacebookAuth.instance.logOut();
             await Future.delayed(const Duration(milliseconds: 500));
           }
@@ -106,7 +113,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           return;
         }
 
-        debugPrint('📘 New FB token: ${accessToken.substring(0, 20)}...');
+        if (kDebugMode) {
+          debugPrint('📘 New FB token: ${accessToken.substring(0, 20)}...');
+        }
         if (!mounted) return;
         context.read<AuthBloc>().add(FacebookSignInEvent(accessToken));
       } else if (result.status == LoginStatus.cancelled) {
@@ -136,7 +145,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         }
       }
     } catch (e) {
-      debugPrint('❌ FB error: $e');
+      if (kDebugMode) debugPrint('❌ FB error: $e');
       if (mounted) {
         setState(() => _loadingProvider = null);
         toastification.dismissAll();

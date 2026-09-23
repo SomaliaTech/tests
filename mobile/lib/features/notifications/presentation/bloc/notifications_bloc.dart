@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:mobile/core/services/chat_socket_service.dart';
@@ -103,7 +103,7 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
           NotificationsLoaded(
             notifications: notifications,
             currentFilter: isSilentRefresh
-                ? (currentState as NotificationsLoaded).currentFilter
+                ? (currentState).currentFilter
                 : NotificationFilter.all,
           ),
         );
@@ -174,7 +174,7 @@ class NotificationsBloc extends Bloc<NotificationsEvent, NotificationsState> {
       final localDataSource = GetIt.instance<NotificationsLocalDataSource>();
       await localDataSource.cacheNotifications(notifications);
     } catch (e) {
-      debugPrint('⚠️ Failed to update cache: $e');
+      if (kDebugMode) debugPrint('⚠️ Failed to update cache: $e');
     }
   }
 

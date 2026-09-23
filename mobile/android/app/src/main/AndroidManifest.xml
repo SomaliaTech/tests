@@ -51,11 +51,13 @@
     <!-- ========================================== -->
     <!-- APPLICATION                                -->
     <!-- ========================================== -->
-    <application
-        android:label="FARXADA"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+  <application
+    android:label="FARXADA"
+    android:name="${applicationName}"
+    android:icon="@mipmap/ic_launcher"
+    android:allowBackup="false"
+    android:fullBackupContent="false"
+    android:enableOnBackInvokedCallback="true">
 
         <!-- Facebook SDK Meta-data -->
         <meta-data

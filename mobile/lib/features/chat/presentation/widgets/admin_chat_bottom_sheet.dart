@@ -92,10 +92,12 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
               final aIsSuper = a.isSuperAdmin == true;
               final bIsSuper = b.isSuperAdmin == true;
 
-              if (aIsSuper && !bIsSuper)
+              if (aIsSuper && !bIsSuper) {
                 return 1; // Super admin goes after regular
-              if (!aIsSuper && bIsSuper)
+              }
+              if (!aIsSuper && bIsSuper) {
                 return -1; // Regular admin goes before super
+              }
               // Alphabetically sort within same type
               return (a.name ?? a.phoneNumber).compareTo(
                 b.name ?? b.phoneNumber,
@@ -124,7 +126,7 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
             (admin) =>
                 (admin.name?.toLowerCase().contains(query.toLowerCase()) ??
                     false) ||
-                (admin.phoneNumber?.contains(query) ?? false),
+                (admin.phoneNumber.contains(query) ?? false),
           )
           .toList();
     }
@@ -343,9 +345,9 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -379,9 +381,9 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
       margin: const EdgeInsets.only(top: 8, bottom: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
       ),
       child: const Row(
         children: [
@@ -411,8 +413,8 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
           color: isSuperAdmin
-              ? Colors.orange.withOpacity(0.3)
-              : Colors.grey.withOpacity(0.1),
+              ? Colors.orange.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.1),
         ),
       ),
       child: InkWell(
@@ -438,8 +440,8 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
                     child: CircleAvatar(
                       radius: 24,
                       backgroundColor: isSuperAdmin
-                          ? Colors.orange.withOpacity(0.2)
-                          : const Color(0xFF2ED573).withOpacity(0.1),
+                          ? Colors.orange.withValues(alpha: 0.2)
+                          : const Color(0xFF2ED573).withValues(alpha: 0.1),
                       backgroundImage:
                           admin.profileImage != null &&
                               admin.profileImage!.isNotEmpty &&
@@ -539,10 +541,10 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.1),
+                              color: Colors.orange.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: Colors.orange.withOpacity(0.3),
+                                color: Colors.orange.withValues(alpha: 0.3),
                               ),
                             ),
                             child: const Row(
@@ -572,10 +574,14 @@ class _AdminChatBottomSheetState extends State<AdminChatBottomSheet> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF2ED573).withOpacity(0.1),
+                              color: const Color(
+                                0xFF2ED573,
+                              ).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: const Color(0xFF2ED573).withOpacity(0.3),
+                                color: const Color(
+                                  0xFF2ED573,
+                                ).withValues(alpha: 0.3),
                               ),
                             ),
                             child: const Text(

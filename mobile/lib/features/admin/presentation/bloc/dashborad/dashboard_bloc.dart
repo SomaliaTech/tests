@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/admin/domain/repositories/dashboard_repository.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
+import 'package:flutter/foundation.dart';
 
 class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
   final DashboardRepository repository;
@@ -43,16 +44,20 @@ class DashboardBloc extends Bloc<DashboardEvent, DashboardState> {
     ChangePeriodEvent event,
     Emitter<DashboardState> emit,
   ) async {
-    print('🎯 [BLoC] ChangePeriodEvent for period: ${event.period}');
+    if (kDebugMode)
+      debugPrint('🎯 [BLoC] ChangePeriodEvent for period: ${event.period}');
     emit(DashboardLoading());
     try {
       final stopwatch = Stopwatch()..start();
       final data = await repository.getAllDashboardData(event.period);
-      print('✅ [BLoC] Data loaded in ${stopwatch.elapsedMilliseconds}ms');
+      if (kDebugMode)
+        debugPrint(
+          '✅ [BLoC] Data loaded in ${stopwatch.elapsedMilliseconds}ms',
+        );
       emit(data);
     } catch (e, stackTrace) {
-      print('❌ [BLoC] Error: $e');
-      print('📚 [BLoC] Stack trace: $stackTrace');
+      if (kDebugMode) debugPrint('❌ [BLoC] Error: $e');
+      if (kDebugMode) debugPrint('📚 [BLoC] Stack trace: $stackTrace');
       emit(DashboardError(e.toString()));
     }
   }

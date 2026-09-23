@@ -1,6 +1,5 @@
 // lib/features/admin/presentation/screens/chat/super_admin_list_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/core/services/injection_container.dart';
 import 'package:mobile/features/admin/presentation/screens/chat/super_admin_chat_screen.dart';
@@ -53,11 +52,12 @@ class _SuperAdminListScreenState extends State<SuperAdminListScreen> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 

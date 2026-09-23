@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,9 +57,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
   @override
   void initState() {
     super.initState();
-    debugPrint(
-      '🔍 [EditProduct] Initializing screen for product: ${widget.productId}',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🔍 [EditProduct] Initializing screen for product: ${widget.productId}',
+      );
+    }
     context.read<AdminProductBloc>().add(FetchCategoriesTreeEvent());
     context.read<AdminProductBloc>().add(FetchColorsEvent());
     context.read<AdminProductBloc>().add(FetchSizesEvent());
@@ -66,7 +69,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   Future<void> _loadProductData() async {
-    debugPrint('🔍 [EditProduct] Loading product data...');
+    if (kDebugMode) debugPrint('🔍 [EditProduct] Loading product data...');
     context.read<AdminProductBloc>().add(
       FetchAdminProductByIdEvent(widget.productId),
     );
@@ -84,7 +87,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   void _populateFields(AdminProductEntity product) {
-    debugPrint('🔍 [EditProduct] Populating fields...');
+    if (kDebugMode) debugPrint('🔍 [EditProduct] Populating fields...');
 
     _nameController.text = product.name;
     _descriptionController.text = product.description ?? '';
@@ -116,10 +119,14 @@ class _EditProductScreenState extends State<EditProductScreen> {
     _productData = product;
 
     if (_categoriesLoaded && !_categorySet) {
-      debugPrint('   ✅ Categories already loaded, setting category now');
+      if (kDebugMode) {
+        debugPrint('   ✅ Categories already loaded, setting category now');
+      }
       _setCategoryFromProduct(product);
     } else {
-      debugPrint('   ⏳ Categories not loaded yet, will set later');
+      if (kDebugMode) {
+        debugPrint('   ⏳ Categories not loaded yet, will set later');
+      }
     }
   }
 
@@ -371,8 +378,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                     hint: 'Enter product name',
                                     icon: Iconsax.box_1,
                                     validator: (value) {
-                                      if (value == null || value.isEmpty)
+                                      if (value == null || value.isEmpty) {
                                         return 'Product name is required';
+                                      }
                                       return null;
                                     },
                                   ),
@@ -395,10 +403,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                           icon: Iconsax.money_tick,
                                           keyboardType: TextInputType.number,
                                           validator: (value) {
-                                            if (value == null || value.isEmpty)
+                                            if (value == null || value.isEmpty) {
                                               return 'Price is required';
-                                            if (double.tryParse(value) == null)
+                                            }
+                                            if (double.tryParse(value) == null) {
                                               return 'Invalid price';
+                                            }
                                             return null;
                                           },
                                         ),
@@ -412,10 +422,12 @@ class _EditProductScreenState extends State<EditProductScreen> {
                                           icon: Iconsax.box,
                                           keyboardType: TextInputType.number,
                                           validator: (value) {
-                                            if (value == null || value.isEmpty)
+                                            if (value == null || value.isEmpty) {
                                               return 'Stock is required';
-                                            if (int.tryParse(value) == null)
+                                            }
+                                            if (int.tryParse(value) == null) {
                                               return 'Invalid stock';
+                                            }
                                             return null;
                                           },
                                         ),
@@ -1794,16 +1806,18 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                       current is AdminColorsLoading ||
                       current is AdminColorsLoaded,
                   builder: (context, state) {
-                    if (state is AdminColorsLoading)
+                    if (state is AdminColorsLoading) {
                       return const Center(
                         child: Padding(
                           padding: EdgeInsets.all(20),
                           child: CircularProgressIndicator(),
                         ),
                       );
+                    }
                     if (state is AdminColorsLoaded) {
-                      if (state.colors.isEmpty)
+                      if (state.colors.isEmpty) {
                         return _buildEmptyState('No colors available');
+                      }
                       return _buildColorGrid(state.colors);
                     }
                     return const SizedBox.shrink();
@@ -1817,16 +1831,18 @@ class _EditVariantDialogState extends State<_EditVariantDialog> {
                       current is AdminSizesLoading ||
                       current is AdminSizesLoaded,
                   builder: (context, state) {
-                    if (state is AdminSizesLoading)
+                    if (state is AdminSizesLoading) {
                       return const Center(
                         child: Padding(
                           padding: EdgeInsets.all(20),
                           child: CircularProgressIndicator(),
                         ),
                       );
+                    }
                     if (state is AdminSizesLoaded) {
-                      if (state.sizes.isEmpty)
+                      if (state.sizes.isEmpty) {
                         return _buildEmptyState('No sizes available');
+                      }
                       return _buildSizeGrid(state.sizes);
                     }
                     return const SizedBox.shrink();
@@ -2281,16 +2297,18 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                     current is AdminColorsLoading ||
                     current is AdminColorsLoaded,
                 builder: (context, state) {
-                  if (state is AdminColorsLoading)
+                  if (state is AdminColorsLoading) {
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(),
                       ),
                     );
+                  }
                   if (state is AdminColorsLoaded) {
-                    if (state.colors.isEmpty)
+                    if (state.colors.isEmpty) {
                       return _buildEmptyState('No colors available');
+                    }
                     return _buildColorGrid(state.colors);
                   }
                   return const SizedBox.shrink();
@@ -2303,16 +2321,18 @@ class _AddVariantDialogState extends State<_AddVariantDialog> {
                 buildWhen: (prev, current) =>
                     current is AdminSizesLoading || current is AdminSizesLoaded,
                 builder: (context, state) {
-                  if (state is AdminSizesLoading)
+                  if (state is AdminSizesLoading) {
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(20),
                         child: CircularProgressIndicator(),
                       ),
                     );
+                  }
                   if (state is AdminSizesLoaded) {
-                    if (state.sizes.isEmpty)
+                    if (state.sizes.isEmpty) {
                       return _buildEmptyState('No sizes available');
+                    }
                     return _buildSizeGrid(state.sizes);
                   }
                   return const SizedBox.shrink();

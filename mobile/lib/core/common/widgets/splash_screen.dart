@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // For ImageProvider if using asset
+// For ImageProvider if using asset
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});

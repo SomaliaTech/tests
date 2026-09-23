@@ -27,7 +27,9 @@ class WarningSection extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.2)),
+            border: Border.all(
+              color: const Color(0xFF2ED573).withValues(alpha: 0.2),
+            ),
           ),
           child: Row(
             children: [
@@ -38,7 +40,7 @@ class WarningSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF2ED573).withOpacity(0.2),
+                      color: const Color(0xFF2ED573).withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -80,7 +82,7 @@ class WarningSection extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF25D366).withOpacity(0.3),
+                        color: const Color(0xFF25D366).withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -108,11 +110,11 @@ class WarningSection extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFFEF4444).withOpacity(0.2),
+                color: const Color(0xFFEF4444).withValues(alpha: 0.2),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFEF4444).withOpacity(0.05),
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.05),
                   blurRadius: 15,
                   offset: const Offset(0, 4),
                 ),
@@ -123,7 +125,7 @@ class WarningSection extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(

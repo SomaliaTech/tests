@@ -949,7 +949,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
               Icons.location_city,
               'Select your market',
             ),
-            value: _selectedMarketId,
+            initialValue: _selectedMarketId,
             items: _markets.map<DropdownMenuItem<String>>((market) {
               return DropdownMenuItem<String>(
                 value: market['id'] as String,

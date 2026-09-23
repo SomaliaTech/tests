@@ -59,7 +59,7 @@ class AddressCard extends StatelessWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2ED573).withOpacity(0.1),
+                          color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(

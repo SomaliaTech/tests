@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 class FlashSaleBadge extends StatefulWidget {
   final DateTime endTime;
@@ -20,13 +21,14 @@ class _FlashSaleBadgeState extends State<FlashSaleBadge> {
   @override
   void initState() {
     super.initState();
-    print('🟢 FlashSaleBadge INIT #${_tickCount}');
+    if (kDebugMode) debugPrint('🟢 FlashSaleBadge INIT #$_tickCount');
     _calculateAndStart();
   }
 
   @override
   void dispose() {
-    print('🔴 FlashSaleBadge DISPOSE - Ticks: $_tickCount');
+    if (kDebugMode)
+      debugPrint('🔴 FlashSaleBadge DISPOSE - Ticks: $_tickCount');
     _timer?.cancel();
     super.dispose();
   }
@@ -36,9 +38,10 @@ class _FlashSaleBadgeState extends State<FlashSaleBadge> {
     final now = DateTime.now();
     final remaining = widget.endTime.difference(now);
 
-    print(
-      '⏰ FlashSaleBadge: EndTime=${widget.endTime}, Now=$now, Remaining=${remaining.inSeconds}s',
-    );
+    if (kDebugMode)
+      debugPrint(
+        '⏰ FlashSaleBadge: EndTime=${widget.endTime}, Now=$now, Remaining=${remaining.inSeconds}s',
+      );
 
     if (remaining.isNegative || remaining.inSeconds <= 0) {
       _remaining = Duration.zero;
@@ -55,7 +58,7 @@ class _FlashSaleBadgeState extends State<FlashSaleBadge> {
       _tickCount++;
 
       if (!mounted) {
-        print('❌ Timer tick #$_tickCount - NOT MOUNTED');
+        if (kDebugMode) debugPrint('❌ Timer tick #$_tickCount - NOT MOUNTED');
         timer.cancel();
         return;
       }
@@ -63,10 +66,13 @@ class _FlashSaleBadgeState extends State<FlashSaleBadge> {
       final now = DateTime.now();
       final remaining = widget.endTime.difference(now);
 
-      print('⏱️ Timer tick #$_tickCount - Remaining: ${remaining.inSeconds}s');
+      if (kDebugMode)
+        debugPrint(
+          '⏱️ Timer tick #$_tickCount - Remaining: ${remaining.inSeconds}s',
+        );
 
       if (remaining.isNegative || remaining.inSeconds <= 0) {
-        print('⏰ EXPIRED! Cancelling timer');
+        if (kDebugMode) debugPrint('⏰ EXPIRED! Cancelling timer');
         timer.cancel();
         setState(() => _remaining = Duration.zero);
       } else {
@@ -95,14 +101,14 @@ class _FlashSaleBadgeState extends State<FlashSaleBadge> {
         ? _formatDuration(_remaining!)
         : 'ENDED';
 
-    print('🏗️ BUILD: $displayText');
+    if (kDebugMode) debugPrint('🏗️ BUILD: $displayText');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: _remaining != null && _remaining!.inSeconds > 0
-            ? Colors.orange.withOpacity(0.95)
-            : Colors.red.withOpacity(0.9),
+            ? Colors.orange.withValues(alpha: 0.95)
+            : Colors.red.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(

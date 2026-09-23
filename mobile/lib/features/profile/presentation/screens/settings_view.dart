@@ -1,11 +1,17 @@
-// lib/features/profile/presentation/screens/settings_screen.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+
+import 'package:mobile/features/affiliate/presentation/bloc/affiliate_user/affiliate_user_bloc.dart';
+import 'package:mobile/features/affiliate/presentation/bloc/affiliate_user/affiliate_user_event.dart';
+import 'package:mobile/features/affiliate/presentation/bloc/affiliate_user/affiliate_user_state.dart';
+
 import 'package:mobile/features/admin/presentation/screens/admin_main_navigation_screen.dart';
-import 'package:mobile/features/auth/presentation/screens/phone_input_screen.dart';
+import 'package:mobile/features/affiliate/presentation/screens/affiliate_apply_screen.dart';
+import 'package:mobile/features/affiliate/presentation/screens/affiliate_dashboard_screen.dart';
 import 'package:mobile/features/auth/presentation/screens/welcome_screen.dart';
+
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../../../auth/presentation/bloc/auth_state.dart';
@@ -26,6 +32,7 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   final StorageService _storageService = sl<StorageService>();
+
   String? _userName;
   String? _userPhone;
   String? _userProfileImage;
@@ -33,10 +40,33 @@ class _SettingsViewState extends State<SettingsView> {
   bool _isSuperAdmin = false;
   bool _isLoading = true;
 
+  // ⭐ Affiliate state — cached locally so UI never flickers
+  bool _cachedIsAffiliate = false;
+  String _cachedAffiliateStatus = 'NONE';
+  bool _affiliateLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadCachedAffiliate();
+
+    // Trigger user-bloc fetch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AffiliateUserBloc>().add(const FetchMyDashboardStatsEvent());
+    });
+  }
+
+  Future<void> _loadCachedAffiliate() async {
+    final isAff = await _storageService.getIsAffiliate();
+    final status = await _storageService.getAffiliateStatus() ?? 'NONE';
+    if (!mounted) return;
+    setState(() {
+      _cachedIsAffiliate = isAff;
+      _cachedAffiliateStatus = status;
+      _affiliateLoaded = true;
+    });
   }
 
   Future<void> _loadUserData() async {
@@ -47,16 +77,15 @@ class _SettingsViewState extends State<SettingsView> {
       final isAdmin = await _storageService.getIsAdmin();
       final isSuperAdmin = await _storageService.getIsSuperAdmin();
 
-      if (mounted) {
-        setState(() {
-          _userName = name;
-          _userPhone = phone;
-          _userProfileImage = profileImage;
-          _isAdmin = isAdmin;
-          _isSuperAdmin = isSuperAdmin;
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _userName = name;
+        _userPhone = phone;
+        _userProfileImage = profileImage;
+        _isAdmin = isAdmin;
+        _isSuperAdmin = isSuperAdmin;
+        _isLoading = false;
+      });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -129,7 +158,6 @@ class _SettingsViewState extends State<SettingsView> {
       body: BlocListener<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is Unauthenticated) {
-            // ✅ Clear stack and navigate to login
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const WelcomeScreen()),
               (route) => false,
@@ -142,7 +170,14 @@ class _SettingsViewState extends State<SettingsView> {
                 children: [
                   Expanded(
                     child: RefreshIndicator(
-                      onRefresh: _loadUserData,
+                      onRefresh: () async {
+                        await _loadUserData();
+                        await _loadCachedAffiliate();
+                        if (!mounted) return;
+                        context.read<AffiliateUserBloc>().add(
+                          const FetchMyDashboardStatsEvent(),
+                        );
+                      },
                       color: const Color(0xFF2ED573),
                       backgroundColor: Colors.white,
                       child: SingleChildScrollView(
@@ -158,56 +193,27 @@ class _SettingsViewState extends State<SettingsView> {
                             const SizedBox(height: 10),
                             Container(
                               color: Colors.white,
-                              child: Column(
-                                children: [
-                                  MenuItem(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      OrderHistoryScreen.route(),
-                                    ),
-                                    id: 'order-history',
-                                    title: 'Order history',
-                                    icon: Iconsax.receipt,
+                              child:
+                                  BlocListener<
+                                    AffiliateUserBloc,
+                                    AffiliateUserState
+                                  >(
+                                    // ⭐ Only react when a REAL loaded state arrives
+                                    listenWhen: (prev, curr) =>
+                                        curr is MyDashboardStatsLoaded,
+                                    listener: (context, state) {
+                                      if (state is! MyDashboardStatsLoaded)
+                                        return;
+                                      // Update local cache to match bloc
+                                      setState(() {
+                                        _cachedIsAffiliate = state.isAffiliate;
+                                        _cachedAffiliateStatus =
+                                            (state.stats['status'] ?? 'NONE')
+                                                .toString();
+                                      });
+                                    },
+                                    child: _buildMenuList(),
                                   ),
-                                  const Divider(
-                                    height: 1,
-                                    color: Color(0xFFE0E0E0),
-                                  ),
-                                  MenuItem(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      SupportScreen.route(),
-                                    ),
-                                    id: 'help-center',
-                                    title: 'Help center',
-                                    icon: Iconsax.info_circle,
-                                  ),
-                                  const Divider(
-                                    height: 1,
-                                    color: Color(0xFFE0E0E0),
-                                  ),
-                                  if (_isAdmin || _isSuperAdmin) ...[
-                                    MenuItem(
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const AdminMainNavigationScreen(),
-                                        ),
-                                      ),
-                                      id: 'admin-dashboard',
-                                      title: _isSuperAdmin
-                                          ? 'Super Admin Dashboard'
-                                          : 'Admin Dashboard',
-                                      icon: Iconsax.chart_square,
-                                    ),
-                                    const Divider(
-                                      height: 1,
-                                      color: Color(0xFFE0E0E0),
-                                    ),
-                                  ],
-                                ],
-                              ),
                             ),
                             const SizedBox(height: 20),
                           ],
@@ -226,6 +232,151 @@ class _SettingsViewState extends State<SettingsView> {
                 ],
               ),
       ),
+    );
+  }
+
+  Widget _buildMenuList() {
+    // ⭐ Use CACHED values, never the live state directly → no flicker
+    final bool isAffiliate = _cachedIsAffiliate;
+    final String affiliateStatus = _cachedAffiliateStatus;
+    final bool isSuspended = isAffiliate && affiliateStatus == 'SUSPENDED';
+    final bool isActiveAffiliate = isAffiliate && affiliateStatus == 'ACTIVE';
+    final bool isAnyAdmin = _isAdmin || _isSuperAdmin;
+
+    // 👉 If affiliate status has never been loaded (fresh install, no cache)
+    //    AND we don't know yet → hide the affiliate row entirely so no
+    //    flicker between "Become" and "Dashboard".
+    final bool affiliateKnown = _affiliateLoaded;
+
+    return Column(
+      children: [
+        MenuItem(
+          onTap: () => Navigator.push(context, OrderHistoryScreen.route()),
+          id: 'order-history',
+          title: 'Order history',
+          icon: Iconsax.receipt,
+        ),
+        const Divider(height: 1, color: Color(0xFFE0E0E0)),
+        MenuItem(
+          onTap: () => Navigator.push(context, SupportScreen.route()),
+          id: 'help-center',
+          title: 'Help center',
+          icon: Iconsax.info_circle,
+        ),
+        const Divider(height: 1, color: Color(0xFFE0E0E0)),
+
+        // ---- Affiliate section ----
+        if (!isAnyAdmin && affiliateKnown) ...[
+          // Suspended
+          if (isSuspended)
+            MenuItem(
+              onTap: () {},
+              id: 'affiliate-suspended',
+              title: 'Affiliate Account Suspended',
+              subtitle: 'Contact support for more information',
+              icon: Iconsax.warning_2,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Suspended',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+          // Active
+          if (isActiveAffiliate)
+            MenuItem(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AffiliateDashboardScreen(),
+                ),
+              ),
+              id: 'affiliate-dashboard',
+              title: 'My Affiliate Dashboard',
+              subtitle: 'Track earnings & promo codes',
+              icon: Iconsax.chart_2,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Active',
+                  style: TextStyle(
+                    color: Color(0xFF2ED573),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+          // Not affiliate
+          if (!isAffiliate)
+            MenuItem(
+              onTap: () =>
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AffiliateApplyScreen(),
+                    ),
+                  ).then((_) {
+                    if (!mounted) return;
+                    context.read<AffiliateUserBloc>().add(
+                      const FetchMyDashboardStatsEvent(),
+                    );
+                  }),
+              id: 'affiliate-apply',
+              title: 'Become an Affiliate',
+              subtitle: 'Earn commissions by sharing products',
+              icon: Iconsax.dollar_circle,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Earn \$',
+                  style: TextStyle(
+                    color: Color(0xFF2ED573),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+          const Divider(height: 1, color: Color(0xFFE0E0E0)),
+        ],
+
+        // ---- Admin dashboard ----
+        if (isAnyAdmin) ...[
+          MenuItem(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdminMainNavigationScreen(),
+              ),
+            ),
+            id: 'admin-dashboard',
+            title: _isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard',
+            icon: Iconsax.chart_square,
+          ),
+          const Divider(height: 1, color: Color(0xFFE0E0E0)),
+        ],
+      ],
     );
   }
 }

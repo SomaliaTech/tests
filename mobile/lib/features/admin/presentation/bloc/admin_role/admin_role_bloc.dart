@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart
-import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/admin/domain/repositories/admin_role_repository.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_event.dart';
@@ -25,10 +25,12 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
     emit(RolesLoading());
     try {
       final roles = await repository.getAllRoles();
-      debugPrint('✅ [AdminRoleBloc] Loaded ${roles.length} roles');
+      if (kDebugMode) {
+        debugPrint('✅ [AdminRoleBloc] Loaded ${roles.length} roles');
+      }
       emit(RolesLoaded(roles));
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Error fetching roles: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Error fetching roles: $e');
       emit(AdminRoleError(e.toString()));
     }
   }
@@ -40,10 +42,10 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
     emit(RolesLoading());
     try {
       final role = await repository.getRoleById(event.roleId);
-      debugPrint('✅ [AdminRoleBloc] Loaded role: ${role.name}');
+      if (kDebugMode) debugPrint('✅ [AdminRoleBloc] Loaded role: ${role.name}');
       emit(RoleLoaded(role));
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Error fetching role: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Error fetching role: $e');
       emit(AdminRoleError(e.toString()));
     }
   }
@@ -54,11 +56,11 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
   ) async {
     try {
       await repository.createRole(event.roleData);
-      debugPrint('✅ [AdminRoleBloc] Role created successfully');
+      if (kDebugMode) debugPrint('✅ [AdminRoleBloc] Role created successfully');
       emit(const RoleOperationSuccess('Role created successfully'));
       add(const FetchAllRolesEvent());
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Error creating role: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Error creating role: $e');
       emit(AdminRoleError(e.toString()));
     }
   }
@@ -69,11 +71,11 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
   ) async {
     try {
       await repository.updateRole(event.roleId, event.updateData);
-      debugPrint('✅ [AdminRoleBloc] Role updated successfully');
+      if (kDebugMode) debugPrint('✅ [AdminRoleBloc] Role updated successfully');
       emit(const RoleOperationSuccess('Role updated successfully'));
       add(const FetchAllRolesEvent());
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Error updating role: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Error updating role: $e');
       emit(AdminRoleError(e.toString()));
     }
   }
@@ -84,11 +86,11 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
   ) async {
     try {
       await repository.deleteRole(event.roleId);
-      debugPrint('✅ [AdminRoleBloc] Role deleted successfully');
+      if (kDebugMode) debugPrint('✅ [AdminRoleBloc] Role deleted successfully');
       emit(const RoleOperationSuccess('Role deleted successfully'));
       add(const FetchAllRolesEvent());
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Error deleting role: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Error deleting role: $e');
       emit(AdminRoleError(e.toString()));
     }
   }
@@ -103,19 +105,25 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
       final hasRole = userRoles.any((role) => role.id == event.roleId);
 
       if (hasRole) {
-        debugPrint('⚠️ [AdminRoleBloc] User already has role: ${event.roleId}');
+        if (kDebugMode) {
+          debugPrint(
+            '⚠️ [AdminRoleBloc] User already has role: ${event.roleId}',
+          );
+        }
         emit(const RoleOperationSuccess('User already has this role'));
         return;
       }
 
       await repository.assignRoleToUser(event.userId, event.roleId);
-      debugPrint(
-        '✅ [AdminRoleBloc] Role assigned successfully to user: ${event.userId}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '✅ [AdminRoleBloc] Role assigned successfully to user: ${event.userId}',
+        );
+      }
       emit(const RoleOperationSuccess('Role assigned successfully'));
       add(const FetchAllRolesEvent());
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Assign role error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Assign role error: $e');
 
       // Handle specific error messages
       final errorMsg = e.toString();
@@ -137,21 +145,25 @@ class AdminRoleBloc extends Bloc<AdminRoleEvent, AdminRoleState> {
       final hasRole = userRoles.any((role) => role.id == event.roleId);
 
       if (!hasRole) {
-        debugPrint(
-          '⚠️ [AdminRoleBloc] User does not have role: ${event.roleId}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '⚠️ [AdminRoleBloc] User does not have role: ${event.roleId}',
+          );
+        }
         emit(const RoleOperationSuccess('User does not have this role'));
         return;
       }
 
       await repository.removeRoleFromUser(event.userId, event.roleId);
-      debugPrint(
-        '✅ [AdminRoleBloc] Role removed successfully from user: ${event.userId}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '✅ [AdminRoleBloc] Role removed successfully from user: ${event.userId}',
+        );
+      }
       emit(const RoleOperationSuccess('Role removed successfully'));
       add(const FetchAllRolesEvent());
     } catch (e) {
-      debugPrint('❌ [AdminRoleBloc] Remove role error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminRoleBloc] Remove role error: $e');
       emit(AdminRoleError(e.toString()));
     }
   }

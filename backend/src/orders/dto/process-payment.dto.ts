@@ -8,7 +8,7 @@ export class ProcessPaymentDto {
     enum: ['cash', 'card', 'mobile_money'],
   })
   @IsString()
-  paymentMethod: string;
+  paymentMethod!: string; // ✅ Added !
 
   @ApiProperty({
     description: 'Phone number for mobile money payments',

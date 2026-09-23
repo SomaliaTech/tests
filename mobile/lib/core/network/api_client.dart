@@ -9,6 +9,7 @@ import 'package:mobile/core/services/server_status_service.dart'; // ✅ ADD THI
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_event.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiClient {
   final http.Client client;
@@ -153,7 +154,7 @@ class ApiClient {
       final authBloc = GetIt.instance<AuthBloc>();
       authBloc.add(LogoutEvent());
     } catch (e) {
-      // debugPrint('❌ Failed to dispatch logout: $e');
+      // if (kDebugMode) debugPrint('❌ Failed to dispatch logout: $e');
     }
 
     SessionHandler.navigateToLogin();

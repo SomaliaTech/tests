@@ -204,7 +204,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                         : _currentUser.isAdmin
                         ? const Color(0xFF7C3AED)
                         : const Color(0xFF2ED573))
-                    .withOpacity(0.3),
+                    .withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -214,7 +214,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
         children: [
           CircleAvatar(
             radius: 50,
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             child: Text(
               _currentUser.name?.isNotEmpty == true
                   ? _currentUser.name![0].toUpperCase()
@@ -239,7 +239,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
           Text(
             _currentUser.email ?? _currentUser.phoneNumber,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 14,
             ),
           ),
@@ -275,9 +275,11 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -307,9 +309,9 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
+        color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -341,7 +343,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.grey.withValues(alpha: 0.05),
             spreadRadius: 1,
             blurRadius: 10,
             offset: const Offset(0, 2),
@@ -375,7 +377,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: AppTheme.primaryColor, size: 16),
@@ -414,7 +416,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.grey.withValues(alpha: 0.05),
             spreadRadius: 1,
             blurRadius: 10,
             offset: const Offset(0, 2),
@@ -475,9 +477,9 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Row(
           children: [
@@ -512,7 +514,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Iconsax.warning_2, color: Colors.red, size: 20),
@@ -545,7 +547,7 @@ class _AdminUserDetailsScreenState extends State<AdminUserDetailsScreen> {
               context.read<UserBloc>().add(DeleteUserEvent(_currentUser.id));
             },
             style: TextButton.styleFrom(
-              backgroundColor: Colors.red.withOpacity(0.1),
+              backgroundColor: Colors.red.withValues(alpha: 0.1),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),

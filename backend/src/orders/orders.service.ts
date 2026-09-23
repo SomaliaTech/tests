@@ -1,5 +1,3 @@
-// src/orders/orders.service.ts
-
 import {
   Injectable,
   NotFoundException,
@@ -38,6 +36,7 @@ import {
   ORDER_STATUS_TRANSITIONS,
   FINAL_ORDER_STATUSES,
 } from './enums/order-status.enum';
+import { AffiliateService } from 'src/affiliate/affiliate.service';
 
 @Injectable()
 export class OrdersService {
@@ -50,6 +49,8 @@ export class OrdersService {
     @Inject(forwardRef(() => NotificationsService))
     private notificationsService: NotificationsService,
     private waafiPayService: WaafiPayService,
+    @Inject(forwardRef(() => AffiliateService))
+    private affiliateService: AffiliateService,
   ) {}
 
   // ==========================================
@@ -61,9 +62,43 @@ export class OrdersService {
       `Processing order for user: ${LogSanitizer.maskValue(userId)}`,
     );
 
-    const { itemsTotal, orderItemsData, user, deliveryFee, finalTotalAmount } =
-      await this._validateAndPrepareOrder(userId, orderData);
+    const {
+      itemsTotal, // 👈 ADD THIS
+      orderItemsData,
+      user,
+      deliveryFee,
+      finalTotalAmount: rawTotal,
+    } = await this._validateAndPrepareOrder(userId, orderData);
 
+    // ✅ 1. PROMO CODE VALIDATION
+    let promoCodeId: string | null = null;
+    let promoDiscount = 0;
+    let finalTotalAmount = rawTotal;
+
+    if (orderData.promoCode && orderData.promoCode.trim().length > 0) {
+      const validation = await this.affiliateService.validatePromoCode(
+        orderData.promoCode.trim(),
+        itemsTotal, // 👈 CHANGE rawTotal TO itemsTotal
+        userId,
+      );
+
+      if (!validation.valid) {
+        throw new BadRequestException(
+          validation.message || 'Invalid promo code',
+        );
+      }
+
+      // ✅ FIX: Added ! to assert promoCode is defined when valid is true
+      promoDiscount = validation.promoCode!.discountAmount;
+      finalTotalAmount = Math.max(0, rawTotal - promoDiscount);
+      promoCodeId = validation.promoCode!.id;
+
+      this.logger.log(
+        `🎟️ Promo applied: ${orderData.promoCode} | Discount: $${promoDiscount} | New Total: $${finalTotalAmount}`,
+      );
+    }
+
+    // ✅ 2. Process payment with the DISCOUNTED total
     const paymentResult = await this._processPaymentIfNeeded(
       orderData,
       finalTotalAmount,
@@ -81,7 +116,6 @@ export class OrdersService {
         ? PaymentStatus.PAID
         : PaymentStatus.PENDING;
 
-      // ✅ FIX: Use correct field names that exist in schema
       const [order] = await tx
         .insert(orders)
         .values({
@@ -93,18 +127,19 @@ export class OrdersService {
           customerPhone: orderData.shippingAddress.phoneNumber,
           shippingAddress: shippingAddress,
           totalAmount: finalTotalAmount.toString(),
+          promoCodeId: promoCodeId,
+          promoCodeDiscount: promoDiscount.toString(),
           status: initialStatus,
           paymentMethod: orderData.paymentMethod,
           paymentStatus: initialPaymentStatus,
           paymentReferenceId: paymentResult?.transactionId || null,
           notes: orderData.notes || null,
-        })
+        } as any) // ✅ FIX: Cast to any to bypass TS error until schema migration is pushed
         .returning();
 
       orderItemsData.forEach((item) => (item.orderId = order.id));
-      if (orderItemsData.length > 0) {
+      if (orderItemsData.length > 0)
         await tx.insert(orderItems).values(orderItemsData);
-      }
 
       await this._updateStock(tx, orderItemsData);
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
@@ -119,8 +154,26 @@ export class OrdersService {
         items: orderItemsData,
         user,
         paymentResult,
+        promoCodeId,
+        promoDiscount,
+        itemsTotal, // 👈 CHANGE rawTotal TO itemsTotal
       };
     });
+
+    // ✅ 3. Record promo usage & generate affiliate commission AFTER transaction commits
+    if (result.promoCodeId && result.promoDiscount > 0) {
+      try {
+        await this.affiliateService.recordPromoUsage(
+          result.promoCodeId,
+          userId,
+          result.order.id,
+          result.itemsTotal, // 👈 CHANGE result.rawTotal TO result.itemsTotal
+          result.promoDiscount,
+        );
+      } catch (err) {
+        this.logger.error('Failed to record promo usage', err);
+      }
+    }
 
     await this._sendOrderNotifications(result.order, result.user);
 
@@ -253,22 +306,38 @@ export class OrdersService {
   // ==========================================
   // PROCESS PAYMENT IF NEEDED
   // ==========================================
-
   private async _processPaymentIfNeeded(
     orderData: CreateOrderDto,
     finalTotalAmount: number,
-  ) {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    transactionId?: string;
+    referenceId?: string;
+    state?: string;
+    responseCode?: string;
+  }> {
+    // ✅ Cash on delivery → no payment processing
     if (orderData.paymentMethod === 'cash_on_delivery') {
       this.logger.log('💰 Cash on delivery - no payment processing needed');
-      return { success: true, message: 'Cash on delivery' };
+      return {
+        success: true,
+        message: 'Cash on delivery',
+      };
     }
 
+    // ✅ No payment method → leave as PENDING
     if (!orderData.paymentMethod || !orderData.phoneNumber) {
       this.logger.log('💰 No payment method or phone - skipping payment');
-      return { success: false, message: 'Payment method not provided' };
+      return {
+        success: false,
+        message: 'Payment method not provided',
+      };
     }
 
-    this.logger.log(`🔄 Processing payment for order...`);
+    this.logger.log(
+      `🔄 Processing WaafiPay payment for order | Amount: $${finalTotalAmount} | Method: ${orderData.paymentMethod}`,
+    );
 
     const paymentRefId = this.waafiPayService.generateReferenceId(
       `ORDER-${Date.now()}`,
@@ -347,7 +416,6 @@ export class OrdersService {
       );
     }
 
-    // ✅ FIX: Only include fields that exist in schema
     const updateData: any = {
       status: newStatus,
       updatedAt: new Date(),
@@ -417,7 +485,6 @@ export class OrdersService {
     if (!updatedOrder) throw new NotFoundException('Order not found');
 
     if (paymentStatus === PaymentStatus.PAID) {
-      // ✅ FIX: Check if userId exists before sending notification
       if (updatedOrder.userId) {
         await this.notificationsService.create({
           userId: updatedOrder.userId,
@@ -466,10 +533,8 @@ export class OrdersService {
       );
     }
 
-    // ✅ FIX: Use proper typing for refundResult
     let refundResult: { success: boolean; message: string } | null = null;
 
-    // ✅ FIX: Check if paymentReferenceId exists on order
     if (
       order.paymentStatus === PaymentStatus.PAID &&
       (order as any).paymentReferenceId
@@ -478,7 +543,6 @@ export class OrdersService {
       refundResult = { success: true, message: 'Refund initiated' };
     }
 
-    // ✅ FIX: Only include fields that exist in schema
     const updateData: any = {
       status: OrderStatus.CANCELLED,
       updatedAt: new Date(),
@@ -496,7 +560,15 @@ export class OrdersService {
 
     await this._restoreStock(orderId);
 
-    // ✅ FIX: Check if userId exists before sending notification
+    // ✅ FIX: Cast to any to access new schema fields
+    if ((order as any).promoCodeId) {
+      try {
+        await this.affiliateService.cancelCommission(orderId);
+      } catch (err) {
+        this.logger.error('Failed to cancel commission', err);
+      }
+    }
+
     if (cancelledOrder.userId) {
       await this.notificationsService.create({
         userId: cancelledOrder.userId,
@@ -559,7 +631,6 @@ export class OrdersService {
   }
 
   private async _sendOrderNotifications(order: any, user: any) {
-    // ✅ FIX: Check if userId exists
     if (order.userId) {
       this.chatGateway.server
         .to(`user:${order.userId}`)
@@ -604,7 +675,6 @@ export class OrdersService {
     order: any,
     newStatus: OrderStatus,
   ) {
-    // ✅ FIX: Check if userId exists
     if (order.userId) {
       await this.notificationsService.create({
         userId: order.userId,
@@ -702,7 +772,6 @@ export class OrdersService {
   // ==========================================
   // EXISTING METHODS (getOrders, getOrderById, etc.)
   // ==========================================
-
   async getOrders(
     userId: string,
     status?: string,
@@ -743,6 +812,8 @@ export class OrdersService {
         with: {
           items: {
             with: {
+              // ✅ ADD — direct product images (for items with no variant)
+              product: { with: { images: true } },
               variant: {
                 with: {
                   product: { with: { images: true } },
@@ -778,14 +849,20 @@ export class OrdersService {
       },
     };
   }
-
   async getOrderById(orderId: string, userId: string) {
+    console.log('🔍 [getOrderById] START');
+
     const order = await this.drizzle.db.query.orders.findFirst({
       where: eq(orders.id, orderId),
       with: {
         items: {
           with: {
+            product: {
+              // ✅ ADD
+              with: { images: true }, // ✅ ADD
+            },
             variant: {
+              // ✅ ADD
               with: {
                 product: { with: { images: true } },
                 color: true,
@@ -795,19 +872,21 @@ export class OrdersService {
           },
         },
         user: {
-          columns: {
-            id: true,
-            name: true,
-            phoneNumber: true,
-            email: true,
-          },
+          columns: { id: true, name: true, phoneNumber: true, email: true },
         },
       },
     });
-
     if (!order) {
+      console.log('❌ Order NOT found in DB');
+      console.log('═══════════════════════════════════════');
       throw new NotFoundException('Order not found');
     }
+
+    console.log('✅ Order found in DB');
+    console.log('   order.id       :', order.id);
+    console.log('   order.userId   :', JSON.stringify(order.userId));
+    console.log('   order.userName :', order.user?.name ?? 'N/A');
+    console.log('   order.createdAt:', order.createdAt);
 
     const [user] = await this.drizzle.db
       .select({
@@ -820,12 +899,33 @@ export class OrdersService {
 
     const isAdmin = user?.isAdmin || user?.isSuperAdmin;
 
-    if (!isAdmin && order.userId !== userId) {
+    console.log('👤 Requesting user:');
+    console.log('   isAdmin      :', user?.isAdmin);
+    console.log('   isSuperAdmin :', user?.isSuperAdmin);
+    console.log('   effective    :', isAdmin);
+
+    // Type-safe comparison
+    const orderUserIdStr = order.userId ? String(order.userId).trim() : null;
+    const requestUserIdStr = userId ? String(userId).trim() : null;
+
+    console.log('🔍 Comparing:');
+    console.log('   order.userId  (string):', JSON.stringify(orderUserIdStr));
+    console.log('   request userId(string):', JSON.stringify(requestUserIdStr));
+    console.log(
+      '   are equal             :',
+      orderUserIdStr === requestUserIdStr,
+    );
+
+    if (!isAdmin && orderUserIdStr !== requestUserIdStr) {
+      console.log('❌ PERMISSION DENIED');
+      console.log('═══════════════════════════════════════');
       throw new ForbiddenException(
         'You do not have permission to view this order',
       );
     }
 
+    console.log('✅ PERMISSION GRANTED');
+    console.log('═══════════════════════════════════════');
     return order;
   }
 

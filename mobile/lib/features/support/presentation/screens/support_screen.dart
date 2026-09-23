@@ -1,4 +1,4 @@
-// lib/features/support/presentation/screens/support_screen.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,9 +6,13 @@ import 'package:iconsax/iconsax.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mobile/features/chat/presentation/widgets/admin_chat_bottom_sheet.dart';
+import 'package:mobile/features/support/data/models/support_contact_model.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_event.dart';
 import 'package:mobile/features/support/presentation/bloc/faq_state.dart';
+import 'package:mobile/features/support/presentation/bloc/support_settings/support_settings_bloc.dart';
+import 'package:mobile/features/support/presentation/bloc/support_settings/support_settings_event.dart';
+import 'package:mobile/features/support/presentation/bloc/support_settings/support_settings_state.dart';
 import 'package:mobile/features/support/presentation/widgets/localization_helper.dart';
 
 class SupportScreen extends StatefulWidget {
@@ -26,9 +30,16 @@ class _SupportScreenState extends State<SupportScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeInAnimation;
 
+  // ✅ Live contact values (updated by SupportSettingsBloc)
+  SupportContact _contact = const SupportContact(
+    email: 'support@farxada.com',
+    phoneNumber: '+252615328651',
+  );
+
   @override
   void initState() {
     super.initState();
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -39,8 +50,12 @@ class _SupportScreenState extends State<SupportScreen>
     );
     _animationController.forward();
 
-    // Load FAQs from backend
-    context.read<FaqBloc>().add(const LoadActiveFaqsEvent());
+    // Load contact info + FAQs from backend
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<SupportSettingsBloc>().add(const LoadSupportSettingsEvent());
+      context.read<FaqBloc>().add(const LoadActiveFaqsEvent());
+    });
   }
 
   @override
@@ -59,30 +74,27 @@ class _SupportScreenState extends State<SupportScreen>
   }
 
   Future<void> _makePhoneCall() async {
-    final l10n = context.supportLocalization;
-    // Clean phone number (remove spaces just in case)
-    final cleanPhone = l10n.phoneNumber.replaceAll(' ', '');
-    final phoneUri = Uri(scheme: 'tel', path: cleanPhone);
-    final smsUri = Uri(scheme: 'sms', path: cleanPhone);
+    // ✅ Use live value instead of hardcoded l10n
+    final phone = _contact.phoneNumber.replaceAll(' ', '');
+    final phoneUri = Uri(scheme: 'tel', path: phone);
+    final smsUri = Uri(scheme: 'sms', path: phone);
 
     try {
-      // Force external application mode to prevent opening inside the app's webview
       final launched = await launchUrl(
         phoneUri,
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched) {
-        // Fallback to SMS if Phone app isn't available (e.g. iPads or Simulators)
         await launchUrl(smsUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
-      debugPrint('❌ Error launching phone call: $e');
+      if (kDebugMode) debugPrint('❌ Error launching phone call: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Could not open phone app. Please call: ${l10n.phoneNumber}',
+              'Could not open phone app. Please call: ${_contact.phoneNumber}',
             ),
             backgroundColor: Colors.red.shade700,
           ),
@@ -92,10 +104,9 @@ class _SupportScreenState extends State<SupportScreen>
   }
 
   Future<void> _sendEmail() async {
-    final l10n = context.supportLocalization;
-    String emailAddress = l10n.email.trim();
+    // ✅ Use live value
+    String emailAddress = _contact.email.trim();
 
-    // ✅ Clean up the email address just in case it includes "mailto:" already
     if (emailAddress.toLowerCase().startsWith('mailto:')) {
       emailAddress = emailAddress.substring(7);
     }
@@ -103,7 +114,7 @@ class _SupportScreenState extends State<SupportScreen>
     final emailUri = Uri(
       scheme: 'mailto',
       path: emailAddress,
-      queryParameters: {'subject': 'Support Request - Faraxada'},
+      queryParameters: {'subject': 'Support Request - Farxada'},
     );
 
     try {
@@ -115,11 +126,10 @@ class _SupportScreenState extends State<SupportScreen>
       if (!launched) {
         throw Exception('No email app found');
       }
-      debugPrint('✅ Email client opened for: $emailAddress');
+      if (kDebugMode) debugPrint('✅ Email client opened for: $emailAddress');
     } catch (e) {
-      debugPrint('❌ Error launching email: $e');
+      if (kDebugMode) debugPrint('❌ Error launching email: $e');
 
-      // ✅ SMART FALLBACK: Copy email to clipboard so the user can paste it anywhere
       await Clipboard.setData(ClipboardData(text: emailAddress));
 
       if (mounted) {
@@ -137,7 +147,7 @@ class _SupportScreenState extends State<SupportScreen>
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF2ED573), // Your brand green
+            backgroundColor: const Color(0xFF2ED573),
             duration: const Duration(seconds: 3),
           ),
         );
@@ -149,339 +159,179 @@ class _SupportScreenState extends State<SupportScreen>
   Widget build(BuildContext context) {
     final l10n = context.supportLocalization;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: CustomScrollView(
-        slivers: [
-          // Modern App Bar with Green Gradient
-          SliverAppBar(
-            expandedHeight: 130,
-            floating: false,
-            pinned: true,
-            backgroundColor: Colors.white,
-            elevation: 0,
-            leading: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+    return BlocListener<SupportSettingsBloc, SupportSettingsState>(
+      listenWhen: (_, curr) => curr is SupportSettingsLoaded,
+      listener: (context, state) {
+        if (state is SupportSettingsLoaded && mounted) {
+          setState(() => _contact = state.contact);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA),
+        body: CustomScrollView(
+          slivers: [
+            _buildAppBar(l10n),
+            SliverToBoxAdapter(
+              child: FadeTransition(
+                opacity: _fadeInAnimation,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.subtitle,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
+                        ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // 1. IN-APP CHAT CARD
+                      _buildInAppChatCard(l10n),
+
+                      const SizedBox(height: 24),
+
+                      // 2. OTHER CONTACT OPTIONS — uses LIVE values
+                      Text(
+                        l10n.otherWays,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildContactOptions(l10n),
+
+                      const SizedBox(height: 32),
+
+                      // 3. FAQ SECTION
+                      _buildFaqHeader(l10n),
+                      const SizedBox(height: 12),
+                      _buildFaqList(l10n),
+
+                      const SizedBox(height: 40),
+
+                      // 4. FOOTER
+                      _buildFooter(l10n),
+                      const SizedBox(height: 24),
                     ],
                   ),
-                  child: const Icon(
-                    Iconsax.arrow_left_2,
-                    color: Color(0xFF1F2937),
-                  ),
                 ),
               ),
             ),
-            flexibleSpace: FlexibleSpaceBar(
-              title: Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 8),
-                child: Text(
-                  l10n.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF2ED573),
-                      Color(0xFF1ABC9C),
-                      Color(0xFF16A085),
-                    ],
-                  ),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      right: -40,
-                      top: -40,
-                      child: Container(
-                        width: 180,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 40,
-                      bottom: -20,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.08),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 20,
-                      bottom: 20,
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: const Icon(
-                          Iconsax.headphone,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Content
-          SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _fadeInAnimation,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.subtitle,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 1. IN-APP CHAT CARD
-                    _buildInAppChatCard(l10n),
-
-                    const SizedBox(height: 24),
-
-                    // 2. OTHER CONTACT OPTIONS
-                    Text(
-                      l10n.otherWays,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildContactOptions(l10n),
-
-                    const SizedBox(height: 32),
-
-                    // 3. FAQ SECTION
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2ED573).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Iconsax.document_text,
-                            color: Color(0xFF2ED573),
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          l10n.faqTitle,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Dynamic FAQs from BLoC
-                    BlocBuilder<FaqBloc, FaqState>(
-                      builder: (context, state) {
-                        if (state is FaqsLoading) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                children: [
-                                  const CircularProgressIndicator(
-                                    color: Color(0xFF2ED573),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    l10n.loadingFaqs,
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        if (state is FaqsLoaded) {
-                          if (state.faqs.isEmpty) {
-                            return Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Center(
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      Iconsax.document_text,
-                                      size: 48,
-                                      color: Colors.grey[400],
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      l10n.noFaqs,
-                                      style: TextStyle(
-                                        color: Colors.grey[500],
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }
-
-                          return Column(
-                            children: state.faqs
-                                .map(
-                                  (faq) => FaqItem(
-                                    question: faq.question,
-                                    answer: faq.answer,
-                                    isSomali: l10n.isSomali,
-                                  ),
-                                )
-                                .toList(),
-                          );
-                        }
-
-                        if (state is FaqError) {
-                          return Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Center(
-                              child: Column(
-                                children: [
-                                  const Icon(
-                                    Iconsax.warning_2,
-                                    color: Colors.red,
-                                    size: 32,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    l10n.errorLoadingFaqs,
-                                    style: const TextStyle(
-                                      color: Colors.red,
-                                      fontSize: 14,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    state.message,
-                                    style: TextStyle(
-                                      color: Colors.grey[600],
-                                      fontSize: 12,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ElevatedButton(
-                                    onPressed: () {
-                                      context.read<FaqBloc>().add(
-                                        const LoadActiveFaqsEvent(),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2ED573),
-                                    ),
-                                    child: Text(l10n.retry),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        return const SizedBox.shrink();
-                      },
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // 4. FOOTER
-                    Center(
-                      child: Column(
-                        children: [
-                          Text(
-                            l10n.supportTeam,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.replyTime,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
+  // ============================================================
+  // APP BAR
+  // ============================================================
+  Widget _buildAppBar(SupportLocalization l10n) {
+    return SliverAppBar(
+      expandedHeight: 130,
+      floating: false,
+      pinned: true,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      leading: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(Iconsax.arrow_left_2, color: Color(0xFF1F2937)),
+          ),
+        ),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        title: Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 8),
+          child: Text(
+            l10n.title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.3,
+            ),
+          ),
+        ),
+        background: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2ED573), Color(0xFF1ABC9C), Color(0xFF16A085)],
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -40,
+                top: -40,
+                child: Container(
+                  width: 180,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 40,
+                bottom: -20,
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 20,
+                bottom: 20,
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Iconsax.headphone,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // IN-APP CHAT CARD
+  // ============================================================
   Widget _buildInAppChatCard(SupportLocalization l10n) {
     return GestureDetector(
       onTap: _openInAppChat,
@@ -494,7 +344,7 @@ class _SupportScreenState extends State<SupportScreen>
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2ED573).withOpacity(0.3),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.3),
               blurRadius: 15,
               offset: const Offset(0, 8),
             ),
@@ -505,7 +355,7 @@ class _SupportScreenState extends State<SupportScreen>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -532,7 +382,7 @@ class _SupportScreenState extends State<SupportScreen>
                     l10n.chatDescription,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                     ),
                   ),
                 ],
@@ -541,7 +391,7 @@ class _SupportScreenState extends State<SupportScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -556,6 +406,9 @@ class _SupportScreenState extends State<SupportScreen>
     );
   }
 
+  // ============================================================
+  // CONTACT OPTIONS — NOW USING LIVE VALUES FROM _contact
+  // ============================================================
   Widget _buildContactOptions(SupportLocalization l10n) {
     return Row(
       children: [
@@ -563,7 +416,7 @@ class _SupportScreenState extends State<SupportScreen>
           child: _buildContactButton(
             icon: Iconsax.call,
             title: l10n.callUs,
-            subtitle: l10n.phoneNumber,
+            subtitle: _contact.phoneNumber, // ✅ LIVE
             color: const Color(0xFF3B82F6),
             onTap: _makePhoneCall,
           ),
@@ -573,7 +426,7 @@ class _SupportScreenState extends State<SupportScreen>
           child: _buildContactButton(
             icon: Iconsax.message,
             title: l10n.emailUs,
-            subtitle: l10n.email,
+            subtitle: _contact.email, // ✅ LIVE
             color: const Color(0xFFF59E0B),
             onTap: _sendEmail,
           ),
@@ -599,7 +452,7 @@ class _SupportScreenState extends State<SupportScreen>
           border: Border.all(color: const Color(0xFFE5E7EB)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
@@ -611,7 +464,7 @@ class _SupportScreenState extends State<SupportScreen>
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: color, size: 22),
@@ -637,10 +490,168 @@ class _SupportScreenState extends State<SupportScreen>
       ),
     );
   }
+
+  // ============================================================
+  // FAQ SECTION
+  // ============================================================
+  Widget _buildFaqHeader(SupportLocalization l10n) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Iconsax.document_text,
+            color: Color(0xFF2ED573),
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          l10n.faqTitle,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF1F2937),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFaqList(SupportLocalization l10n) {
+    return BlocBuilder<FaqBloc, FaqState>(
+      builder: (context, state) {
+        if (state is FaqsLoading) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF2ED573)),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.loadingFaqs,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (state is FaqsLoaded) {
+          if (state.faqs.isEmpty) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Iconsax.document_text,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.noFaqs,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return Column(
+            children: state.faqs
+                .map(
+                  (faq) => FaqItem(
+                    question: faq.question,
+                    answer: faq.answer,
+                    isSomali: l10n.isSomali,
+                  ),
+                )
+                .toList(),
+          );
+        }
+
+        if (state is FaqError) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  const Icon(Iconsax.warning_2, color: Colors.red, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.errorLoadingFaqs,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.message,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      context.read<FaqBloc>().add(const LoadActiveFaqsEvent());
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2ED573),
+                    ),
+                    child: Text(l10n.retry),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildFooter(SupportLocalization l10n) {
+    return Center(
+      child: Column(
+        children: [
+          Text(
+            l10n.supportTeam,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n.replyTime,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ==========================================
-// FAQ ACCORDION WIDGET with Localization
+// FAQ ACCORDION WIDGET
 // ==========================================
 class FaqItem extends StatefulWidget {
   final String question;

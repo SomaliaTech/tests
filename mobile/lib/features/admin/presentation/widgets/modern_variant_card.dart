@@ -24,13 +24,13 @@ class ModernVariantCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isNew
-              ? AppTheme.primaryColor.withOpacity(0.3)
-              : Colors.grey.withOpacity(0.1),
+              ? AppTheme.primaryColor.withValues(alpha: 0.3)
+              : Colors.grey.withValues(alpha: 0.1),
           width: isNew ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -78,7 +78,7 @@ class ModernVariantCard extends StatelessWidget {
                     icon: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -114,7 +114,7 @@ class ModernVariantCard extends StatelessWidget {
                   Container(
                     width: 1,
                     height: 40,
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                   ),
 
                   // Stock
@@ -134,7 +134,7 @@ class ModernVariantCard extends StatelessWidget {
                   Container(
                     width: 1,
                     height: 40,
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                   ),
 
                   // Price
@@ -180,10 +180,10 @@ class ModernVariantCard extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: _hexToColor(colorHex),
-        border: Border.all(color: Colors.grey.withOpacity(0.2), width: 2),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2), width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -197,9 +197,9 @@ class ModernVariantCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.1),
+        color: Colors.blue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.3), width: 1),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 1),
       ),
       child: Text(
         sizeValue.toUpperCase(),

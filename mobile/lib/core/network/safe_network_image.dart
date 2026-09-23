@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
@@ -50,7 +51,7 @@ class SafeNetworkImage extends StatelessWidget {
             ),
         errorWidget: (context, url, error) {
           // ✅ Log the error silently
-          debugPrint('⚠️ Image load failed: $url - $error');
+          if (kDebugMode) debugPrint('⚠️ Image load failed: $url - $error');
           return errorWidget ?? _buildFallback();
         },
         // ✅ Add cache configuration

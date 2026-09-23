@@ -1,8 +1,7 @@
+import 'package:flutter/foundation.dart';
 // lib/features/profile/data/datasources/market_remote_datasource.dart
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/market.dart';
@@ -34,15 +33,19 @@ class MarketRemoteDataSourceImpl implements MarketRemoteDataSource {
         if (responseData is Map && responseData.containsKey('items')) {
           // Paginated response: { items: [...], pagination: {...} }
           jsonList = responseData['items'] as List<dynamic>;
-          debugPrint(
-            '📊 Parsed paginated markets response: ${jsonList.length} items',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '📊 Parsed paginated markets response: ${jsonList.length} items',
+            );
+          }
         } else if (responseData is List) {
           // Direct array response: [...]
           jsonList = responseData;
-          debugPrint(
-            '📊 Parsed array markets response: ${jsonList.length} items',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '📊 Parsed array markets response: ${jsonList.length} items',
+            );
+          }
         } else {
           throw ServerException(
             'Unexpected response format: ${responseData.runtimeType}',
@@ -53,7 +56,9 @@ class MarketRemoteDataSourceImpl implements MarketRemoteDataSource {
             .map((json) => MarketModel.fromJson(json as Map<String, dynamic>))
             .toList();
 
-        debugPrint('✅ Successfully loaded ${markets.length} markets');
+        if (kDebugMode) {
+          debugPrint('✅ Successfully loaded ${markets.length} markets');
+        }
         return markets;
       } else {
         throw ServerException(
@@ -63,7 +68,7 @@ class MarketRemoteDataSourceImpl implements MarketRemoteDataSource {
     } on ServerException {
       rethrow;
     } catch (e) {
-      debugPrint('❌ Market loading error: $e');
+      if (kDebugMode) debugPrint('❌ Market loading error: $e');
       throw ServerException('Network error: $e');
     }
   }

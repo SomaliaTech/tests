@@ -27,8 +27,8 @@ class MenuItem extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        splashColor: Colors.grey.withOpacity(0.1),
-        highlightColor: Colors.grey.withOpacity(0.05),
+        splashColor: Colors.grey.withValues(alpha: 0.1),
+        highlightColor: Colors.grey.withValues(alpha: 0.05),
         child: Container(
           // ✅ CRITICAL: Provide bounded width
           width: double.infinity,

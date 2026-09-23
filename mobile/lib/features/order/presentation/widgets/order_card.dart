@@ -34,12 +34,12 @@ class OrderCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: Colors.grey.withOpacity(0.06)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.06)),
         ),
         child: Column(
           children: [
@@ -61,7 +61,7 @@ class OrderCard extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: statusColor.withOpacity(0.1),
+                                    color: statusColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
@@ -144,7 +144,9 @@ class OrderCard extends StatelessWidget {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF059669).withOpacity(0.08),
+                              color: const Color(
+                                0xFF059669,
+                              ).withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -167,7 +169,7 @@ class OrderCard extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: Colors.grey.withOpacity(0.08)),
+                  top: BorderSide(color: Colors.grey.withValues(alpha: 0.08)),
                 ),
               ),
               child: Row(
@@ -187,7 +189,7 @@ class OrderCard extends StatelessWidget {
                           decoration: BoxDecoration(
                             border: Border(
                               right: BorderSide(
-                                color: Colors.grey.withOpacity(0.08),
+                                color: Colors.grey.withValues(alpha: 0.08),
                               ),
                             ),
                           ),
@@ -266,7 +268,7 @@ class OrderCard extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.withOpacity(0.15)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
           borderRadius: BorderRadius.circular(10),
         ),
         child: CachedNetworkImage(
@@ -305,7 +307,7 @@ class OrderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.withOpacity(0.15)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
       ),
       child: Center(
         child: Icon(Iconsax.box, color: Colors.grey[400], size: 20),
@@ -338,9 +340,9 @@ class OrderCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -352,7 +354,7 @@ class OrderCard extends StatelessWidget {
               color: color,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: color.withOpacity(0.4), blurRadius: 4),
+                BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 4),
               ],
             ),
           ),

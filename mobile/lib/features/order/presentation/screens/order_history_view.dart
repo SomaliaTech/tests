@@ -7,7 +7,6 @@ import 'package:mobile/features/tracking/presentation/screens/tracking_screen.da
 import '../bloc/order_history_bloc.dart';
 import '../bloc/order_history_event.dart';
 import '../bloc/order_history_state.dart';
-import '../widgets/empty_state.dart';
 import '../widgets/order_card.dart';
 
 class OrderHistoryView extends StatefulWidget {
@@ -147,13 +146,13 @@ class _OrderHistoryViewState extends State<OrderHistoryView>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF2ED573).withOpacity(0.12),
-                      const Color(0xFF1ABC9C).withOpacity(0.08),
+                      const Color(0xFF2ED573).withValues(alpha: 0.12),
+                      const Color(0xFF1ABC9C).withValues(alpha: 0.08),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF2ED573).withOpacity(0.3),
+                    color: const Color(0xFF2ED573).withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -209,7 +208,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView>
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: color.withOpacity(0.2),
+                              color: color.withValues(alpha: 0.2),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -227,7 +226,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView>
                     decoration: BoxDecoration(
                       gradient: isSelected
                           ? LinearGradient(
-                              colors: [color, color.withOpacity(0.8)],
+                              colors: [color, color.withValues(alpha: 0.8)],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             )
@@ -392,8 +391,8 @@ class _OrderHistoryViewState extends State<OrderHistoryView>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF2ED573).withOpacity(0.1),
-                          const Color(0xFF1ABC9C).withOpacity(0.05),
+                          const Color(0xFF2ED573).withValues(alpha: 0.1),
+                          const Color(0xFF1ABC9C).withValues(alpha: 0.05),
                         ],
                       ),
                       shape: BoxShape.circle,
@@ -461,7 +460,7 @@ class _OrderHistoryViewState extends State<OrderHistoryView>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),

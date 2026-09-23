@@ -4,6 +4,7 @@ import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/admin_user_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminUserRemoteDataSource {
   Future<List<AdminUserModel>> getAllUsers(String? search);
@@ -58,7 +59,8 @@ class AdminUserRemoteDataSourceImpl implements AdminUserRemoteDataSource {
       } else if (decoded is Map && decoded.containsKey('data')) {
         jsonList = decoded['data'];
       } else {
-        print('❌ [AdminUsers] Unexpected response format: $decoded');
+        if (kDebugMode)
+          debugPrint('❌ [AdminUsers] Unexpected response format: $decoded');
         return [];
       }
 

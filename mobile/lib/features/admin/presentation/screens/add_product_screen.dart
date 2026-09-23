@@ -200,14 +200,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
           if (state is AdminProductOperationSuccess) {
-            if (Navigator.canPop(context))
+            if (Navigator.canPop(context)) {
               Navigator.pop(context); // Close loading dialog
+            }
             setState(() => _isSubmitting = false);
             ToastHelper.showSuccess(context, state.message);
             Navigator.pop(context); // Close AddProductScreen
           } else if (state is AdminProductsError) {
-            if (Navigator.canPop(context))
+            if (Navigator.canPop(context)) {
               Navigator.pop(context); // Close loading dialog
+            }
             setState(() => _isSubmitting = false);
             ToastHelper.showError(
               context,
@@ -310,7 +312,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                         current is AdminCategoriesLoading ||
                                         current is AdminCategoriesLoaded,
                                     builder: (context, state) {
-                                      if (state is AdminCategoriesLoading)
+                                      if (state is AdminCategoriesLoading) {
                                         return const Center(
                                           child: Padding(
                                             padding: EdgeInsets.all(20),
@@ -319,11 +321,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
                                             ),
                                           ),
                                         );
+                                      }
                                       if (state is AdminCategoriesLoaded) {
-                                        if (state.categories.isEmpty)
+                                        if (state.categories.isEmpty) {
                                           return _buildWarningBox(
                                             'No categories available. Please add categories first.',
                                           );
+                                        }
                                         return Column(
                                           children: [
                                             _buildCategoryDropdown(

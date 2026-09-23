@@ -1,5 +1,6 @@
 // lib/features/chat/domain/entities/chat_message.dart
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatMessage extends Equatable {
   final String id;
@@ -64,7 +65,7 @@ class ChatMessage extends Equatable {
       // If it's already local, toLocal() returns the same time
       return utcTime.toLocal();
     } catch (e) {
-      print('❌ [ChatMessage] Error parsing datetime: $e');
+      if (kDebugMode) debugPrint('❌ [ChatMessage] Error parsing datetime: $e');
       return DateTime.now();
     }
   }

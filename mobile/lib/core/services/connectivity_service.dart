@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart';
 // lib/core/services/connectivity_service.dart
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 
@@ -81,7 +81,9 @@ class ConnectivityService extends ChangeNotifier {
       notifyListeners();
       _connectivityStreamController.add(newStatus);
 
-      debugPrint('🔌 Connectivity status changed: $oldStatus -> $newStatus');
+      if (kDebugMode) {
+        debugPrint('🔌 Connectivity status changed: $oldStatus -> $newStatus');
+      }
     }
   }
 

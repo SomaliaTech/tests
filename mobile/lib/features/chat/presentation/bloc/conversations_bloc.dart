@@ -1,9 +1,8 @@
+import 'package:flutter/foundation.dart';
 // lib/features/chat/presentation/bloc/conversations_bloc.dart
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/chat/domain/repositories/chat_repository.dart';
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 import '../../domain/entities/conversation.dart';
 import '../../data/models/conversation_model.dart';
 import '../../domain/usecases/get_conversations.dart';
@@ -81,13 +80,15 @@ class ConversationsBloc extends Bloc<ConversationsEvent, ConversationsState> {
           ? message.receiverId
           : message.senderId;
 
-      if (partnerId != null && partnerId.isNotEmpty) {
+      if (partnerId.isNotEmpty) {
         try {
           await localDataSource.addMessage(partnerId, message);
         } catch (e) {
-          debugPrint(
-            '⚠️ [ConversationsBloc] Error saving received message: $e',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '⚠️ [ConversationsBloc] Error saving received message: $e',
+            );
+          }
         }
       }
 

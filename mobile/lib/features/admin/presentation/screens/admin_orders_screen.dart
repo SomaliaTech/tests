@@ -108,7 +108,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -293,7 +293,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
       ),
       backgroundColor: const Color(0xFF2ED573),
       elevation: 8,
-      // shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+      // shadowColor: const Color(0xFF2ED573).withValues(alpha: 0.4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
       extendedPadding: const EdgeInsets.symmetric(horizontal: 24),
     );
@@ -340,7 +340,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF2ED573).withOpacity(0.3),
+                        color: const Color(0xFF2ED573).withValues(alpha: 0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -422,17 +422,17 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF2ED573).withOpacity(0.15),
-                      const Color(0xFF1ABC9C).withOpacity(0.1),
+                      const Color(0xFF2ED573).withValues(alpha: 0.15),
+                      const Color(0xFF1ABC9C).withValues(alpha: 0.1),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: const Color(0xFF2ED573).withOpacity(0.3),
+                    color: const Color(0xFF2ED573).withValues(alpha: 0.3),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF2ED573).withOpacity(0.1),
+                      color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -460,7 +460,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                       Container(
                         width: 1,
                         height: 16,
-                        color: const Color(0xFF2ED573).withOpacity(0.3),
+                        color: const Color(0xFF2ED573).withValues(alpha: 0.3),
                       ),
                       const SizedBox(width: 8),
                       Container(
@@ -471,7 +471,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.orange.withOpacity(0.5),
+                              color: Colors.orange.withValues(alpha: 0.5),
                               blurRadius: 4,
                             ),
                           ],
@@ -593,10 +593,10 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.1)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.03),
+              color: Colors.black.withValues(alpha: 0.03),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -609,7 +609,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
             Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 14),
@@ -660,7 +660,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                 ),
                 decoration: BoxDecoration(
                   color: _showSearch
-                      ? const Color(0xFF2ED573).withOpacity(0.1)
+                      ? const Color(0xFF2ED573).withValues(alpha: 0.1)
                       : const Color(0xFFF9FAFB),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
@@ -709,10 +709,12 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
         decoration: BoxDecoration(
           color: const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.3)),
+          border: Border.all(
+            color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -751,7 +753,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                   margin: const EdgeInsets.only(right: 8),
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -794,7 +796,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                       boxShadow: isSelected
                           ? [
                               BoxShadow(
-                                color: color.withOpacity(0.3),
+                                color: color.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 3),
                               ),
@@ -811,7 +813,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                       decoration: BoxDecoration(
                         gradient: isSelected
                             ? LinearGradient(
-                                colors: [color, color.withOpacity(0.8)],
+                                colors: [color, color.withValues(alpha: 0.8)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               )
@@ -977,20 +979,20 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
-          border: Border.all(color: Colors.grey.withOpacity(0.08)),
+          border: Border.all(color: Colors.grey.withValues(alpha: 0.08)),
         ),
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            splashColor: const Color(0xFF2ED573).withOpacity(0.05),
-            highlightColor: const Color(0xFF2ED573).withOpacity(0.03),
+            splashColor: const Color(0xFF2ED573).withValues(alpha: 0.05),
+            highlightColor: const Color(0xFF2ED573).withValues(alpha: 0.03),
             onTap: () {
               HapticFeedback.lightImpact();
               Navigator.push(
@@ -1070,7 +1072,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2ED573).withOpacity(0.08),
+                          color: const Color(
+                            0xFF2ED573,
+                          ).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -1095,8 +1099,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              const Color(0xFF2ED573).withOpacity(0.2),
-                              const Color(0xFF1ABC9C).withOpacity(0.1),
+                              const Color(0xFF2ED573).withValues(alpha: 0.2),
+                              const Color(0xFF1ABC9C).withValues(alpha: 0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(10),
@@ -1131,7 +1135,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.08),
+                          color: Colors.grey.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
@@ -1169,9 +1173,9 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(
         status.replaceAll('_', ' '),
@@ -1223,8 +1227,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          const Color(0xFF2ED573).withOpacity(0.1),
-                          const Color(0xFF1ABC9C).withOpacity(0.05),
+                          const Color(0xFF2ED573).withValues(alpha: 0.1),
+                          const Color(0xFF1ABC9C).withValues(alpha: 0.05),
                         ],
                       ),
                       shape: BoxShape.circle,
@@ -1301,7 +1305,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),

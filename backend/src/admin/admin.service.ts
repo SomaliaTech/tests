@@ -232,6 +232,44 @@ export class AdminService {
     return { message: 'User created successfully', user: newUser };
   }
 
+  async getOrderRevenue(orderId: string) {
+    const order = await this.drizzle.db.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+      with: {
+        items: {
+          with: {
+            // ✅ Products without variants
+            product: {
+              with: { images: true },
+            },
+            // ✅ Products WITH variants
+            variant: {
+              with: {
+                product: { with: { images: true } },
+                color: true,
+                size: true,
+              },
+            },
+          },
+        },
+        user: {
+          columns: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return order;
+  }
+
   async getUserById(userId: string) {
     const user = await this.drizzle.db.query.users.findFirst({
       where: eq(users.id, userId),
@@ -1842,7 +1880,10 @@ export class AdminService {
     return product;
   }
 
-  async createProduct(createProductDto: CreateProductAdminDto) {
+  async createProduct(
+    createProductDto: CreateProductAdminDto,
+    files: Array<Express.Multer.File> = [],
+  ) {
     const productId = uuidv4();
 
     // ✅ Generate unique slug
@@ -1853,7 +1894,6 @@ export class AdminService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
 
-    // ✅ Check if slug exists and make it unique
     const existingProduct = await this.drizzle.db
       .select({ slug: products.slug })
       .from(products)
@@ -1861,11 +1901,8 @@ export class AdminService {
       .limit(1);
 
     if (existingProduct.length > 0) {
-      // Add timestamp to make it unique
       slug = `${slug}-${Date.now()}`;
-      console.log(
-        `⚠️ [Admin] Slug "${createProductDto.slug || createProductDto.name}" already exists. Using: ${slug}`,
-      );
+      this.logInfo(`Slug collision. Using: ${slug}`);
     }
 
     // ✅ Validate category exists
@@ -1885,65 +1922,59 @@ export class AdminService {
     const insertData: Record<string, unknown> = {
       id: productId,
       name: createProductDto.name,
-      slug: slug,
+      slug,
       price: createProductDto.price.toString(),
       stock: createProductDto.stock ?? 0,
       isActive: createProductDto.isActive ?? true,
-      isFeatured: createProductDto.isFeatured ?? false, // ✅ ADD THIS
+      isFeatured: createProductDto.isFeatured ?? false,
       categoryId: createProductDto.categoryId,
     };
 
-    // Optional text fields
-    if (createProductDto.description) {
+    if (createProductDto.description)
       insertData.description = createProductDto.description;
-    }
     if (createProductDto.sku) insertData.sku = createProductDto.sku;
     if (createProductDto.barcode) insertData.barcode = createProductDto.barcode;
     if (createProductDto.brand) insertData.brand = createProductDto.brand;
     if (createProductDto.tags) insertData.tags = createProductDto.tags;
     if (createProductDto.seoTitle)
       insertData.seoTitle = createProductDto.seoTitle;
-    if (createProductDto.seoDescription) {
+    if (createProductDto.seoDescription)
       insertData.seoDescription = createProductDto.seoDescription;
-    }
-
-    // ✅ Convert optional decimal fields to strings
     if (
       createProductDto.compareAtPrice !== undefined &&
       createProductDto.compareAtPrice !== null
-    ) {
+    )
       insertData.compareAtPrice = createProductDto.compareAtPrice.toString();
-    }
     if (
       createProductDto.costPerItem !== undefined &&
       createProductDto.costPerItem !== null
-    ) {
+    )
       insertData.costPerItem = createProductDto.costPerItem.toString();
-    }
     if (
       createProductDto.weight !== undefined &&
       createProductDto.weight !== null
-    ) {
+    )
       insertData.weight = createProductDto.weight.toString();
-    }
 
     try {
       this.logInfo('Creating product', {
         productName: createProductDto.name,
         categoryId: createProductDto.categoryId,
+        imageCount: files.length,
       });
 
+      // 1) Insert product row
       await this.drizzle.db
         .insert(products)
         .values(insertData as typeof products.$inferInsert)
         .returning();
 
-      // Handle variants
+      // 2) Insert variants
       if (createProductDto.variants && createProductDto.variants.length > 0) {
         for (const variant of createProductDto.variants) {
           const variantSku =
             variant.sku ||
-            `${slug}-${variant.colorId.slice(0, 4)}-${variant.sizeId.slice(0, 4)}`.toUpperCase();
+            `${slug}-${(variant.colorId || 'NO').slice(0, 4)}-${(variant.sizeId || 'NO').slice(0, 4)}`.toUpperCase();
 
           const variantData: Record<string, unknown> = {
             id: uuidv4(),
@@ -1964,18 +1995,37 @@ export class AdminService {
         }
       }
 
+      // 3) ✅ Upload images WITH RETRY. On total failure → ROLLBACK product.
+      if (files.length > 0) {
+        try {
+          await this.uploadFilesWithRetry(productId, files, 3);
+        } catch (error) {
+          this.logError(
+            'All image upload attempts failed — rolling back product',
+            error,
+          );
+          await this.rollbackProduct(productId);
+          throw new BadRequestException(
+            'Image upload to storage failed. The product was NOT created. Please check your internet connection and try again.',
+          );
+        }
+      }
+
       return this.getProductById(productId);
     } catch (error: unknown) {
+      // Re-throw our clean messages as-is
+      if (error instanceof BadRequestException) throw error;
+
       const err = error as { message?: string; detail?: string; code?: string };
       this.logError('Database Insert Error', {
         message: err.message,
         code: err.code,
         detail: err.detail,
       });
-      console.error('❌ Error Code:', err.code);
-      console.error('❌ Error Detail:', err.detail);
 
-      // ✅ Better error messages
+      // ✅ Rollback on any DB failure too (no orphans)
+      await this.rollbackProduct(productId);
+
       if (err.code === '23505') {
         if (err.detail?.includes('slug')) {
           throw new BadRequestException(
@@ -2216,8 +2266,13 @@ export class AdminService {
   }
 
   async uploadProductImages(productId: string, images: Express.Multer.File[]) {
-    await this.getProductById(productId);
+    await this.getProductById(productId); // validate product exists
 
+    if (!images || images.length === 0) {
+      throw new BadRequestException('No images provided');
+    }
+
+    // 1) Upload every file to Supabase FIRST (all-or-nothing)
     const uploadResults = await Promise.all(
       images.map((image) => {
         const base64 = `data:${image.mimetype};base64,${image.buffer.toString('base64')}`;
@@ -2225,6 +2280,7 @@ export class AdminService {
       }),
     );
 
+    // 2) Only after ALL uploads succeed, insert DB rows
     const insertedImages: Array<{
       id: string;
       url: string;
@@ -2233,6 +2289,7 @@ export class AdminService {
       isMain: boolean | null;
       order: number | null;
     }> = [];
+
     for (let i = 0; i < uploadResults.length; i++) {
       const result = uploadResults[i];
       const [image] = await this.drizzle.db
@@ -2249,6 +2306,7 @@ export class AdminService {
       insertedImages.push(image);
     }
 
+    this.logInfo(`Uploaded ${insertedImages.length} images for ${productId}`);
     return insertedImages;
   }
   // In admin.service.ts, find and replace the getCategoriesTree method
@@ -3607,5 +3665,45 @@ export class AdminService {
     // ✅ Always log errors, but sanitize
     const sanitizedError = error ? LogSanitizer.sanitize(error) : undefined;
     this.logger.error(message, sanitizedError);
+  }
+
+  private async uploadFilesWithRetry(
+    productId: string,
+    files: Array<Express.Multer.File>,
+    maxRetries = 3,
+  ) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.uploadProductImages(productId, files);
+      } catch (error) {
+        lastError = error;
+        this.logError(
+          `Image upload attempt ${attempt}/${maxRetries} failed`,
+          error,
+        );
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+        }
+      }
+    }
+
+    throw lastError;
+  }
+  // ==========================================
+  // ✅ NEW: Rollback helper (deletes variants + product)
+  // ==========================================
+  private async rollbackProduct(productId: string) {
+    try {
+      await this.drizzle.db
+        .delete(productVariants)
+        .where(eq(productVariants.productId, productId));
+      await this.drizzle.db.delete(products).where(eq(products.id, productId));
+      this.logInfo(`🔄 Rolled back product ${productId}`);
+    } catch (error) {
+      this.logError('Failed to rollback product', error);
+    }
   }
 }

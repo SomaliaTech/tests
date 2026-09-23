@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:get_it/get_it.dart';
+import 'package:flutter/foundation.dart';
 
 class AdminService {
   static final StorageService _storageService =
@@ -33,7 +34,7 @@ class AdminService {
         throw Exception('Failed to fetch admins: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error fetching admins: $e');
+      if (kDebugMode) debugPrint('❌ Error fetching admins: $e');
       return [];
     }
   }
@@ -57,7 +58,7 @@ class AdminService {
       // Fallback to first admin
       return admins.first;
     } catch (e) {
-      print('❌ Error getting first admin: $e');
+      if (kDebugMode) debugPrint('❌ Error getting first admin: $e');
       return null;
     }
   }

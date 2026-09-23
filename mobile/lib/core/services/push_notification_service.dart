@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
@@ -16,7 +16,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Initialize Firebase if needed for background processing
   // await Firebase.initializeApp();
 
-  debugPrint('📩 [BG] Background message received: ${message.messageId}');
+  if (kDebugMode) {
+    debugPrint('📩 [BG] Background message received: ${message.messageId}');
+  }
 
   // Show local notification in background/terminated state
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -70,13 +72,13 @@ class PushNotificationService {
     if (_isInitialized) return;
     _isInitialized = true;
 
-    debugPrint('📱 Initializing push notification service...');
+    if (kDebugMode) debugPrint('📱 Initializing push notification service...');
 
     // ✅ Register background handler ONLY ONCE
     if (!_backgroundHandlerRegistered) {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       _backgroundHandlerRegistered = true;
-      debugPrint('✅ [Push] Background handler registered');
+      if (kDebugMode) debugPrint('✅ [Push] Background handler registered');
     }
 
     await _requestPermission();
@@ -85,29 +87,37 @@ class PushNotificationService {
 
     // ✅ Handle FOREGROUND messages only
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('📩 [FG] Foreground message: ${message.notification?.title}');
+      if (kDebugMode) {
+        debugPrint(
+          '📩 [FG] Foreground message: ${message.notification?.title}',
+        );
+      }
       _showForegroundNotification(message);
     });
 
     // Handle notification taps when app is in background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint(
-        '📩 [Tap] Notification tapped from background: ${message.data}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '📩 [Tap] Notification tapped from background: ${message.data}',
+        );
+      }
       _handleNotificationTap(message.data);
     });
 
     // Handle notification tap when app was terminated
     _firebaseMessaging.getInitialMessage().then((RemoteMessage? message) {
       if (message != null) {
-        debugPrint(
-          '📩 [Launch] App launched from notification: ${message.data}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '📩 [Launch] App launched from notification: ${message.data}',
+          );
+        }
         _handleNotificationTap(message.data);
       }
     });
 
-    debugPrint('✅ Push notification service initialized');
+    if (kDebugMode) debugPrint('✅ Push notification service initialized');
   }
 
   Future<void> _requestPermission() async {
@@ -117,7 +127,9 @@ class PushNotificationService {
       sound: true,
       provisional: false,
     );
-    debugPrint('📱 Notification permission: ${settings.authorizationStatus}');
+    if (kDebugMode) {
+      debugPrint('📱 Notification permission: ${settings.authorizationStatus}');
+    }
   }
 
   Future<void> _initLocalNotifications() async {
@@ -192,7 +204,9 @@ class PushNotificationService {
             final data = json.decode(response.payload!) as Map<String, dynamic>;
             _handleNotificationTap(data);
           } catch (e) {
-            debugPrint('❌ Failed to parse notification payload: $e');
+            if (kDebugMode) {
+              debugPrint('❌ Failed to parse notification payload: $e');
+            }
           }
         }
       },
@@ -203,16 +217,16 @@ class PushNotificationService {
     try {
       final token = await _firebaseMessaging.getToken();
       if (token != null) {
-        debugPrint('📱 FCM Token: $token');
+        if (kDebugMode) debugPrint('📱 FCM Token: $token');
         await _registerToken(token);
       }
 
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
-        debugPrint('📱 FCM Token refreshed: $newToken');
+        if (kDebugMode) debugPrint('📱 FCM Token refreshed: $newToken');
         _registerToken(newToken);
       });
     } catch (e) {
-      debugPrint('⚠️ Could not get FCM token: $e');
+      if (kDebugMode) debugPrint('⚠️ Could not get FCM token: $e');
     }
   }
 
@@ -233,12 +247,14 @@ class PushNotificationService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint('✅ Device token registered successfully');
+        if (kDebugMode) debugPrint('✅ Device token registered successfully');
       } else {
-        debugPrint('⚠️ Failed to register token: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('⚠️ Failed to register token: ${response.statusCode}');
+        }
       }
     } catch (e) {
-      debugPrint('❌ Failed to register token: $e');
+      if (kDebugMode) debugPrint('❌ Failed to register token: $e');
     }
   }
 
@@ -283,7 +299,9 @@ class PushNotificationService {
           );
         }
       } catch (e) {
-        debugPrint('❌ Failed to download notification image: $e');
+        if (kDebugMode) {
+          debugPrint('❌ Failed to download notification image: $e');
+        }
       }
     }
 
@@ -358,20 +376,20 @@ class PushNotificationService {
   }
 
   void _handleNotificationTap(Map<String, dynamic> data) {
-    debugPrint('🔔 Handling notification tap: $data');
+    if (kDebugMode) debugPrint('🔔 Handling notification tap: $data');
 
     final type = data['type']?.toString();
     final actionLink = data['actionLink']?.toString();
     final context = NavigationService.navigatorKey.currentContext;
 
     if (context == null) {
-      debugPrint('❌ No context available for navigation');
+      if (kDebugMode) debugPrint('❌ No context available for navigation');
       return;
     }
 
     // 1. PRIORITY: Handle actionLink if it exists
     if (actionLink != null && actionLink.isNotEmpty) {
-      debugPrint('🔗 Navigating via actionLink: $actionLink');
+      if (kDebugMode) debugPrint('🔗 Navigating via actionLink: $actionLink');
       final uri = Uri.tryParse(actionLink);
       if (uri != null) {
         final segments = uri.path
@@ -443,7 +461,7 @@ class PushNotificationService {
     try {
       return await _firebaseMessaging.getToken();
     } catch (e) {
-      debugPrint('⚠️ Could not get FCM token: $e');
+      if (kDebugMode) debugPrint('⚠️ Could not get FCM token: $e');
       return null;
     }
   }
@@ -466,9 +484,9 @@ class PushNotificationService {
         body: json.encode({'token': token}),
       );
 
-      debugPrint('✅ Device token unregistered');
+      if (kDebugMode) debugPrint('✅ Device token unregistered');
     } catch (e) {
-      debugPrint('❌ Failed to unregister token: $e');
+      if (kDebugMode) debugPrint('❌ Failed to unregister token: $e');
     }
   }
 }

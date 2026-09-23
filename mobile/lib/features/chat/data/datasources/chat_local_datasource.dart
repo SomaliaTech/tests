@@ -59,7 +59,7 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
         return uniqueConversations;
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached conversations: $e');
+      if (kDebugMode) debugPrint('❌ Error reading cached conversations: $e');
     }
     return [];
   }
@@ -95,7 +95,7 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
 
       await _conversationsBox.put('conversations_list', json.encode(jsonList));
     } catch (e) {
-      debugPrint('❌ Error caching conversations: $e');
+      if (kDebugMode) debugPrint('❌ Error caching conversations: $e');
     }
   }
 
@@ -115,7 +115,7 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
 
       await cacheConversations(conversations);
     } catch (e) {
-      debugPrint('❌ Error updating conversation: $e');
+      if (kDebugMode) debugPrint('❌ Error updating conversation: $e');
     }
   }
 
@@ -137,7 +137,9 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
             .toList();
       }
     } catch (e) {
-      debugPrint('❌ Error reading cached messages for $partnerId: $e');
+      if (kDebugMode) {
+        debugPrint('❌ Error reading cached messages for $partnerId: $e');
+      }
     }
     return [];
   }
@@ -164,9 +166,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       }).toList();
 
       await _messagesBox.put('messages_$partnerId', json.encode(jsonList));
-      debugPrint('✅ Cached ${messages.length} messages for $partnerId');
+      if (kDebugMode) {
+        debugPrint('✅ Cached ${messages.length} messages for $partnerId');
+      }
     } catch (e) {
-      debugPrint('❌ Error caching messages for $partnerId: $e');
+      if (kDebugMode) debugPrint('❌ Error caching messages for $partnerId: $e');
     }
   }
 
@@ -222,9 +226,11 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
       // Save back to storage
       await _messagesBox.put('messages_$partnerId', json.encode(messagesList));
 
-      debugPrint('✅ Message saved to cache: ${message.id} for $partnerId');
+      if (kDebugMode) {
+        debugPrint('✅ Message saved to cache: ${message.id} for $partnerId');
+      }
     } catch (e) {
-      debugPrint('❌ Error adding message for $partnerId: $e');
+      if (kDebugMode) debugPrint('❌ Error adding message for $partnerId: $e');
     }
   }
 
@@ -241,7 +247,7 @@ class ChatLocalDataSourceImpl implements ChatLocalDataSource {
         return DateTime.parse(timestamp);
       }
     } catch (e) {
-      debugPrint('❌ Error reading sync time: $e');
+      if (kDebugMode) debugPrint('❌ Error reading sync time: $e');
     }
     return null;
   }

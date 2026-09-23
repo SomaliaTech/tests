@@ -27,6 +27,10 @@ import 'package:mobile/features/admin/presentation/bloc/admin_market/admin_marke
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/revenue/revenue_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
+import 'package:mobile/features/admin/data/datasources/affiliate_remote_data_source.dart';
+import 'package:mobile/features/admin/data/repositories/affiliate_repository_impl.dart';
+import 'package:mobile/features/admin/domain/repositories/affiliate_repository.dart';
+import 'package:mobile/features/admin/presentation/bloc/affiliate/affiliate_bloc.dart';
 
 void registerAdminDependencies(GetIt sl) {
   // Data Sources
@@ -96,4 +100,16 @@ void registerAdminDependencies(GetIt sl) {
   sl.registerFactory(() => AdminProductBloc(repository: sl()));
   // ✅ ADD THIS
   sl.registerFactory(() => AdminCategoryBloc(repository: sl()));
+
+  sl.registerLazySingleton<AffiliateRemoteDataSource>(
+    () => AffiliateRemoteDataSourceImpl(client: sl(), storageService: sl()),
+  );
+
+  // Affiliate Repository
+  sl.registerLazySingleton<AffiliateRepository>(
+    () => AffiliateRepositoryImpl(remoteDataSource: sl()),
+  );
+
+  // Affiliate BLoC
+  sl.registerFactory(() => AffiliateBloc(repository: sl()));
 }

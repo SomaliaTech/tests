@@ -391,7 +391,7 @@ class _CategoryViewState extends State<CategoryView> {
       },
       color: const Color(0xFF2ED573),
       child: GridView.builder(
-        key: ValueKey('products_grid_${_selectedSubCategoryId}'),
+        key: ValueKey('products_grid_$_selectedSubCategoryId'),
         controller: _scrollController,
         padding: const EdgeInsets.all(12),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -424,8 +424,8 @@ class _CategoryViewState extends State<CategoryView> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isOffline
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.08),
+                    ? Colors.orange.withValues(alpha: 0.1)
+                    : Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -461,9 +461,11 @@ class _CategoryViewState extends State<CategoryView> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.05),
+                  color: Colors.orange.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -528,7 +530,7 @@ class _CategoryViewState extends State<CategoryView> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF2ED573).withOpacity(0.1),
+                color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -536,7 +538,7 @@ class _CategoryViewState extends State<CategoryView> {
                     ? Iconsax.search_status
                     : Iconsax.category,
                 size: 56,
-                color: const Color(0xFF2ED573).withOpacity(0.5),
+                color: const Color(0xFF2ED573).withValues(alpha: 0.5),
               ),
             ),
             const SizedBox(height: 24),

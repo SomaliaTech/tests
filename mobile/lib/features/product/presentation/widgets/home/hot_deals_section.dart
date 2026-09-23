@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:provider/provider.dart';
 import 'package:mobile/core/common/widgets/empty_state_widget.dart';
 import 'package:mobile/core/common/widgets/shared/products_grid_skeleton.dart';
 import 'package:mobile/core/services/connectivity_service.dart';

@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/notification.dart';
+import 'package:flutter/foundation.dart';
 
 class NotificationsRemoteDataSource {
   final http.Client client;
@@ -15,9 +16,10 @@ class NotificationsRemoteDataSource {
         final displayToken = token.length > 20
             ? '${token.substring(0, 20)}...'
             : token;
-        print('🔍 Fetching notifications with token: $displayToken');
+        if (kDebugMode)
+          debugPrint('🔍 Fetching notifications with token: $displayToken');
       } else {
-        print('❌ Token is empty');
+        if (kDebugMode) debugPrint('❌ Token is empty');
         throw Exception('Authentication token is empty');
       }
 
@@ -29,10 +31,11 @@ class NotificationsRemoteDataSource {
         },
       );
 
-      print('📦 Response status: ${response.statusCode}');
-      print(
-        '📦 Response body (first 200 chars): ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
-      );
+      if (kDebugMode) debugPrint('📦 Response status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint(
+          '📦 Response body (first 200 chars): ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}',
+        );
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -57,20 +60,21 @@ class NotificationsRemoteDataSource {
             jsonList = decoded['results'];
           } else {
             // Unknown format - log and return empty
-            print('⚠️ Unknown response format: $decoded');
+            if (kDebugMode) debugPrint('⚠️ Unknown response format: $decoded');
             return [];
           }
         } else {
-          print('⚠️ Unexpected response type: ${decoded.runtimeType}');
+          if (kDebugMode)
+            debugPrint('⚠️ Unexpected response type: ${decoded.runtimeType}');
           return [];
         }
 
-        print('✅ Found ${jsonList.length} notifications');
+        if (kDebugMode) debugPrint('✅ Found ${jsonList.length} notifications');
         return jsonList
             .map((json) => NotificationEntity.fromJson(json))
             .toList();
       } else if (response.statusCode == 401) {
-        print('❌ Token expired or invalid');
+        if (kDebugMode) debugPrint('❌ Token expired or invalid');
         throw ServerException('Session expired. Please login again.');
       } else {
         throw ServerException(
@@ -78,7 +82,7 @@ class NotificationsRemoteDataSource {
         );
       }
     } catch (e) {
-      print('❌ Network error: $e');
+      if (kDebugMode) debugPrint('❌ Network error: $e');
       if (e is ServerException) rethrow;
       throw ServerException('Network error: $e');
     }

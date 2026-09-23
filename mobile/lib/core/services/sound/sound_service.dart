@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 // lib/core/services/sound/sound_service.dart
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/material.dart';
 
 class SoundService {
   AudioPlayer? _player;
@@ -15,7 +15,7 @@ class SoundService {
     try {
       _player = AudioPlayer();
     } catch (e) {
-      debugPrint('⚠️ Failed to create audio player: $e');
+      if (kDebugMode) debugPrint('⚠️ Failed to create audio player: $e');
       _player = null;
     }
   }

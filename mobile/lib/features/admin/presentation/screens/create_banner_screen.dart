@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/screens/create_banner_screen.dart
 
 import 'dart:io';
@@ -180,7 +181,7 @@ class _CreateBannerScreenState extends State<CreateBannerScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ED573).withOpacity(0.1),
+                    color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -513,7 +514,7 @@ class _CreateBannerScreenState extends State<CreateBannerScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _selectedProductId == linkTarget
-              ? const Color(0xFF2ED573).withOpacity(0.1)
+              ? const Color(0xFF2ED573).withValues(alpha: 0.1)
               : const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -536,7 +537,9 @@ class _CreateBannerScreenState extends State<CreateBannerScreen> {
                         image: NetworkImage(imageUrl),
                         fit: BoxFit.cover,
                         onError: (exception, stackTrace) {
-                          debugPrint('❌ Failed to load image: $imageUrl');
+                          if (kDebugMode) {
+                            debugPrint('❌ Failed to load image: $imageUrl');
+                          }
                         },
                       )
                     : null,

@@ -14,6 +14,7 @@ import {
   jsonb,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { numeric } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // CATEGORY TABLE
@@ -404,8 +405,20 @@ export const orders = pgTable(
     status: varchar('status', { length: 50 }).notNull().default('PENDING'),
     paymentMethod: varchar('payment_method', { length: 50 }),
     paymentStatus: varchar('payment_status', { length: 50 }).default('PENDING'),
-    // ✅ ADDED THESE TWO FIELDS
     paymentReferenceId: varchar('payment_reference_id', { length: 255 }),
+
+    // ✅ ADD THESE BACK — they exist in your DB
+    promoCodeId: uuid('promo_code_id').references(() => promoCodes.id, {
+      onDelete: 'set null',
+    }),
+    promoCodeDiscount: decimal('promo_code_discount', {
+      precision: 10,
+      scale: 2,
+    }).default('0.00'),
+    affiliateId: uuid('affiliate_id').references(() => affiliates.id, {
+      onDelete: 'set null',
+    }),
+
     completedAt: timestamp('completed_at', { withTimezone: true }),
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -422,6 +435,9 @@ export const orders = pgTable(
     userIdIdx: index('order_user_id_idx').on(table.userId),
     paymentStatusIdx: index('order_payment_status_idx').on(table.paymentStatus),
     paymentRefIdx: index('order_payment_ref_idx').on(table.paymentReferenceId),
+    // ✅ ADD THESE INDEXES
+    promoCodeIdx: index('order_promo_code_idx').on(table.promoCodeId),
+    affiliateIdx: index('order_affiliate_idx').on(table.affiliateId),
   }),
 );
 
@@ -839,7 +855,6 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
     references: [productVariants.id],
   }),
 }));
-
 export const paymentTransactionsRelations = relations(
   paymentTransactions,
   ({ one }) => ({
@@ -938,3 +953,277 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   reviews: many(reviews),
   userRoles: many(userRoles),
 }));
+
+// Add these new tables at the end of your schema.ts file
+
+// ==========================================
+// AFFILIATE REQUESTS TABLE
+// ==========================================
+export const affiliateRequests = pgTable('affiliate_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
+  businessName: varchar('business_name', { length: 255 }).notNull(),
+  description: text('description'),
+  phoneNumber: varchar('phone_number', { length: 20 }),
+  socialMediaLinks: jsonb('social_media_links').$type<Record<string, string>>(),
+  expectedAudience: integer('expected_audience'),
+  status: varchar('status', { length: 20 }).default('PENDING').notNull(), // PENDING, APPROVED, REJECTED
+  rejectionReason: text('rejection_reason'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id),
+  appliedAt: timestamp('applied_at').defaultNow().notNull(),
+  reviewedAt: timestamp('reviewed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// AFFILIATES TABLE (Approved marketers)
+// ==========================================
+export const affiliates = pgTable('affiliates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull()
+    .unique(),
+  uniqueCode: varchar('unique_code', { length: 20 }).notNull().unique(), // e.g., "FARX-INA-7X9K"
+  commissionRate: numeric('commission_rate', { precision: 5, scale: 2 })
+    .default('5.00')
+    .notNull(), // 5% default
+  totalEarnings: numeric('total_earnings', { precision: 12, scale: 2 })
+    .default('0.00')
+    .notNull(),
+  paidEarnings: numeric('paid_earnings', { precision: 12, scale: 2 })
+    .default('0.00')
+    .notNull(),
+  pendingEarnings: numeric('pending_earnings', { precision: 12, scale: 2 })
+    .default('0.00')
+    .notNull(),
+  totalOrders: integer('total_orders').default(0).notNull(),
+  totalCustomers: integer('total_customers').default(0).notNull(),
+  status: varchar('status', { length: 20 }).default('ACTIVE').notNull(), // ACTIVE, SUSPENDED
+  joinedAt: timestamp('joined_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// PROMO CODES TABLE
+// ==========================================
+export const promoCodes = pgTable('promo_codes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  code: varchar('code', { length: 50 }).notNull().unique(), // e.g., "SAVE20" or "INA2026"
+  affiliateId: uuid('affiliate_id').references(() => affiliates.id, {
+    onDelete: 'cascade',
+  }), // null = system-wide
+  description: text('description'),
+  discountType: varchar('discount_type', { length: 20 }).notNull(), // PERCENTAGE, FIXED
+  discountValue: numeric('discount_value', {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  minOrderAmount: numeric('min_order_amount', { precision: 10, scale: 2 }), // Minimum order to apply
+  maxDiscountAmount: numeric('max_discount_amount', {
+    precision: 10,
+    scale: 2,
+  }), // Cap for percentage discounts
+  maxUses: integer('max_uses'), // null = unlimited
+  usedCount: integer('used_count').default(0).notNull(),
+  maxUsesPerUser: integer('max_uses_per_user').default(1).notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  startsAt: timestamp('starts_at'),
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// PROMO CODE USAGE TABLE
+// ==========================================
+export const promoCodeUsage = pgTable('promo_code_usage', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  promoCodeId: uuid('promo_code_id')
+    .references(() => promoCodes.id, { onDelete: 'cascade' })
+    .notNull(),
+  userId: uuid('user_id')
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
+  orderId: uuid('order_id').references(() => orders.id, {
+    onDelete: 'set null',
+  }),
+  affiliateId: uuid('affiliate_id').references(() => affiliates.id, {
+    onDelete: 'set null',
+  }),
+  orderAmount: numeric('order_amount', { precision: 12, scale: 2 }).notNull(),
+  discountAmount: numeric('discount_amount', {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// AFFILIATE COMMISSIONS TABLE
+// ==========================================
+export const affiliateCommissions = pgTable('affiliate_commissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  affiliateId: uuid('affiliate_id')
+    .references(() => affiliates.id, { onDelete: 'cascade' })
+    .notNull(),
+  orderId: uuid('order_id').references(() => orders.id, {
+    onDelete: 'set null',
+  }),
+  promoCodeId: uuid('promo_code_id').references(() => promoCodes.id, {
+    onDelete: 'set null',
+  }),
+  orderAmount: numeric('order_amount', { precision: 12, scale: 2 }).notNull(),
+  commissionRate: numeric('commission_rate', {
+    precision: 5,
+    scale: 2,
+  }).notNull(),
+  commissionAmount: numeric('commission_amount', {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  status: varchar('status', { length: 20 }).default('PENDING').notNull(), // PENDING, PAID, CANCELLED
+  paidAt: timestamp('paid_at'),
+  cancelledAt: timestamp('cancelled_at'),
+  cancellationReason: text('cancellation_reason'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// ==========================================
+// ADD RELATIONS
+// ==========================================
+// Add to your existing relations block:
+
+export const affiliateRequestsRelations = relations(
+  affiliateRequests,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [affiliateRequests.userId],
+      references: [users.id],
+    }),
+    reviewer: one(users, {
+      fields: [affiliateRequests.reviewedBy],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const affiliatesRelations = relations(affiliates, ({ one, many }) => ({
+  user: one(users, { fields: [affiliates.userId], references: [users.id] }),
+  promoCodes: many(promoCodes),
+  commissions: many(affiliateCommissions),
+}));
+
+export const promoCodesRelations = relations(promoCodes, ({ one, many }) => ({
+  affiliate: one(affiliates, {
+    fields: [promoCodes.affiliateId],
+    references: [affiliates.id],
+  }),
+  usages: many(promoCodeUsage),
+}));
+
+export const promoCodeUsageRelations = relations(promoCodeUsage, ({ one }) => ({
+  promoCode: one(promoCodes, {
+    fields: [promoCodeUsage.promoCodeId],
+    references: [promoCodes.id],
+  }),
+  user: one(users, { fields: [promoCodeUsage.userId], references: [users.id] }),
+  order: one(orders, {
+    fields: [promoCodeUsage.orderId],
+    references: [orders.id],
+  }),
+  affiliate: one(affiliates, {
+    fields: [promoCodeUsage.affiliateId],
+    references: [affiliates.id],
+  }),
+}));
+
+export const affiliateCommissionsRelations = relations(
+  affiliateCommissions,
+  ({ one }) => ({
+    affiliate: one(affiliates, {
+      fields: [affiliateCommissions.affiliateId],
+      references: [affiliates.id],
+    }),
+    order: one(orders, {
+      fields: [affiliateCommissions.orderId],
+      references: [orders.id],
+    }),
+    promoCode: one(promoCodes, {
+      fields: [affiliateCommissions.promoCodeId],
+      references: [promoCodes.id],
+    }),
+  }),
+);
+
+// ✅ Single-row settings table for the affiliate program
+export const affiliateSettings = pgTable('affiliate_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+
+  // Commission defaults
+  defaultCommissionRate: decimal('default_commission_rate', {
+    precision: 5,
+    scale: 2,
+  })
+    .notNull()
+    .default('5.00'),
+  minPayoutAmount: decimal('min_payout_amount', { precision: 10, scale: 2 })
+    .notNull()
+    .default('10.00'),
+  payoutCycleDays: integer('payout_cycle_days').notNull().default(30),
+
+  // Promo code defaults
+  defaultDiscountType: varchar('default_discount_type', { length: 20 })
+    .notNull()
+    .default('PERCENTAGE'),
+  defaultDiscountValue: decimal('default_discount_value', {
+    precision: 10,
+    scale: 2,
+  })
+    .notNull()
+    .default('5.00'),
+  defaultMaxUsesPerUser: integer('default_max_uses_per_user')
+    .notNull()
+    .default(1),
+
+  // Program rules
+  requireApproval: boolean('require_approval').notNull().default(true),
+  autoApprovePromoCodes: boolean('auto_approve_promo_codes')
+    .notNull()
+    .default(false),
+  allowSelfReferral: boolean('allow_self_referral').notNull().default(false),
+  cookieWindowDays: integer('cookie_window_days').notNull().default(30),
+
+  // Notifications
+  notifyOnNewApplication: boolean('notify_on_new_application')
+    .notNull()
+    .default(true),
+  notifyOnNewCommission: boolean('notify_on_new_commission')
+    .notNull()
+    .default(true),
+  notifyOnCodeApproval: boolean('notify_on_code_approval')
+    .notNull()
+    .default(true),
+  emailDigest: boolean('email_digest').notNull().default(false),
+
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+// ==========================================
+// SUPPORT SETTINGS (single-row table)
+// ==========================================
+export const supportSettings = pgTable('support_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email', { length: 255 })
+    .notNull()
+    .default('support@farxada.com'),
+  phoneNumber: varchar('phone_number', { length: 50 })
+    .notNull()
+    .default('+252615328651'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});

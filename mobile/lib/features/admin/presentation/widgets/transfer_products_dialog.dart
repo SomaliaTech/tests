@@ -93,7 +93,7 @@ class _TransferProductsDialogState extends State<TransferProductsDialog> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -164,10 +164,10 @@ class _TransferProductsDialogState extends State<TransferProductsDialog> {
                         return Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.05),
+                            color: Colors.red.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.red.withOpacity(0.2),
+                              color: Colors.red.withValues(alpha: 0.2),
                             ),
                           ),
                           child: const Row(
@@ -198,7 +198,7 @@ class _TransferProductsDialogState extends State<TransferProductsDialog> {
                           color: const Color(0xFFF8F9FA),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: Colors.grey.withOpacity(0.2),
+                            color: Colors.grey.withValues(alpha: 0.2),
                           ),
                         ),
                         child: DropdownButtonHideUnderline(

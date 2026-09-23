@@ -8,6 +8,7 @@ import 'package:mobile/core/services/address_injection.dart';
 import 'package:mobile/core/services/admin_feq_ijection.dart';
 import 'package:mobile/core/services/admin_injection.dart';
 import 'package:mobile/core/services/admin_role_ijection.dart';
+import 'package:mobile/core/services/affilate_user_injection.dart';
 import 'package:mobile/core/services/analytics_injection.dart';
 import 'package:mobile/core/services/auth_ijdection.dart';
 import 'package:mobile/core/services/banner_injection.dart';
@@ -31,6 +32,7 @@ import 'category_injection.dart';
 import 'wishlist_injection.dart';
 import 'market_injection.dart';
 import 'storage/storage_service.dart';
+import 'package:flutter/foundation.dart';
 
 final sl = GetIt.instance;
 
@@ -66,7 +68,7 @@ Future<void> initDependencies() async {
 
   // ✅ REGISTER ConnectivityService HERE (BEFORE any BLoC that depends on it)
   sl.registerLazySingleton<ConnectivityService>(() => ConnectivityService());
-  print('✅ ConnectivityService registered');
+  if (kDebugMode) debugPrint('✅ ConnectivityService registered');
 
   sl.registerLazySingleton<ServerStatusService>(() => ServerStatusService());
   sl.registerLazySingleton(() => GetAdminUsers(sl()));
@@ -99,4 +101,5 @@ Future<void> initDependencies() async {
   registerAnalyticsDependencies(sl);
   registerAdminRoleDependencies(sl);
   registerBannerDependencies(sl);
+  registerAffiliateUserDependencies(sl);
 }

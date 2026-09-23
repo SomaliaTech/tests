@@ -6,6 +6,7 @@ import 'package:mobile/core/constants/api_constants.dart';
 import 'package:mobile/core/error/exceptions.dart';
 import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/data/models/admin_product_model.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AdminCategoryRemoteDataSource {
   Future<List<AdminCategoryModel>> getCategoriesTree();
@@ -37,7 +38,7 @@ class AdminCategoryRemoteDataSourceImpl
 
   @override
   Future<List<AdminCategoryModel>> getCategoriesTree() async {
-    print('🔍 [AdminCategories] Fetching categories tree');
+    if (kDebugMode) debugPrint('🔍 [AdminCategories] Fetching categories tree');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/categories/tree';
@@ -50,7 +51,10 @@ class AdminCategoryRemoteDataSourceImpl
         },
       );
 
-      print('📡 [AdminCategories] Response Status: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Response Status: ${response.statusCode}',
+        );
 
       if (response.statusCode == 200) {
         final List<dynamic> jsonList = json.decode(response.body);
@@ -64,14 +68,15 @@ class AdminCategoryRemoteDataSourceImpl
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminCategories] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminCategories] Error: $e');
       rethrow;
     }
   }
 
   @override
   Future<List<AdminCategoryModel>> getAllCategories() async {
-    print('🔍 [AdminCategories] Fetching all categories flat list');
+    if (kDebugMode)
+      debugPrint('🔍 [AdminCategories] Fetching all categories flat list');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/categories/tree';
@@ -96,15 +101,16 @@ class AdminCategoryRemoteDataSourceImpl
         final flatList = <AdminCategoryModel>[];
         _flattenCategories(categories, flatList);
 
-        print(
-          '✅ [AdminCategories] Found ${flatList.length} categories (flattened)',
-        );
+        if (kDebugMode)
+          debugPrint(
+            '✅ [AdminCategories] Found ${flatList.length} categories (flattened)',
+          );
         return flatList;
       } else {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminCategories] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminCategories] Error: $e');
       rethrow;
     }
   }
@@ -126,7 +132,7 @@ class AdminCategoryRemoteDataSourceImpl
 
   @override
   Future<void> createCategory(Map<String, dynamic> data) async {
-    print('🔍 [AdminCategories] Creating category: $data');
+    if (kDebugMode) debugPrint('🔍 [AdminCategories] Creating category: $data');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/categories';
@@ -140,13 +146,16 @@ class AdminCategoryRemoteDataSourceImpl
         body: json.encode(data),
       );
 
-      print('📡 [AdminCategories] Create Response: ${response.statusCode}');
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Create Response: ${response.statusCode}',
+        );
 
       if (response.statusCode != 201 && response.statusCode != 200) {
         throw ServerException('Failed: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ [AdminCategories] Error: $e');
+      if (kDebugMode) debugPrint('❌ [AdminCategories] Error: $e');
       rethrow;
     }
   }
@@ -156,7 +165,8 @@ class AdminCategoryRemoteDataSourceImpl
     String categoryId,
     Map<String, dynamic> data,
   ) async {
-    print('🔍 [AdminCategories] Updating category: $categoryId');
+    if (kDebugMode)
+      debugPrint('🔍 [AdminCategories] Updating category: $categoryId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/categories/$categoryId';
@@ -180,7 +190,8 @@ class AdminCategoryRemoteDataSourceImpl
 
   @override
   Future<void> deleteCategory(String categoryId) async {
-    print('🔍 [AdminCategories] Deleting category: $categoryId');
+    if (kDebugMode)
+      debugPrint('🔍 [AdminCategories] Deleting category: $categoryId');
     try {
       final token = await _getToken();
       final url = '${ApiConstants.baseUrl}/admin/categories/$categoryId';
@@ -193,22 +204,30 @@ class AdminCategoryRemoteDataSourceImpl
         },
       );
 
-      print(
-        '📡 [AdminCategories] Delete Response Status: ${response.statusCode}',
-      );
-      print('📡 [AdminCategories] Delete Response Body: ${response.body}');
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Delete Response Status: ${response.statusCode}',
+        );
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Delete Response Body: ${response.body}',
+        );
 
       if (response.statusCode != 200) {
         final errorBody = json.decode(response.body);
-        print('❌ [AdminCategories] Delete Error: ${errorBody['message']}');
+        if (kDebugMode)
+          debugPrint(
+            '❌ [AdminCategories] Delete Error: ${errorBody['message']}',
+          );
         throw ServerException(
           errorBody['message'] ?? 'Failed: ${response.statusCode}',
         );
       }
 
-      print('✅ [AdminCategories] Category deleted successfully');
+      if (kDebugMode)
+        debugPrint('✅ [AdminCategories] Category deleted successfully');
     } catch (e) {
-      print('❌ [AdminCategories] Delete Exception: $e');
+      if (kDebugMode) debugPrint('❌ [AdminCategories] Delete Exception: $e');
       rethrow;
     }
   }
@@ -218,9 +237,10 @@ class AdminCategoryRemoteDataSourceImpl
     String categoryId,
     String targetCategoryId,
   ) async {
-    print(
-      '🔍 [AdminCategories] Deleting category $categoryId with transfer to $targetCategoryId',
-    );
+    if (kDebugMode)
+      debugPrint(
+        '🔍 [AdminCategories] Deleting category $categoryId with transfer to $targetCategoryId',
+      );
     try {
       final token = await _getToken();
       final url =
@@ -234,10 +254,14 @@ class AdminCategoryRemoteDataSourceImpl
         },
       );
 
-      print(
-        '📡 [AdminCategories] Delete Transfer Response: ${response.statusCode}',
-      );
-      print('📡 [AdminCategories] Delete Transfer Body: ${response.body}');
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Delete Transfer Response: ${response.statusCode}',
+        );
+      if (kDebugMode)
+        debugPrint(
+          '📡 [AdminCategories] Delete Transfer Body: ${response.body}',
+        );
 
       if (response.statusCode != 200) {
         final errorBody = json.decode(response.body);
@@ -246,9 +270,11 @@ class AdminCategoryRemoteDataSourceImpl
         );
       }
 
-      print('✅ [AdminCategories] Category deleted with transfer');
+      if (kDebugMode)
+        debugPrint('✅ [AdminCategories] Category deleted with transfer');
     } catch (e) {
-      print('❌ [AdminCategories] Delete Transfer Error: $e');
+      if (kDebugMode)
+        debugPrint('❌ [AdminCategories] Delete Transfer Error: $e');
       rethrow;
     }
   }

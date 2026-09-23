@@ -1,5 +1,6 @@
 // lib/features/chat/data/models/conversation_model.dart
 import '../../domain/entities/conversation.dart';
+import 'package:flutter/foundation.dart';
 
 class ConversationModel extends Conversation {
   const ConversationModel({
@@ -37,7 +38,8 @@ class ConversationModel extends Conversation {
             lastMessageTime = rawTime.toLocal();
           }
         } catch (e) {
-          print('❌ [ConversationModel] Error parsing time: $e');
+          if (kDebugMode)
+            debugPrint('❌ [ConversationModel] Error parsing time: $e');
           lastMessageTime = DateTime.now();
         }
       }
@@ -62,9 +64,10 @@ class ConversationModel extends Conversation {
             0,
       );
     } catch (e, stackTrace) {
-      print('❌ [ConversationModel] PARSING ERROR: $e');
-      print('📦 [ConversationModel] PAYLOAD: $json');
-      print('🦺 [ConversationModel] STACKTRACE: $stackTrace');
+      if (kDebugMode) debugPrint('❌ [ConversationModel] PARSING ERROR: $e');
+      if (kDebugMode) debugPrint('📦 [ConversationModel] PAYLOAD: $json');
+      if (kDebugMode)
+        debugPrint('🦺 [ConversationModel] STACKTRACE: $stackTrace');
       rethrow;
     }
   }

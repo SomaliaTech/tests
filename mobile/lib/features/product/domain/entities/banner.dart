@@ -64,8 +64,9 @@ class AppBanner extends Equatable {
   bool get isDiscountActive {
     if (!hasDiscount) return false;
     final now = DateTime.now();
-    if (discountStartDate != null && now.isBefore(discountStartDate!))
+    if (discountStartDate != null && now.isBefore(discountStartDate!)) {
       return false;
+    }
     if (discountEndDate != null && now.isAfter(discountEndDate!)) return false;
     return true;
   }
@@ -73,10 +74,12 @@ class AppBanner extends Equatable {
   bool get isFlashSaleActive {
     if (!isFlashSale) return false;
     final now = DateTime.now();
-    if (flashSaleStartTime != null && now.isBefore(flashSaleStartTime!))
+    if (flashSaleStartTime != null && now.isBefore(flashSaleStartTime!)) {
       return false;
-    if (flashSaleEndTime != null && now.isAfter(flashSaleEndTime!))
+    }
+    if (flashSaleEndTime != null && now.isAfter(flashSaleEndTime!)) {
       return false;
+    }
     return true;
   }
 

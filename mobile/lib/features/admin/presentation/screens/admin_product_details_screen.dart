@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/screens/admin_product_details_screen.dart
 
 import 'package:flutter/material.dart';
@@ -68,11 +69,15 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
         _permissionsLoaded = true;
       });
 
-      debugPrint(
-        '🔐 [ProductDetails] canUpdate: $_canUpdate, canDelete: $_canDelete',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '🔐 [ProductDetails] canUpdate: $_canUpdate, canDelete: $_canDelete',
+        );
+      }
     } catch (e) {
-      debugPrint('❌ [ProductDetails] Permission load failed: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [ProductDetails] Permission load failed: $e');
+      }
       if (!mounted) return;
       setState(() {
         _permissionsLoaded = true;
@@ -81,7 +86,11 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
   }
 
   void _loadProduct() {
-    debugPrint('🔄 [AdminProductDetails] Loading product: ${widget.productId}');
+    if (kDebugMode) {
+      debugPrint(
+        '🔄 [AdminProductDetails] Loading product: ${widget.productId}',
+      );
+    }
     context.read<AdminProductBloc>().add(
       FetchAdminProductByIdEvent(widget.productId),
     );
@@ -134,7 +143,7 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
       ),
       body: BlocConsumer<AdminProductBloc, AdminProductState>(
         listener: (context, state) {
-          debugPrint('📢 [AdminProductDetails] State: $state');
+          if (kDebugMode) debugPrint('📢 [AdminProductDetails] State: $state');
 
           if (state is AdminProductDetailsLoaded) {
             setState(() {
@@ -238,7 +247,9 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withOpacity(0.1),
+                                color: AppTheme.primaryColor.withValues(
+                                  alpha: 0.1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -269,8 +280,8 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: product.isActive
-                                      ? Colors.green.withOpacity(0.1)
-                                      : Colors.red.withOpacity(0.1),
+                                      ? Colors.green.withValues(alpha: 0.1)
+                                      : Colors.red.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -441,9 +452,9 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.05),
+        color: Colors.blue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -465,7 +476,9 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
   }
 
   Future<void> _navigateToEdit() async {
-    debugPrint('📝 [AdminProductDetails] Navigating to edit screen');
+    if (kDebugMode) {
+      debugPrint('📝 [AdminProductDetails] Navigating to edit screen');
+    }
 
     final result = await Navigator.push(
       context,
@@ -474,12 +487,16 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
       ),
     );
 
-    debugPrint(
-      '↩️ [AdminProductDetails] Returned from edit with result: $result',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '↩️ [AdminProductDetails] Returned from edit with result: $result',
+      );
+    }
 
     if (result == true && mounted) {
-      debugPrint('🔄 [AdminProductDetails] Reloading product after edit');
+      if (kDebugMode) {
+        debugPrint('🔄 [AdminProductDetails] Reloading product after edit');
+      }
       _loadProduct();
     }
   }
@@ -543,7 +560,7 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             spreadRadius: 1,
             blurRadius: 8,
             offset: const Offset(0, 2),
@@ -558,7 +575,7 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: AppTheme.primaryColor, size: 16),
@@ -683,7 +700,7 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Iconsax.warning_2, color: Colors.red, size: 20),
@@ -718,7 +735,7 @@ class _AdminProductDetailsScreenState extends State<AdminProductDetailsScreen> {
               );
             },
             style: TextButton.styleFrom(
-              backgroundColor: Colors.red.withOpacity(0.1),
+              backgroundColor: Colors.red.withValues(alpha: 0.1),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),

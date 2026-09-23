@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile/core/services/sound/message_sound_manager.dart';
 import 'package:mobile/features/chat/data/datasources/chat_local_datasource.dart';
@@ -52,7 +51,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
 
   XFile? _selectedImage;
   bool _isUploadingLocally = false;
-  bool _hasShownCachedData = false;
+  final bool _hasShownCachedData = false;
 
   @override
   void initState() {
@@ -468,7 +467,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -482,7 +481,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: const Color(0xFF2ED573).withOpacity(0.7),
+                              color: const Color(
+                                0xFF2ED573,
+                              ).withValues(alpha: 0.7),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -542,7 +543,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(Iconsax.message, size: 48, color: Colors.grey.shade400),
@@ -580,7 +581,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),
@@ -669,7 +670,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
+                      color: Colors.black.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Center(
@@ -718,7 +719,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),

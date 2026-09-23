@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -79,9 +80,9 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   Future<void> _loadMarketsAndUserMarket() async {
     try {
       final authState = context.read<AuthBloc>().state;
-      if (authState is Authenticated)
+      if (authState is Authenticated) {
         _userMarketId = authState.user.marketId;
-      else if (authState is OtpVerified)
+      } else if (authState is OtpVerified)
         _userMarketId = authState.user.marketId;
       else if (authState is ProfileCompleted)
         _userMarketId = authState.user.marketId;
@@ -91,9 +92,9 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       if (response.statusCode == 200) {
         final decodedData = jsonDecode(response.body);
         final List<dynamic> marketsList;
-        if (decodedData is List)
+        if (decodedData is List) {
           marketsList = decodedData;
-        else if (decodedData is Map && decodedData.containsKey('items'))
+        } else if (decodedData is Map && decodedData.containsKey('items'))
           marketsList = decodedData['items'];
         else if (decodedData is Map && decodedData.containsKey('data'))
           marketsList = decodedData['data'];
@@ -139,7 +140,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         }
       }
     } catch (e) {
-      debugPrint('Error loading markets: $e');
+      if (kDebugMode) debugPrint('Error loading markets: $e');
     }
   }
 
@@ -168,15 +169,11 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   void _autoSelectVariants(Product product) {
     if (product.variants.isEmpty) return;
     bool changed = false;
-    if (selectedColor == null &&
-        product.colors != null &&
-        product.colors.isNotEmpty) {
+    if (selectedColor == null && product.colors.isNotEmpty) {
       selectedColor = product.colors.first;
       changed = true;
     }
-    if (selectedSize == null &&
-        product.sizes != null &&
-        product.sizes.isNotEmpty) {
+    if (selectedSize == null && product.sizes.isNotEmpty) {
       selectedSize = product.sizes.first;
       changed = true;
     }
@@ -209,8 +206,8 @@ class _ProductDetailViewState extends State<ProductDetailView> {
   // ✅ HELPER: Get the dynamic price based on selected variant
   double _getCurrentPrice(Product product) {
     final variant = _getSelectedVariant(product);
-    if (variant != null && variant.price != null && variant.price! > 0) {
-      return variant.price!;
+    if (variant != null && variant.price > 0) {
+      return variant.price;
     }
     return product.price;
   }
@@ -274,15 +271,11 @@ class _ProductDetailViewState extends State<ProductDetailView> {
 
     if (product.variants.isNotEmpty) {
       if (variant == null) {
-        if (selectedColor == null &&
-            product.colors != null &&
-            product.colors.isNotEmpty) {
+        if (selectedColor == null && product.colors.isNotEmpty) {
           selectedColor = product.colors.first;
           autoSelected = true;
         }
-        if (selectedSize == null &&
-            product.sizes != null &&
-            product.sizes.isNotEmpty) {
+        if (selectedSize == null && product.sizes.isNotEmpty) {
           selectedSize = product.sizes.first;
           autoSelected = true;
         }
@@ -300,8 +293,8 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       }
 
       availableStock = variant?.stock ?? 0;
-      price = (variant?.price != null && variant!.price! > 0)
-          ? variant.price!
+      price = (variant?.price != null && variant!.price > 0)
+          ? variant.price
           : product.price;
 
       if (autoSelected) {
@@ -516,12 +509,15 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                   product = state.product;
                   _currentProduct = product;
                 }
-                if (product == null && _currentProduct != null)
+                if (product == null && _currentProduct != null) {
                   product = _currentProduct;
-                if (state is ProductDetailLoading && product == null)
+                }
+                if (state is ProductDetailLoading && product == null) {
                   return const LoadingProductDetail();
-                if (state is ProductDetailError && product == null)
+                }
+                if (state is ProductDetailError && product == null) {
                   return _buildStyledErrorState(state.message);
+                }
                 if (product != null) {
                   final p = product;
                   return Stack(
@@ -552,7 +548,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                     _buildSelectedVariantChip(p),
                                   if (_selectedAddress != null)
                                     _buildAddressDisplay(),
-                                  if (p.colors != null && p.colors.isNotEmpty)
+                                  if (p.colors.isNotEmpty)
                                     SelectionOptions(
                                       title: "Select Color:",
                                       options: p.colors,
@@ -561,7 +557,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
                                           setState(() => selectedColor = c),
                                       optionType: OptionType.color,
                                     ),
-                                  if (p.sizes != null && p.sizes.isNotEmpty)
+                                  if (p.sizes.isNotEmpty)
                                     SelectionOptions(
                                       title: "Select Size:",
                                       options: p.sizes,
@@ -655,8 +651,8 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: isOffline
-                    ? Colors.orange.withOpacity(0.1)
-                    : Colors.red.withOpacity(0.08),
+                    ? Colors.orange.withValues(alpha: 0.1)
+                    : Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(
@@ -692,9 +688,11 @@ class _ProductDetailViewState extends State<ProductDetailView> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.05),
+                  color: Colors.orange.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -760,7 +758,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -774,7 +772,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
             height: 14,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: const Color(0xFF2ED573).withOpacity(0.7),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.7),
             ),
           ),
           const SizedBox(width: 8),
@@ -794,9 +792,11 @@ class _ProductDetailViewState extends State<ProductDetailView> {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF2ED573).withOpacity(0.1),
+        color: const Color(0xFF2ED573).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF2ED573).withOpacity(0.3)),
+        border: Border.all(
+          color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         children: [
@@ -838,7 +838,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
         border: Border.all(color: const Color(0xFF2ED573), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2ED573).withOpacity(0.1),
+            color: const Color(0xFF2ED573).withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -849,7 +849,7 @@ class _ProductDetailViewState extends State<ProductDetailView> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF2ED573).withOpacity(0.1),
+              color: const Color(0xFF2ED573).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(

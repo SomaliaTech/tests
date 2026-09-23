@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/bloc/admin_product/admin_product_bloc.dart
-import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/features/admin/domain/repositories/admin_product_repository.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_product/admin_product_event.dart';
@@ -24,14 +24,20 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     FetchAllAdminProductsEvent event,
     Emitter<AdminProductState> emit,
   ) async {
-    debugPrint('📦 [AdminProductBloc] Fetching all products...');
+    if (kDebugMode) {
+      debugPrint('📦 [AdminProductBloc] Fetching all products...');
+    }
     emit(AdminProductsLoading());
     try {
       final products = await repository.getAllProducts();
-      debugPrint('📦 [AdminProductBloc] Loaded ${products.length} products');
+      if (kDebugMode) {
+        debugPrint('📦 [AdminProductBloc] Loaded ${products.length} products');
+      }
       emit(AdminProductsLoaded(products));
     } catch (e) {
-      debugPrint('❌ [AdminProductBloc] Error fetching products: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [AdminProductBloc] Error fetching products: $e');
+      }
       emit(AdminProductsError(e.toString()));
     }
   }
@@ -40,14 +46,20 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     FetchAdminProductByIdEvent event,
     Emitter<AdminProductState> emit,
   ) async {
-    debugPrint('🔍 [AdminProductBloc] Fetching product: ${event.productId}');
+    if (kDebugMode) {
+      debugPrint('🔍 [AdminProductBloc] Fetching product: ${event.productId}');
+    }
     emit(AdminProductDetailsLoading());
     try {
       final product = await repository.getProductById(event.productId);
-      debugPrint('✅ [AdminProductBloc] Product loaded: ${product.name}');
+      if (kDebugMode) {
+        debugPrint('✅ [AdminProductBloc] Product loaded: ${product.name}');
+      }
       emit(AdminProductDetailsLoaded(product));
     } catch (e) {
-      debugPrint('❌ [AdminProductBloc] Error fetching product: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [AdminProductBloc] Error fetching product: $e');
+      }
       emit(AdminProductDetailsError(e.toString()));
     }
   }
@@ -68,7 +80,7 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       // ✅ FIX: Silently refresh the product list so the new product appears immediately
       add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
-      debugPrint('❌ [Bloc] Create product error: $e');
+      if (kDebugMode) debugPrint('❌ [Bloc] Create product error: $e');
       emit(AdminProductsError(e.toString()));
     }
   }
@@ -82,7 +94,7 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       final products = await repository.getAllProducts();
       emit(AdminProductsLoaded(products));
     } catch (e) {
-      debugPrint('❌ [Bloc] Silent fetch error: $e');
+      if (kDebugMode) debugPrint('❌ [Bloc] Silent fetch error: $e');
       // Don't emit error — keep existing list visible
     }
   }
@@ -92,14 +104,20 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     Emitter<AdminProductState> emit,
   ) async {
     try {
-      debugPrint('🗑️ [AdminProductBloc] Deleting product: ${event.productId}');
+      if (kDebugMode) {
+        debugPrint(
+          '🗑️ [AdminProductBloc] Deleting product: ${event.productId}',
+        );
+      }
       await repository.deleteProduct(event.productId);
       emit(const AdminProductOperationSuccess('Product deleted successfully'));
 
       // ✅ FIX: Silently refresh the list after deletion
       add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
-      debugPrint('❌ [AdminProductBloc] Error deleting product: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [AdminProductBloc] Error deleting product: $e');
+      }
       emit(AdminProductsError(e.toString()));
     }
   }
@@ -109,7 +127,11 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
     Emitter<AdminProductState> emit,
   ) async {
     try {
-      debugPrint('✏️ [AdminProductBloc] Updating product: ${event.productId}');
+      if (kDebugMode) {
+        debugPrint(
+          '✏️ [AdminProductBloc] Updating product: ${event.productId}',
+        );
+      }
       emit(const AdminProductCreating(step: 'updating'));
 
       await repository.updateProduct(
@@ -127,7 +149,7 @@ class AdminProductBloc extends Bloc<AdminProductEvent, AdminProductState> {
       // ✅ FIX: Silently refresh the list after update
       add(SilentFetchAllAdminProductsEvent());
     } catch (e) {
-      debugPrint('❌ [Bloc] Update product error: $e');
+      if (kDebugMode) debugPrint('❌ [Bloc] Update product error: $e');
       emit(AdminProductsError(e.toString()));
     }
   }

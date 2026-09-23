@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/main/presentation/screens/main_navigation_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -60,7 +61,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         _fetchUnreadCount();
       });
     } catch (e) {
-      debugPrint('⚠️ ChatSocketService not available: $e');
+      if (kDebugMode) debugPrint('⚠️ ChatSocketService not available: $e');
     }
   }
 

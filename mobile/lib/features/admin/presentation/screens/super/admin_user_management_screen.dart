@@ -220,7 +220,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
             children: [
               CircleAvatar(
                 radius: 28,
-                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
                 child: Text(
                   user.name?.isNotEmpty == true
                       ? user.name![0].toUpperCase()
@@ -256,7 +256,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.1),
+                              color: Colors.blue.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Text(
@@ -301,7 +301,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
       margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -392,7 +392,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, -4),
                 ),
@@ -443,12 +443,12 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                         decoration: BoxDecoration(
                           color: role.isSystem
                               ? Colors.grey[100]
-                              : AppTheme.primaryColor.withOpacity(0.1),
+                              : AppTheme.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: role.isSystem
                                 ? Colors.grey[300]!
-                                : AppTheme.primaryColor.withOpacity(0.2),
+                                : AppTheme.primaryColor.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Row(
@@ -561,7 +561,7 @@ class _AdminUserManagementScreenState extends State<AdminUserManagementScreen> {
                           labelText: 'Role',
                           prefixIcon: Icon(Iconsax.shield_tick),
                         ),
-                        value: selectedRoleId,
+                        initialValue: selectedRoleId,
                         items: state.roles.map((role) {
                           return DropdownMenuItem(
                             value: role.id,

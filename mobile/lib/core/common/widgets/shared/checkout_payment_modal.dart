@@ -1,7 +1,11 @@
 // lib/features/product/presentation/screens/checkout_screen.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:get_it/get_it.dart';
+import 'package:http/http.dart' as http;
 import 'package:mobile/core/common/widgets/checkout_address_section.dart';
 import 'package:mobile/core/common/widgets/checkout_market_section.dart';
 import 'package:mobile/core/common/widgets/checkout_order_summary.dart';
@@ -9,6 +13,8 @@ import 'package:mobile/core/common/widgets/checkout_pay_button.dart';
 import 'package:mobile/core/common/widgets/checkout_payment_section.dart';
 import 'package:mobile/core/common/widgets/shared/payment_method.dart';
 import 'package:mobile/core/common/widgets/shared/phone_utils.dart';
+import 'package:mobile/core/constants/api_constants.dart';
+import 'package:mobile/core/services/storage/storage_service.dart';
 import 'package:mobile/features/admin/domain/entities/market_entity.dart';
 import 'package:mobile/features/cart/domain/entities/cart_item.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
@@ -18,9 +24,9 @@ import 'package:mobile/features/order/presentation/bloc/order_event.dart';
 import 'package:mobile/features/order/presentation/bloc/order_state.dart';
 import 'package:mobile/features/product/domain/entities/address.dart';
 import 'package:mobile/features/product/domain/entities/product.dart';
-
 import 'package:mobile/features/product/presentation/screens/payment_failed_page.dart';
 import 'package:mobile/features/product/presentation/screens/payment_success_page.dart';
+import 'package:flutter/foundation.dart';
 
 /// Unified checkout screen that works for both:
 /// 1. Single product checkout (Buy Now)
@@ -76,6 +82,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _formKey = GlobalKey<FormState>();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _promoController = TextEditingController();
   String? _selectedLabel;
 
   MarketEntity? _selectedMarket;
@@ -83,10 +90,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _selectedPaymentMethod = 'evc_plus';
   String? _createdOrderId;
 
+  // ✅ Promo code state
+  Map<String, dynamic>? _appliedPromo;
+  bool _isCheckingPromo = false;
+  String? _promoError;
+
   // ✅ Payment methods
   final List<PaymentMethod> _paymentMethods = PaymentMethod.methods;
-
-  // In checkout_screen.dart, update the GlobalKey type
 
   // ✅ Use the public state type (no underscore)
   final GlobalKey<CheckoutAddressSectionState> _addressSectionKey =
@@ -151,6 +161,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _addressController.dispose();
     _phoneController.dispose();
+    _promoController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -206,8 +217,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return _selectedMarket!.deliveryPrice;
   }
 
-  // ✅ Total
-  double get _totalAmount => _subtotal + _deliveryFee;
+  // ✅ Discount amount from promo code
+  double get _discountAmount => _appliedPromo != null
+      ? (_appliedPromo!['discountAmount'] as num).toDouble()
+      : 0.0;
+
+  // ✅ Total (with discount applied)
+  double get _totalAmount => (_subtotal + _deliveryFee) - _discountAmount;
 
   // ✅ Items for API
   List<Map<String, dynamic>> get _orderItems {
@@ -231,6 +247,58 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'quantity': widget.quantity,
       },
     ];
+  }
+
+  // ✅ Apply promo code
+  Future<void> _applyPromoCode() async {
+    final code = _promoController.text.trim();
+    if (code.isEmpty) return;
+
+    setState(() {
+      _isCheckingPromo = true;
+      _promoError = null;
+    });
+
+    try {
+      // ✅ Get token from your existing StorageService
+      final token = await GetIt.instance<StorageService>().getAuthToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      // ✅ CORRECT URL MATCHING YOUR BACKEND CONTROLLER
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/affiliate/promo-codes/validate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'code': code.toUpperCase(),
+          'orderAmount': _subtotal + _deliveryFee,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      // ✅ FIXED: Accept both 200 and 201 (NestJS default for POST)
+      if ((response.statusCode == 200 || response.statusCode == 201) &&
+          data['valid'] == true) {
+        setState(() {
+          _appliedPromo = data['promoCode'];
+          _isCheckingPromo = false;
+        });
+      } else {
+        setState(() {
+          _promoError = data['message'] ?? 'Invalid promo code';
+          _isCheckingPromo = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Promo Code Error: $e');
+      setState(() {
+        _promoError = e.toString().replaceAll('Exception: ', '');
+        _isCheckingPromo = false;
+      });
+    }
   }
 
   // ✅ Scroll to address section when there's an error
@@ -359,7 +427,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _executePayment();
   }
 
-  // In checkout_screen.dart - Simplified _executePayment method
   void _executePayment() {
     setState(() => _isProcessing = true);
 
@@ -368,7 +435,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     // For international numbers, don't require Somali payment method
     final paymentMethod = PhoneUtils.isSomaliNumber(_phoneController.text)
         ? (_selectedPaymentMethod ?? 'evc_plus')
-        : 'cash_on_delivery'; // or any default for international
+        : 'cash_on_delivery';
 
     final orderData = {
       'items': _orderItems,
@@ -380,6 +447,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'paymentMethod': paymentMethod,
       'phoneNumber': formattedPhone,
       'deliveryFee': _deliveryFee,
+      if (_appliedPromo != null)
+        'promoCode': _appliedPromo!['code'], // ✅ Pass promo code
     };
 
     context.read<OrderBloc>().add(CreateOrderEvent(orderData));
@@ -406,8 +475,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
         centerTitle: true,
       ),
-      body: // In checkout_screen.dart - Update BlocListener
-      BlocListener<OrderBloc, OrderState>(
+      body: BlocListener<OrderBloc, OrderState>(
         listener: (context, state) {
           if (state is PaymentProcessed) {
             setState(() => _isProcessing = false);
@@ -424,10 +492,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             final orderId = state.order['id'] as String? ?? '';
             _navigateToSuccess(orderId);
           } else if (state is OrderError) {
-            // ✅ ADD THIS BLOCK
-            setState(() => _isProcessing = false); // ✅ Stop the loading spinner
+            setState(() => _isProcessing = false);
 
-            // Show user-friendly error instead of raw backend message
             String userMessage = state.message;
             if (state.message.contains('not authorized') ||
                 state.message.contains('E10015')) {
@@ -435,9 +501,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   'Payment service is currently unavailable. Please try again later or use a different payment method.';
             }
 
-            _showPaymentErrorDialog(
-              userMessage,
-            ); // ✅ Reuse your existing dialog
+            _showPaymentErrorDialog(userMessage);
           }
         },
         child: Form(
@@ -473,12 +537,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         selectedPaymentMethod: _selectedPaymentMethod,
                         paymentMethods: _paymentMethods,
                         onPhoneChanged: (phone) {
-                          // Clear error when user types
                           _addressSectionKey.currentState?.clearError();
                           _autoDetectProvider();
                           setState(() {});
                         },
                       ),
+                      const SizedBox(height: 16),
+
+                      // ✅ Promo Code Section
+                      _buildPromoCodeSection(),
                       const SizedBox(height: 16),
 
                       // Order Summary
@@ -493,6 +560,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         itemCount: _itemCount,
                         subtotal: _subtotal,
                         deliveryFee: _deliveryFee,
+                        discountAmount: _discountAmount, // ✅ Pass discount
                         totalAmount: _totalAmount,
                       ),
                       const SizedBox(height: 16),
@@ -503,7 +571,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         onPaymentMethodChanged: (methodId) {
                           setState(() {
                             _selectedPaymentMethod = methodId;
-                            // Clear error when payment method changes
                             _addressSectionKey.currentState?.clearError();
                           });
                         },
@@ -537,6 +604,171 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  // ✅ Promo Code UI Widget
+  Widget _buildPromoCodeSection() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C5CE7).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Iconsax.discount_shape,
+                  color: Color(0xFF6C5CE7),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Promo Code',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_appliedPromo != null)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2ED573).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF2ED573).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Iconsax.tick_circle,
+                    color: Color(0xFF2ED573),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _appliedPromo!['code'],
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2ED573),
+                          ),
+                        ),
+                        Text(
+                          'Discount: \$${_discountAmount.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _appliedPromo = null;
+                      _promoController.clear();
+                      _promoError = null;
+                    }),
+                    child: const Icon(
+                      Iconsax.close_circle,
+                      color: Colors.red,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _promoController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      hintText: 'Enter promo code',
+                      errorText: _promoError,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: Color(0xFF6C5CE7)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
+                      ),
+                    ),
+                    onChanged: (_) => setState(() => _promoError = null),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isCheckingPromo || _promoController.text.isEmpty
+                        ? null
+                        : _applyPromoCode,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6C5CE7),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                    ),
+                    child: _isCheckingPromo
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Apply',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   void _navigateToSuccess(String orderId) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -544,7 +776,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           orderId: orderId,
           totalAmount: _totalAmount,
           productName: widget.isCartCheckout
-              ? '${_itemCount} items'
+              ? '$_itemCount items'
               : widget.product?.name ?? 'Order',
           productImage: widget.isCartCheckout
               ? null
@@ -581,7 +813,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.1),
+                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -607,7 +839,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // Go back to checkout
             },
             child: const Text(
               'Cancel',
@@ -617,7 +848,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // Retry payment
               _executePayment();
             },
             style: TextButton.styleFrom(

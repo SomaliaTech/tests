@@ -8,6 +8,7 @@ import 'package:mobile/features/product/domain/usecases/banner/update_banner.dar
 
 import 'admin_banner_event.dart';
 import 'admin_banner_state.dart';
+import 'package:flutter/foundation.dart';
 
 class AdminBannerBloc extends Bloc<AdminBannerEvent, AdminBannerState> {
   final GetAllBanners getAllBanners;
@@ -99,8 +100,7 @@ class AdminBannerBloc extends Bloc<AdminBannerEvent, AdminBannerState> {
 
   @override
   void onChange(Change<AdminBannerState> change) {
-    // TODO: implement onChange
     super.onChange(change);
-    print(change);
+    if (kDebugMode) debugPrint('$change');
   }
 }

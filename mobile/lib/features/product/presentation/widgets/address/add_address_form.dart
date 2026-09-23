@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iconsax/iconsax.dart';
@@ -70,7 +71,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
           });
         }
       } catch (e) {
-        debugPrint('Could not read auth state: $e');
+        if (kDebugMode) debugPrint('Could not read auth state: $e');
       }
     });
   }
@@ -101,7 +102,8 @@ class _AddAddressFormState extends State<AddAddressForm> {
         isDefault: _isDefault,
       );
 
-      print('📦 Submitting address: ${newAddress.toJson()}');
+      if (kDebugMode)
+        debugPrint('📦 Submitting address: ${newAddress.toJson()}');
 
       // Clear form
       _fullAddressController.clear();
@@ -120,11 +122,17 @@ class _AddAddressFormState extends State<AddAddressForm> {
     return BlocListener<AddressBloc, AddressState>(
       listener: (context, state) {
         if (state is AddressAdded) {
-          print('🎯 [AddAddressForm] AddressAdded received');
-          print('🎯 navigateToCheckout: ${widget.navigateToCheckout}');
-          print('🎯 availableMarkets: ${widget.availableMarkets?.length}');
-          print('🎯 product: ${widget.product?.id}');
-          print('🎯 cartItems: ${widget.cartItems?.length}');
+          if (kDebugMode)
+            debugPrint('🎯 [AddAddressForm] AddressAdded received');
+          if (kDebugMode)
+            debugPrint('🎯 navigateToCheckout: ${widget.navigateToCheckout}');
+          if (kDebugMode)
+            debugPrint(
+              '🎯 availableMarkets: ${widget.availableMarkets?.length}',
+            );
+          if (kDebugMode) debugPrint('🎯 product: ${widget.product?.id}');
+          if (kDebugMode)
+            debugPrint('🎯 cartItems: ${widget.cartItems?.length}');
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -237,12 +245,13 @@ class _AddAddressFormState extends State<AddAddressForm> {
   }
 
   void _navigateToCheckoutAfterAddressAdded(Address address) {
-    print('🚀 [AddAddressForm] Starting navigation to checkout...');
+    if (kDebugMode)
+      debugPrint('🚀 [AddAddressForm] Starting navigation to checkout...');
 
     Widget? checkoutScreen;
 
     if (widget.cartItems != null && widget.cartItems!.isNotEmpty) {
-      print('🛒 Creating CheckoutScreen.fromCart');
+      if (kDebugMode) debugPrint('🛒 Creating CheckoutScreen.fromCart');
       checkoutScreen = CheckoutScreen.fromCart(
         cartItems: widget.cartItems!,
         availableMarkets: widget.availableMarkets!,
@@ -250,7 +259,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
         savedAddress: address,
       );
     } else if (widget.product != null) {
-      print('📦 Creating CheckoutScreen for product');
+      if (kDebugMode) debugPrint('📦 Creating CheckoutScreen for product');
       checkoutScreen = CheckoutScreen(
         product: widget.product,
         selectedColor: widget.selectedColor,
@@ -263,7 +272,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
     }
 
     if (checkoutScreen == null) {
-      print('❌ Could not create checkout screen');
+      if (kDebugMode) debugPrint('❌ Could not create checkout screen');
       if (widget.onAddressAdded != null) {
         widget.onAddressAdded!(address);
       }
@@ -273,7 +282,7 @@ class _AddAddressFormState extends State<AddAddressForm> {
       return;
     }
 
-    print('✅ Checkout screen created, navigating...');
+    if (kDebugMode) debugPrint('✅ Checkout screen created, navigating...');
 
     // Use pushAndRemoveUntil to clear all modals and navigate to checkout
     Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(

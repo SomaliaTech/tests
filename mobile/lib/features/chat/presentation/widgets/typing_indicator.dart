@@ -1,7 +1,6 @@
 // lib/features/chat/presentation/widgets/typing_indicator.dart
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:iconsax/iconsax.dart';
 
 class TypingIndicator extends StatefulWidget {
   final String? partnerImage;

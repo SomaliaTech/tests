@@ -17,7 +17,7 @@ import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:flutter/foundation.dart';
 
 void authRegisterDependencies(GetIt sl) {
-  debugPrint('📦 Registering Auth Dependencies...');
+  if (kDebugMode) debugPrint('📦 Registering Auth Dependencies...');
 
   // Data Sources - ✅ Use apiClient instead of client
   // if (!sl.isRegistered<AuthRemoteDataSource>()) {
@@ -83,5 +83,5 @@ void authRegisterDependencies(GetIt sl) {
     ),
   );
 
-  debugPrint('✅ Auth Dependencies Registered');
+  if (kDebugMode) debugPrint('✅ Auth Dependencies Registered');
 }

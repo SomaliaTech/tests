@@ -94,7 +94,7 @@ class LoadingProductDetail extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
                       // Color selection placeholder
-                      Container(
+                      SizedBox(
                         height: 60,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
@@ -117,7 +117,7 @@ class LoadingProductDetail extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       // Size selection placeholder
-                      Container(
+                      SizedBox(
                         height: 50,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,

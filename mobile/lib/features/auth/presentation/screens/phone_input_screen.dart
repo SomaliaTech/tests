@@ -217,7 +217,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF2ED573).withOpacity(0.3),
+                          color: const Color(0xFF2ED573).withValues(alpha: 0.3),
                           blurRadius: 24,
                           offset: const Offset(0, 10),
                         ),
@@ -278,8 +278,8 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
         boxShadow: [
           BoxShadow(
             color:
-                providerColor?.withOpacity(0.2) ??
-                Colors.black.withOpacity(0.04),
+                providerColor?.withValues(alpha: 0.2) ??
+                Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -370,7 +370,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: providerColor?.withOpacity(0.15),
+              color: providerColor?.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
@@ -437,7 +437,7 @@ class _PhoneInputScreenState extends State<PhoneInputScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               elevation: isValid ? 8 : 0,
-              shadowColor: const Color(0xFF2ED573).withOpacity(0.4),
+              shadowColor: const Color(0xFF2ED573).withValues(alpha: 0.4),
             ),
             child: Ink(
               decoration: BoxDecoration(

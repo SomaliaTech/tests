@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:mobile/features/wishlist/data/model/wishlist_item_model.dart';
 import 'package:mobile/features/wishlist/domain/repository/wishlist_repository.dart';
-import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
 import '../../../../core/utils/typedefs.dart';
 import '../../domain/entities/wishlist_item.dart';

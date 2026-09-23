@@ -10,6 +10,7 @@ import 'package:mobile/features/admin/data/models/location_traffic_model.dart';
 import 'package:mobile/features/admin/data/models/product_traffic_model.dart';
 
 import 'package:mobile/features/admin/presentation/bloc/dashborad/dashboard_state.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class DashboardRemoteDataSource {
   Future<DashboardLoaded> getAllDashboardData(String period);
@@ -33,9 +34,6 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
   // ✅ OPTIMIZED: Single API call for all dashboard data
   @override
   Future<DashboardLoaded> getAllDashboardData(String period) async {
-    print(
-      '🚀 [Dashboard] Fetching ALL data in ONE request for period: $period',
-    );
     final stopwatch = Stopwatch()..start();
 
     try {
@@ -43,7 +41,7 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
 
       _debugToken(token);
       final url = '${ApiConstants.baseUrl}/admin/dashboard/all?period=$period';
-      print('📍 [Dashboard] URL: $url');
+      if (kDebugMode) debugPrint('📍 [Dashboard] URL: $url');
 
       final response = await client.get(
         Uri.parse(url),
@@ -53,12 +51,8 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
         },
       );
 
-      print('📡 [Dashboard] Response Status: ${response.statusCode}');
-      print('⏱️ [Dashboard] Response Time: ${stopwatch.elapsedMilliseconds}ms');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('✅ [Dashboard] All data parsed successfully');
 
         return DashboardLoaded(
           stats: DashboardStatsModel.fromJson(data['stats']),
@@ -82,9 +76,7 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
       } else {
         throw ServerException('Failed: ${response.statusCode}');
       }
-    } catch (e, stackTrace) {
-      print('❌ [Dashboard] Exception: $e');
-      print('📚 [Dashboard] Stack trace: $stackTrace');
+    } catch (e) {
       rethrow;
     }
   }
@@ -93,7 +85,6 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
     try {
       final parts = token.split('.');
       if (parts.length != 3) {
-        print('❌ Invalid JWT format');
         return;
       }
 
@@ -102,14 +93,8 @@ class DashboardRemoteDataSourceImpl implements DashboardRemoteDataSource {
       final normalized = base64.normalize(payload);
       final decoded = utf8.decode(base64.decode(normalized));
       final jsonPayload = json.decode(decoded);
-
-      print('🔑 [JWT Debug] Token payload: $jsonPayload');
-      print('🔑 [JWT Debug] isAdmin: ${jsonPayload['isAdmin']}');
-      print(
-        '🔑 [JWT Debug] userId: ${jsonPayload['userId'] ?? jsonPayload['sub']}',
-      );
     } catch (e) {
-      print('❌ Failed to decode JWT: $e');
+      ServerException(e.toString());
     }
   }
 }

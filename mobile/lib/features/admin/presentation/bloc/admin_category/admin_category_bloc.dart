@@ -1,10 +1,10 @@
 // lib/features/admin/presentation/bloc/admin_category/admin_category_bloc.dart
 
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:mobile/features/admin/domain/entities/admin_product_entity.dart';
 import 'package:mobile/features/admin/domain/repositories/admin_category_repository.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_category_event.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_category/admin_category_state.dart';
+import 'package:flutter/foundation.dart';
 
 class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
   final AdminCategoryRepository repository;
@@ -78,7 +78,7 @@ class AdminCategoryBloc extends Bloc<AdminCategoryEvent, AdminCategoryState> {
       emit(AdminCategoryOperationSuccess('Category deleted successfully'));
       emit(AdminCategoriesLoaded(categories));
     } catch (e) {
-      print('❌ [AdminCategoryBloc] Delete failed: $e');
+      if (kDebugMode) debugPrint('❌ [AdminCategoryBloc] Delete failed: $e');
       final errorMessage = e.toString();
 
       if (errorMessage.contains('subcategories') ||

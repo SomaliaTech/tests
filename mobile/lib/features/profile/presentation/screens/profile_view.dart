@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/profile/presentation/screens/profile_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -67,7 +68,7 @@ class _ProfileViewState extends State<ProfileView> {
     try {
       if (await canLaunchUrl(whatsappUri)) {
         await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
-        debugPrint('✅ WhatsApp opened');
+        if (kDebugMode) debugPrint('✅ WhatsApp opened');
       } else {
         if (mounted) {
           ErrorHandler.showError(
@@ -77,7 +78,7 @@ class _ProfileViewState extends State<ProfileView> {
         }
       }
     } catch (e) {
-      debugPrint('❌ Error launching WhatsApp: $e');
+      if (kDebugMode) debugPrint('❌ Error launching WhatsApp: $e');
     }
   }
 
@@ -91,7 +92,9 @@ class _ProfileViewState extends State<ProfileView> {
 
       result.fold(
         (failure) {
-          debugPrint('❌ Failed to load markets: ${failure.message}');
+          if (kDebugMode) {
+            debugPrint('❌ Failed to load markets: ${failure.message}');
+          }
           setState(() {
             _markets = [];
             _marketsLoaded = true;
@@ -99,9 +102,11 @@ class _ProfileViewState extends State<ProfileView> {
         },
         (markets) {
           final activeMarkets = markets.where((m) => m.isActive).toList();
-          debugPrint(
-            '📊 Total markets: ${markets.length}, Active: ${activeMarkets.length}',
-          );
+          if (kDebugMode) {
+            debugPrint(
+              '📊 Total markets: ${markets.length}, Active: ${activeMarkets.length}',
+            );
+          }
 
           setState(() {
             _markets = activeMarkets;
@@ -112,7 +117,7 @@ class _ProfileViewState extends State<ProfileView> {
         },
       );
     } catch (e) {
-      debugPrint('❌ Error loading markets: $e');
+      if (kDebugMode) debugPrint('❌ Error loading markets: $e');
       if (mounted) {
         setState(() {
           _markets = [];
@@ -155,7 +160,7 @@ class _ProfileViewState extends State<ProfileView> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withOpacity(0.1),
+                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -247,14 +252,6 @@ class _ProfileViewState extends State<ProfileView> {
     );
   }
 
-  // ✅ FIXED: same navigation pattern as logout in settings_screen.dart
-  void _navigateToWelcomeAfterDelete() {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      (route) => false,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -313,14 +310,24 @@ class _ProfileViewState extends State<ProfileView> {
             _currentMarketId = state.profile.marketId;
             _profileLoaded = true;
 
-            debugPrint(
-              '📱 Profile loaded - Phone: "${state.profile.phoneNumber}"',
-            );
-            debugPrint('📱 Profile loaded - Email: "${state.profile.email}"');
-            debugPrint('📱 Profile loaded - isAdmin: ${state.profile.isAdmin}');
-            debugPrint(
-              '📱 Profile loaded - isSuperAdmin: ${state.profile.isSuperAdmin}',
-            );
+            if (kDebugMode) {
+              debugPrint(
+                '📱 Profile loaded - Phone: "${state.profile.phoneNumber}"',
+              );
+            }
+            if (kDebugMode) {
+              debugPrint('📱 Profile loaded - Email: "${state.profile.email}"');
+            }
+            if (kDebugMode) {
+              debugPrint(
+                '📱 Profile loaded - isAdmin: ${state.profile.isAdmin}',
+              );
+            }
+            if (kDebugMode) {
+              debugPrint(
+                '📱 Profile loaded - isSuperAdmin: ${state.profile.isSuperAdmin}',
+              );
+            }
 
             setState(() {});
             _tryPreSelectMarket();
@@ -427,7 +434,7 @@ class _ProfileViewState extends State<ProfileView> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: Icon(_getErrorIcon(message), size: 48, color: Colors.red),

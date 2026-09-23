@@ -228,8 +228,9 @@ class ChatSocketService with WidgetsBindingObserver {
     });
 
     _socket?.on('user_deleted', (data) {
-      if (data is Map)
+      if (data is Map) {
         _userDeletedController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     _socket?.on('new_message', (data) {
@@ -244,8 +245,9 @@ class ChatSocketService with WidgetsBindingObserver {
     });
 
     _socket?.on('message_sent', (data) {
-      if (data is Map)
+      if (data is Map) {
         _messageSentController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     _socket?.on('partner_status', (data) {
@@ -257,15 +259,16 @@ class ChatSocketService with WidgetsBindingObserver {
     });
 
     _socket?.on('message_read', (data) {
-      if (data is Map)
+      if (data is Map) {
         _messageReadController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     _socket?.on('error', (data) {
       String errorMessage = 'Unknown error';
-      if (data is Map && data['message'] != null)
+      if (data is Map && data['message'] != null) {
         errorMessage = data['message'].toString();
-      else if (data is String)
+      } else if (data is String)
         errorMessage = data;
       _errorController.add(errorMessage);
     });
@@ -275,8 +278,9 @@ class ChatSocketService with WidgetsBindingObserver {
     });
 
     _socket?.on('new_notification', (data) {
-      if (data is Map)
+      if (data is Map) {
         _notificationController.add(Map<String, dynamic>.from(data));
+      }
     });
 
     _socket?.on('new_order', (data) {

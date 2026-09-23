@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/profile/presentation/screens/profile_screen.dart';
@@ -56,7 +57,9 @@ class ProfileSection extends StatelessWidget {
                         },
                         // ✅ Handle error state - PREVENTS CRASH
                         errorBuilder: (context, error, stackTrace) {
-                          debugPrint('⚠️ Profile image load error: $error');
+                          if (kDebugMode) {
+                            debugPrint('⚠️ Profile image load error: $error');
+                          }
                           return Container(
                             color: const Color(0xFFE8F5E9),
                             child: const Icon(
@@ -113,7 +116,7 @@ class ProfileSection extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2ED573).withOpacity(0.1),
+                  color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(

@@ -74,7 +74,7 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
       ServerStatusService().markServerDown();
       return const Right([]);
     } catch (e) {
-      debugPrint('⚠️ Failed to fetch notifications: $e');
+      if (kDebugMode) debugPrint('⚠️ Failed to fetch notifications: $e');
       return const Right([]);
     }
   }

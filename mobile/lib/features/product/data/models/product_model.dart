@@ -44,8 +44,9 @@ class ProductModel {
         final sizeName = sizeObj is Map ? sizeObj['name'] as String? : null;
 
         // Add to unique sets so the UI knows what options to show
-        if (colorName != null && colorName.isNotEmpty)
+        if (colorName != null && colorName.isNotEmpty) {
           uniqueColors.add(colorName);
+        }
         if (sizeName != null && sizeName.isNotEmpty) uniqueSizes.add(sizeName);
 
         return ProductVariant(

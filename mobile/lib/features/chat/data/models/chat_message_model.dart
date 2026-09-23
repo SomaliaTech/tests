@@ -1,5 +1,6 @@
 // lib/features/chat/data/models/chat_message_model.dart
 import '../../domain/entities/chat_message.dart';
+import 'package:flutter/foundation.dart';
 
 class ChatMessageModel extends ChatMessage {
   const ChatMessageModel({
@@ -28,9 +29,9 @@ class ChatMessageModel extends ChatMessage {
         // ✅ FIX: Parse UTC and convert to local
         createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
       );
-    } catch (e, stackTrace) {
-      print('❌ [ChatMessageModel] PARSING ERROR: $e');
-      print('📦 [ChatMessageModel] PAYLOAD: $json');
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ [ChatMessageModel] PARSING ERROR: $e');
+      if (kDebugMode) debugPrint('📦 [ChatMessageModel] PAYLOAD: $json');
       rethrow;
     }
   }
@@ -61,7 +62,10 @@ class ChatMessageModel extends ChatMessage {
       // ✅ Convert UTC to local timezone
       return parsedTime.toLocal();
     } catch (e) {
-      print('❌ [ChatMessageModel] Error parsing datetime: $value, error: $e');
+      if (kDebugMode)
+        debugPrint(
+          '❌ [ChatMessageModel] Error parsing datetime: $value, error: $e',
+        );
       return DateTime.now();
     }
   }

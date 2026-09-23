@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_banners_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/admin_users_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/affiliate/affiliate_marketing_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/broadcast_notification_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/chat/super_admin_list_screen.dart';
 import 'package:mobile/features/admin/presentation/screens/modern_analytics_screen.dart';
+import 'package:mobile/features/admin/presentation/screens/support_settings_screen.dart';
 
 class AdminMoreDashboardScreen extends StatelessWidget {
   const AdminMoreDashboardScreen({super.key});
@@ -110,6 +112,27 @@ class AdminMoreDashboardScreen extends StatelessWidget {
                 );
               },
             ),
+
+            const SizedBox(height: 12),
+
+            // 6. Affiliate Marketing ✨ NEW
+            _buildActionCard(
+              context,
+              title: 'Affiliate Marketing',
+              subtitle: 'Manage affiliates, promo codes, and commissions',
+              icon: Iconsax.dollar_square,
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AdminAffiliateMarketingScreen(),
+                  ),
+                );
+              },
+            ),
             const SizedBox(height: 12),
 
             // 3. User Management
@@ -164,6 +187,26 @@ class AdminMoreDashboardScreen extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const SuperAdminListScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // 5. App Settings
+            _buildActionCard(
+              context,
+              title: ('Support Settings'),
+              subtitle: 'Update support email and phone',
+              icon: (Iconsax.arrow_right_3),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF2D3436), Color(0xFF636E72)],
+              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SupportSettingsScreen(),
                   ),
                 );
               },

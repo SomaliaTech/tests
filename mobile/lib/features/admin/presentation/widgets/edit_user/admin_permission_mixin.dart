@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/features/admin/presentation/widgets/admin_permission_mixin.dart
 
 import 'package:flutter/widgets.dart';
@@ -27,7 +28,7 @@ mixin AdminPermissionMixin<T extends StatefulWidget> on State<T> {
         });
       }
     } catch (e) {
-      debugPrint('❌ [PermissionMixin] Failed: $e');
+      if (kDebugMode) debugPrint('❌ [PermissionMixin] Failed: $e');
       if (mounted) {
         setState(() {
           permissionsLoaded = true;

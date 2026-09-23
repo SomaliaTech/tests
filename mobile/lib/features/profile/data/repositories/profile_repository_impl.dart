@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
-import 'package:mobile/features/notifications/data/repositories/notifications_repository_impl.dart';
 
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
@@ -26,28 +25,34 @@ class ProfileRepositoryImpl implements ProfileRepository {
   ResultFuture<Profile> getProfile() async {
     try {
       final token = await _getToken();
-      if (token == null)
+      if (token == null) {
         return Left(ServerFailure('No authentication token found'));
+      }
 
       final data = await remoteDataSource.getProfile(token);
       final profile = ProfileModel.fromJson(data);
 
       // Save to local storage
       await storageService.saveUserName(profile.name);
-      if (profile.email != null)
+      if (profile.email != null) {
         await storageService.saveUserEmail(profile.email!);
-      if (profile.profileImage != null)
+      }
+      if (profile.profileImage != null) {
         await storageService.saveUserProfileImage(profile.profileImage!);
-      if (profile.marketId != null)
+      }
+      if (profile.marketId != null) {
         await storageService.saveUserMarketId(profile.marketId!);
+      }
 
       // ✅ Save admin status
       await storageService.saveIsAdmin(profile.isAdmin);
       await storageService.saveIsSuperAdmin(profile.isSuperAdmin);
 
-      debugPrint(
-        '💾 Profile saved - isAdmin: ${profile.isAdmin}, isSuperAdmin: ${profile.isSuperAdmin}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '💾 Profile saved - isAdmin: ${profile.isAdmin}, isSuperAdmin: ${profile.isSuperAdmin}',
+        );
+      }
 
       return Right(profile);
     } on ServerException catch (e) {
@@ -65,10 +70,12 @@ class ProfileRepositoryImpl implements ProfileRepository {
   }) async {
     try {
       final token = await _getToken();
-      if (token == null)
+      if (token == null) {
         return Left(ServerFailure('No authentication token found'));
+      }
 
-      print('📤 Updating profile with: name=$name, marketId=$marketId');
+      if (kDebugMode)
+        debugPrint('📤 Updating profile with: name=$name, marketId=$marketId');
 
       final data = await remoteDataSource.updateProfile(
         token,
@@ -76,7 +83,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
         email,
         marketId,
       );
-      print('📥 Response data: $data');
+      if (kDebugMode) debugPrint('📥 Response data: $data');
 
       final profile = ProfileModel.fromJson(data['user']);
 
@@ -97,8 +104,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   ResultFuture<String> uploadProfileImage(String base64Image) async {
     try {
       final token = await _getToken();
-      if (token == null)
+      if (token == null) {
         return Left(ServerFailure('No authentication token found'));
+      }
 
       final result = await remoteDataSource.uploadProfileImage(
         token,
@@ -120,8 +128,9 @@ class ProfileRepositoryImpl implements ProfileRepository {
   ResultFuture<void> deleteAccount() async {
     try {
       final token = await _getToken();
-      if (token == null)
+      if (token == null) {
         return Left(ServerFailure('No authentication token found'));
+      }
 
       await remoteDataSource.deleteAccount(token);
       await storageService.clearAuthData();

@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:retry/retry.dart'; // ✅ 1. Import retry package
 import 'package:mobile/core/common/entities/no_params.dart';
@@ -28,7 +28,9 @@ class BannerBloc extends Bloc<BannerEvent, BannerState> {
   void _onConnectivityChanged() {
     // Only reload if we just came back online
     if (_connectivityService.status == ConnectionStatus.online) {
-      debugPrint(' [BannerBloc] Internet restored, reloading banners...');
+      if (kDebugMode) {
+        debugPrint(' [BannerBloc] Internet restored, reloading banners...');
+      }
       add(LoadBannersEvent());
     }
   }
@@ -37,7 +39,7 @@ class BannerBloc extends Bloc<BannerEvent, BannerState> {
     LoadBannersEvent event,
     Emitter<BannerState> emit,
   ) async {
-    debugPrint('🔄 [BannerBloc] Loading banners...');
+    if (kDebugMode) debugPrint('🔄 [BannerBloc] Loading banners...');
 
     // Only show loading if we don't have data yet
     if (state is! BannersLoaded) {
@@ -67,13 +69,15 @@ class BannerBloc extends Bloc<BannerEvent, BannerState> {
             ), // Retry on 500 too (backend restarting)
       );
 
-      debugPrint('✅ [BannerBloc] Loaded ${banners.length} banners');
+      if (kDebugMode) {
+        debugPrint('✅ [BannerBloc] Loaded ${banners.length} banners');
+      }
       var filteredBanners = event.filter != null
           ? _applyFilter(banners, event.filter!)
           : banners;
       emit(BannersLoaded(filteredBanners));
     } catch (e) {
-      debugPrint('❌ [BannerBloc] Final Error: $e');
+      if (kDebugMode) debugPrint('❌ [BannerBloc] Final Error: $e');
       // Don't emit error if we already have data (show stale data instead)
       if (state is! BannersLoaded) {
         emit(

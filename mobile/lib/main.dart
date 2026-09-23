@@ -1,20 +1,24 @@
+import 'package:flutter/foundation.dart';
 // lib/main.dart - Complete version with ChatSocketService integration
 
 import 'dart:async';
 import 'dart:io';
 import 'package:hive_flutter/adapters.dart';
-import 'package:iconsax/iconsax.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile/core/common/widgets/splash_screen.dart';
 import 'package:mobile/core/network/internet_banner.dart';
 import 'package:mobile/features/admin/presentation/bloc/admin_role/admin_role_bloc.dart';
+import 'package:mobile/features/admin/presentation/bloc/affiliate/affiliate_bloc.dart';
 import 'package:mobile/features/admin/presentation/bloc/banner/admin_banner_bloc.dart';
+import 'package:mobile/features/affiliate/presentation/bloc/affiliate_user/affiliate_user_bloc.dart';
+import 'package:mobile/features/affiliate/presentation/bloc/affiliate_user/affiliate_user_event.dart';
 import 'package:mobile/features/auth/presentation/screens/complete_profile_screen.dart';
 import 'package:mobile/features/auth/presentation/screens/welcome_screen.dart';
 import 'package:mobile/features/product/presentation/blocs/banner/banner_bloc.dart';
 import 'package:mobile/features/product/presentation/screens/category_view.dart';
 import 'package:mobile/features/product/presentation/screens/product_detail_screen.dart';
+import 'package:mobile/features/support/presentation/bloc/support_settings/support_settings_bloc.dart';
 import 'package:provider/provider.dart';
 import 'package:toastification/toastification.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -41,7 +45,6 @@ import 'package:mobile/features/admin/presentation/bloc/user/user_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_event.dart';
 import 'package:mobile/features/auth/presentation/bloc/auth_state.dart';
-import 'package:mobile/features/auth/presentation/screens/phone_input_screen.dart';
 import 'package:mobile/features/cart/presentation/bloc/cart_bloc.dart';
 import 'package:mobile/features/chat/presentation/bloc/chat_room_bloc.dart';
 import 'package:mobile/features/chat/presentation/bloc/conversations_bloc.dart';
@@ -57,8 +60,6 @@ import 'package:mobile/features/support/presentation/bloc/faq_bloc.dart';
 import 'package:mobile/features/tracking/presentation/bloc/tracking_bloc.dart';
 import 'package:mobile/features/wishlist/presentation/bloc/wishlist_bloc.dart';
 import 'firebase_options.dart';
-import 'package:flutter/painting.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 void main() async {
@@ -71,10 +72,10 @@ void main() async {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      debugPrint('✅ Firebase initialized successfully');
+      if (kDebugMode) debugPrint('✅ Firebase initialized successfully');
     }
   } catch (e) {
-    debugPrint('❌ Firebase initialization error: $e');
+    if (kDebugMode) debugPrint('❌ Firebase initialization error: $e');
   }
 
   // ✅ Open ALL Hive boxes FIRST with correct types
@@ -109,16 +110,18 @@ void main() async {
   if (hasValidToken) {
     // Connect socket in background
     socketService.connect().catchError((e) {
-      debugPrint('⚠️ Chat socket connection error: $e');
+      if (kDebugMode) debugPrint('⚠️ Chat socket connection error: $e');
     });
   }
 
   // ✅ Listen for connection status
   socketService.onConnectionChange.listen((isConnected) {
     if (isConnected) {
-      debugPrint('🟢 Chat socket connected');
+      if (kDebugMode) debugPrint('🟢 Chat socket connected');
     } else {
-      debugPrint('🔴 Chat socket disconnected - auto-reconnect active');
+      if (kDebugMode) {
+        debugPrint('🔴 Chat socket disconnected - auto-reconnect active');
+      }
     }
   });
 
@@ -128,7 +131,7 @@ void main() async {
     if (error.contains('failed to reconnect') ||
         error.contains('Unable to connect to chat server')) {
       // You can show a snackbar or banner here
-      debugPrint('⚠️ Critical chat error: $error');
+      if (kDebugMode) debugPrint('⚠️ Critical chat error: $error');
 
       // Optionally show a snackbar using a global key or event
       // NavigationService.showSnackBar(
@@ -140,12 +143,12 @@ void main() async {
 
   // Initialize push notifications in background
   PushNotificationService().init().catchError((e) {
-    debugPrint('⚠️ Push notification init failed: $e');
+    if (kDebugMode) debugPrint('⚠️ Push notification init failed: $e');
   });
 
   // Initialize sound manager in background
   MessageSoundManager().init().catchError((e) {
-    debugPrint('⚠️ Sound manager init failed: $e');
+    if (kDebugMode) debugPrint('⚠️ Sound manager init failed: $e');
   });
 
   // 🚀 Check authentication status
@@ -187,9 +190,11 @@ Future<void> clearImageCache() async {
       await imageCacheDir.delete(recursive: true);
     }
 
-    debugPrint('🗑️ Successfully cleared all corrupted image caches');
+    if (kDebugMode) {
+      debugPrint('🗑️ Successfully cleared all corrupted image caches');
+    }
   } catch (e) {
-    debugPrint('⚠️ Error clearing image cache: $e');
+    if (kDebugMode) debugPrint('⚠️ Error clearing image cache: $e');
   }
 }
 
@@ -215,7 +220,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   StreamSubscription? _socketConnectionSubscription;
   StreamSubscription? _socketErrorSubscription;
 
-  // ✅ FIX: Add timer to debounce rapid network changes
+  // ✅ Timer to debounce rapid network changes
   Timer? _connectivityDebounce;
 
   @override
@@ -223,20 +228,35 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    // ✅ Preload affiliate status once so all screens see it.
+    //    Uses StorageService (not AuthBloc) because on cold start
+    //    AuthBloc may still be in AuthChecking state.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final storage = sl<StorageService>();
+      final isAuth = await storage.isAuthenticated();
+      if (isAuth && mounted) {
+        sl<AffiliateUserBloc>().add(const FetchMyDashboardStatsEvent());
+      }
+    });
+
+    // Socket connection status stream
     _socketConnectionSubscription = widget.socketService.onConnectionChange
         .listen((isConnected) {
+          if (!mounted) return;
           setState(() {
             _socketConnected = isConnected;
           });
         });
 
+    // Socket error stream
     _socketErrorSubscription = widget.socketService.onError.listen((error) {
       if (error.contains('failed to reconnect') ||
           error.contains('Unable to connect')) {
-        _showChatErrorSnackBar(error);
+        // Optionally handle critical errors here
       }
     });
 
+    // Connectivity stream
     _connectivitySubscription = widget.connectivityService.onConnectivityChange
         .listen((status) {
           _onConnectivityChanged(status);
@@ -249,24 +269,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _connectivitySubscription?.cancel();
     _socketConnectionSubscription?.cancel();
     _socketErrorSubscription?.cancel();
-    _connectivityDebounce?.cancel(); // ✅ FIX: Cancel timer on dispose
+    _connectivityDebounce?.cancel();
     super.dispose();
   }
 
   void _onConnectivityChanged(ConnectionStatus status) {
-    // ✅ FIX: Cancel previous timer to prevent rapid firing/flapping
+    // Cancel previous timer to prevent rapid firing/flapping
     _connectivityDebounce?.cancel();
 
-    // ✅ FIX: Wait 2 seconds to ensure the connection is actually stable before reacting
+    // Wait 2 seconds to ensure the connection is actually stable
     _connectivityDebounce = Timer(const Duration(seconds: 2), () {
       if (status == ConnectionStatus.online) {
-        debugPrint('🌐 Network stable and online - checking chat socket...');
+        if (kDebugMode) {
+          debugPrint('🌐 Network stable and online - checking chat socket...');
+        }
         final storageService = sl<StorageService>();
         storageService.isAuthenticated().then((isAuth) {
+          if (!mounted) return;
           if (isAuth && !_socketConnected) {
-            debugPrint('🔄 Attempting to reconnect chat socket...');
+            if (kDebugMode) {
+              debugPrint('🔄 Attempting to reconnect chat socket...');
+            }
             widget.socketService.reconnect().catchError((e) {
-              debugPrint('⚠️ Socket reconnect error: $e');
+              if (kDebugMode) debugPrint('⚠️ Socket reconnect error: $e');
             });
           }
         });
@@ -279,49 +304,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       final storageService = sl<StorageService>();
       storageService.isAuthenticated().then((isAuth) {
+        if (!mounted) return;
         if (isAuth && !_socketConnected) {
           final status = widget.connectivityService.status;
           if (status != ConnectionStatus.offline) {
-            debugPrint('🔄 App resumed - reconnecting chat socket...');
+            if (kDebugMode) {
+              debugPrint('🔄 App resumed - reconnecting chat socket...');
+            }
             widget.socketService.reconnect().catchError((e) {
-              debugPrint('⚠️ Socket reconnect on resume error: $e');
+              if (kDebugMode) {
+                debugPrint('⚠️ Socket reconnect on resume error: $e');
+              }
             });
           }
         }
       });
-    }
-  }
-
-  void _showChatErrorSnackBar(String error) {
-    final context = NavigationService.navigatorKey.currentContext;
-    if (context != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Iconsax.warning_2, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Chat connection lost. Tap to reconnect.',
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.red.shade700,
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(
-            label: 'Retry',
-            textColor: Colors.white,
-            onPressed: () {
-              widget.socketService.reconnect().catchError((e) {
-                debugPrint('⚠️ Manual reconnect failed: $e');
-              });
-            },
-          ),
-        ),
-      );
     }
   }
 
@@ -331,7 +328,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: widget.connectivityService),
-          // ✅ Provide socket service to the widget tree
           Provider<ChatSocketService>.value(value: widget.socketService),
           BlocProvider(
             create: (context) =>
@@ -364,7 +360,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           BlocProvider(create: (_) => sl<AdminBannerBloc>()),
           BlocProvider(create: (_) => sl<BannerBloc>()),
           BlocProvider(create: (_) => sl<AdminFaqBloc>()),
+          BlocProvider(create: (_) => sl<AffiliateBloc>()), // admin
+          BlocProvider(create: (_) => sl<AffiliateUserBloc>()), // user
           Provider<StorageService>.value(value: sl<StorageService>()),
+          BlocProvider(create: (_) => sl<SupportSettingsBloc>()),
         ],
         child: MaterialApp(
           title: 'FARXADA',
@@ -424,26 +423,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget _buildHome() {
     return Consumer<ConnectivityService>(
       builder: (context, connectivity, _) {
-        // ✅ Show splash screen while connectivity is being checked
+        // Show splash screen while connectivity is being checked
         if (connectivity.isInitialCheck && !widget.isInitiallyAuthenticated) {
           return const SplashScreen();
         }
 
-        // ✅ If already authenticated, go directly to home
+        // If already authenticated, go directly to home
         if (widget.isInitiallyAuthenticated) {
           return const MainNavigationScreen();
         }
 
-        // ✅ Use BlocBuilder with buildWhen to prevent unnecessary rebuilds
+        // BlocBuilder with buildWhen to prevent unnecessary rebuilds
         return BlocBuilder<AuthBloc, AuthState>(
           buildWhen: (previous, current) {
-            // ✅ Only rebuild for meaningful state changes, not loading
             if (current is AuthLoading) return false;
             if (previous is AuthLoading && current is! AuthLoading) return true;
             return true;
           },
           builder: (context, state) {
-            // ✅ Don't rebuild on AuthLoading to prevent flicker
             if (state is AuthLoading) {
               return const SizedBox.shrink();
             }
@@ -451,6 +448,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             if (state is AuthChecking) {
               return const SplashScreen();
             } else if (state is Authenticated) {
+              // ✅ Preload affiliate stats once authenticated
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                sl<AffiliateUserBloc>().add(const FetchMyDashboardStatsEvent());
+              });
               return const MainNavigationScreen();
             } else if (state is Unauthenticated) {
               return const WelcomeScreen();
@@ -473,6 +475,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 }
               }
             } else if (state is ProfileCompleted) {
+              // ✅ Preload affiliate stats once profile is completed
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                sl<AffiliateUserBloc>().add(const FetchMyDashboardStatsEvent());
+              });
               return const MainNavigationScreen();
             } else if (state is AuthError) {
               WidgetsBinding.instance.addPostFrameCallback((_) {

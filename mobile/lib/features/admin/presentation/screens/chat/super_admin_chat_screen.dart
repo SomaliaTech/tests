@@ -53,11 +53,12 @@ class _SuperAdminUsersScreenState extends State<SuperAdminUsersScreen> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 

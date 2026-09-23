@@ -27,7 +27,7 @@ class MarketDropdown extends StatelessWidget {
         // Backdrop
         GestureDetector(
           onTap: onClose,
-          child: Container(color: Colors.black.withOpacity(0.4)),
+          child: Container(color: Colors.black.withValues(alpha: 0.4)),
         ),
         // Bottom sheet
         Positioned(
@@ -155,7 +155,7 @@ class MarketDropdown extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF2ED573).withOpacity(0.08)
+              ? const Color(0xFF2ED573).withValues(alpha: 0.08)
               : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -172,7 +172,7 @@ class MarketDropdown extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isSelected
                     ? const Color(0xFF2ED573)
-                    : const Color(0xFFF59E0B).withOpacity(0.1),
+                    : const Color(0xFFF59E0B).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(

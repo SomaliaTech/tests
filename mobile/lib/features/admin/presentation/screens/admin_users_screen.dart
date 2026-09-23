@@ -154,7 +154,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   border: Border.all(color: Colors.grey[200]!),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.05),
+                      color: Colors.grey.withValues(alpha: 0.05),
                       spreadRadius: 1,
                       blurRadius: 10,
                       offset: const Offset(0, 2),
@@ -304,7 +304,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           border: Border.all(color: Colors.grey[200]!),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.05),
+              color: Colors.grey.withValues(alpha: 0.05),
               spreadRadius: 1,
               blurRadius: 10,
               offset: const Offset(0, 2),
@@ -316,7 +316,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             // Avatar
             CircleAvatar(
               radius: 24,
-              backgroundColor: AppTheme.primaryColor.withOpacity(0.15),
+              backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
               child: Text(
                 user.name?.isNotEmpty == true
                     ? user.name![0].toUpperCase()
@@ -355,7 +355,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1),
+                            color: Colors.red.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -374,7 +374,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.1),
+                            color: Colors.purple.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(

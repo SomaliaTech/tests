@@ -354,8 +354,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final uri = Uri.parse(actionLink);
       final segments = uri.path.split('/').where((s) => s.isNotEmpty).toList();
       final resourceIndex = segments.indexOf(resource);
-      if (resourceIndex != -1 && resourceIndex + 1 < segments.length)
+      if (resourceIndex != -1 && resourceIndex + 1 < segments.length) {
         return segments[resourceIndex + 1];
+      }
     } catch (e) {}
     return null;
   }
@@ -433,7 +434,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.08),
+                color: Colors.red.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Iconsax.warning_2, size: 48, color: Colors.red),

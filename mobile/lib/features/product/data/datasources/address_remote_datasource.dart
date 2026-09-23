@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../domain/entities/address.dart';
+import 'package:flutter/foundation.dart';
 
 abstract class AddressRemoteDataSource {
   Future<List<Address>> getAddresses(String token);
@@ -37,7 +38,7 @@ class AddressRemoteDataSourceImpl implements AddressRemoteDataSource {
 
   @override
   Future<Address> addAddress(String token, Address address) async {
-    print("object ${address}");
+    if (kDebugMode) debugPrint("object $address");
     try {
       final response = await client.post(
         Uri.parse('${ApiConstants.baseUrl}/orders/addresses'),

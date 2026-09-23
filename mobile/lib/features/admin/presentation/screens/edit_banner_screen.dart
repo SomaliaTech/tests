@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -258,7 +259,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
     } catch (e) {
       setState(() => _isUploading = false);
       _showErrorToast('Failed to upload image: $e');
-      debugPrint('❌ Upload error: $e');
+      if (kDebugMode) debugPrint('❌ Upload error: $e');
     }
   }
 
@@ -325,7 +326,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: AppTheme.primaryColor, size: 20),
@@ -684,7 +685,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _selectedProductId == linkTarget
-              ? const Color(0xFF2ED573).withOpacity(0.1)
+              ? const Color(0xFF2ED573).withValues(alpha: 0.1)
               : const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -707,7 +708,9 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                         image: NetworkImage(imageUrl),
                         fit: BoxFit.cover,
                         onError: (exception, stackTrace) {
-                          debugPrint('❌ Failed to load image: $imageUrl');
+                          if (kDebugMode) {
+                            debugPrint('❌ Failed to load image: $imageUrl');
+                          }
                         },
                       )
                     : null,
@@ -795,7 +798,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2ED573).withOpacity(0.1),
+                    color: const Color(0xFF2ED573).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -920,8 +923,9 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                         hint: 'Summer Sale 50% Off',
                         icon: Iconsax.text,
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty)
+                          if (value == null || value.trim().isEmpty) {
                             return 'Title is required';
+                          }
                           return null;
                         },
                       ),
@@ -1045,8 +1049,9 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                           icon: Iconsax.link,
                           validator: (value) {
                             if (_useImageUpload) return null;
-                            if (value == null || value.trim().isEmpty)
+                            if (value == null || value.trim().isEmpty) {
                               return 'Image URL is required';
+                            }
                             return null;
                           },
                         ),
@@ -1337,7 +1342,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -1398,7 +1403,10 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.6)],
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.6),
+                  ],
                   stops: const [0.4, 1.0],
                 ),
               ),
@@ -1438,7 +1446,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -1504,7 +1512,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1518,7 +1526,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: AppTheme.primaryColor, size: 18),
@@ -1616,7 +1624,7 @@ class _EditBannerScreenState extends State<EditBannerScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: const Color(0xFF2ED573),
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.grey.shade300,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:ui';
 
@@ -65,7 +66,9 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
           .loadPermissions(forceRefresh: forceRefresh)
           .timeout(const Duration(seconds: 10), onTimeout: () => <String>[]);
 
-      debugPrint('🧭 [AdminNav] Loaded permissions: $permissions');
+      if (kDebugMode) {
+        debugPrint('🧭 [AdminNav] Loaded permissions: $permissions');
+      }
 
       bool allowed(String? permission) {
         // No permission required
@@ -150,7 +153,7 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
         _isLoadingTabs = false;
       });
     } catch (e) {
-      debugPrint('❌ [AdminNav] Failed to build tabs: $e');
+      if (kDebugMode) debugPrint('❌ [AdminNav] Failed to build tabs: $e');
 
       if (!mounted) return;
 
@@ -190,9 +193,11 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
         final isAdmin = data['isAdmin'] as bool? ?? false;
         final isSuperAdmin = data['isSuperAdmin'] as bool? ?? false;
 
-        debugPrint(
-          '🔔 [AdminNav] role_changed -> isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            '🔔 [AdminNav] role_changed -> isAdmin: $isAdmin, isSuperAdmin: $isSuperAdmin',
+          );
+        }
 
         if (!isAdmin && !isSuperAdmin) {
           _redirectToMainNavigation();
@@ -203,7 +208,7 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
         }
       });
     } catch (e) {
-      debugPrint('❌ [AdminNav] Role listener failed: $e');
+      if (kDebugMode) debugPrint('❌ [AdminNav] Role listener failed: $e');
     }
   }
 
@@ -272,18 +277,21 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Colors.white.withOpacity(0.85),
-                Colors.white.withOpacity(0.75),
-                Colors.white.withOpacity(0.80),
+                Colors.white.withValues(alpha: 0.85),
+                Colors.white.withValues(alpha: 0.75),
+                Colors.white.withValues(alpha: 0.80),
               ],
               stops: const [0.0, 0.5, 1.0],
             ),
             border: Border(
-              top: BorderSide(color: Colors.white.withOpacity(0.4), width: 1),
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.4),
+                width: 1,
+              ),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 20,
                 offset: const Offset(0, -5),
               ),
@@ -332,13 +340,13 @@ class _AdminMainNavigationScreenState extends State<AdminMainNavigationScreen> {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppTheme.primaryColor.withOpacity(0.15)
+                      ? AppTheme.primaryColor.withValues(alpha: 0.15)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: AppTheme.primaryColor.withOpacity(0.2),
+                            color: AppTheme.primaryColor.withValues(alpha: 0.2),
                             blurRadius: 12,
                           ),
                         ]

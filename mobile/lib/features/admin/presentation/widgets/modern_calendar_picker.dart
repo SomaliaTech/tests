@@ -136,11 +136,11 @@ class _ModernCalendarPickerState extends State<ModernCalendarPicker> {
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF1A1A2E),
               ),
-              leftChevronIcon: const Icon(
+              leftChevronIcon: Icon(
                 Icons.chevron_left,
                 color: Color(0xFF6C63FF),
               ),
-              rightChevronIcon: const Icon(
+              rightChevronIcon: Icon(
                 Icons.chevron_right,
                 color: Color(0xFF6C63FF),
               ),

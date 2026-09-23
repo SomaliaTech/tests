@@ -35,7 +35,7 @@ class BannerSwitch extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: const Color(0xFF2ED573),
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.grey.shade300,

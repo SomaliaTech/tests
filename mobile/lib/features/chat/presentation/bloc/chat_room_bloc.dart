@@ -1,8 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:image_picker/image_picker.dart';
@@ -157,7 +157,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     try {
       await localDataSource.cacheMessages(_currentPartnerId!, _messages);
     } catch (e) {
-      debugPrint('⚠️ [ChatBloc] Error persisting messages: $e');
+      if (kDebugMode) debugPrint('⚠️ [ChatBloc] Error persisting messages: $e');
     }
   }
 
@@ -222,7 +222,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
     try {
       await localDataSource.addMessage(_currentPartnerId!, message);
     } catch (e) {
-      debugPrint('⚠️ [ChatBloc] Error saving received message: $e');
+      if (kDebugMode) {
+        debugPrint('⚠️ [ChatBloc] Error saving received message: $e');
+      }
     }
   }
 
@@ -246,7 +248,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       _saveConfirmedMessage(confirmed);
       add(ReceiveMessageEvent(confirmed));
     } catch (e) {
-      debugPrint('⚠️ [ChatBloc] Error parsing sent confirmation: $e');
+      if (kDebugMode) {
+        debugPrint('⚠️ [ChatBloc] Error parsing sent confirmation: $e');
+      }
     }
   }
 
@@ -272,7 +276,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       // Add confirmed message
       await localDataSource.addMessage(_currentPartnerId!, confirmed);
     } catch (e) {
-      debugPrint('⚠️ [ChatBloc] Error saving confirmed message: $e');
+      if (kDebugMode) {
+        debugPrint('⚠️ [ChatBloc] Error saving confirmed message: $e');
+      }
     }
   }
 
@@ -453,7 +459,9 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         },
       );
     } catch (e) {
-      debugPrint('❌ [ChatBloc] Failed to fetch fresh messages: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [ChatBloc] Failed to fetch fresh messages: $e');
+      }
 
       _isFetchingFreshData = false;
 
@@ -621,9 +629,11 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
       unawaited(_persistCurrentMessages());
     }
 
-    debugPrint(
-      '🔍 [MarkRead] Marking messages as read from: $_currentPartnerId',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        '🔍 [MarkRead] Marking messages as read from: $_currentPartnerId',
+      );
+    }
 
     // ✅ Call API + socket
     unawaited(markAsRead.call(_currentPartnerId!));
@@ -742,7 +752,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         _emitLoaded(emit);
       }
     } catch (e) {
-      debugPrint('❌ Failed to load partner info: $e');
+      if (kDebugMode) debugPrint('❌ Failed to load partner info: $e');
     }
   }
 
@@ -779,7 +789,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         emit(ChatRoomError('Failed to upload image'));
       }
     } catch (e) {
-      debugPrint('❌ [ChatBloc] Image send error: $e');
+      if (kDebugMode) debugPrint('❌ [ChatBloc] Image send error: $e');
 
       if (!emit.isDone) {
         emit(ChatRoomError('Failed to send image'));
@@ -829,15 +839,20 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
           final data = jsonDecode(response.body) as Map<String, dynamic>;
           return data['url'] as String?;
         }
-        debugPrint('⚠️ Upload HTTP ${response.statusCode}: ${response.body}');
-        if ([401, 403, 413].contains(response.statusCode))
+        if (kDebugMode) {
+          debugPrint('⚠️ Upload HTTP ${response.statusCode}: ${response.body}');
+        }
+        if ([401, 403, 413].contains(response.statusCode)) {
           return null; // no retry point
+        }
       } on SocketException catch (e) {
-        debugPrint('⚠️ Upload attempt $attempt: server unreachable ($e)');
+        if (kDebugMode) {
+          debugPrint('⚠️ Upload attempt $attempt: server unreachable ($e)');
+        }
       } on TimeoutException catch (_) {
-        debugPrint('⚠️ Upload attempt $attempt timed out');
+        if (kDebugMode) debugPrint('⚠️ Upload attempt $attempt timed out');
       } catch (e) {
-        debugPrint('⚠️ Upload attempt $attempt failed: $e');
+        if (kDebugMode) debugPrint('⚠️ Upload attempt $attempt failed: $e');
       }
       if (attempt < 3) await Future.delayed(Duration(seconds: attempt));
     }
@@ -870,7 +885,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         );
       }
     } catch (e) {
-      debugPrint('❌ [ChatBloc] Gallery pick error: $e');
+      if (kDebugMode) debugPrint('❌ [ChatBloc] Gallery pick error: $e');
     }
   }
 
@@ -900,7 +915,7 @@ class ChatRoomBloc extends Bloc<ChatRoomEvent, ChatRoomState> {
         );
       }
     } catch (e) {
-      debugPrint('❌ [ChatBloc] Camera error: $e');
+      if (kDebugMode) debugPrint('❌ [ChatBloc] Camera error: $e');
     }
   }
 
