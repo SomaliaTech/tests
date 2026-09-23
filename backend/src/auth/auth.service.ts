@@ -108,7 +108,7 @@ export class AuthService {
   async sendOtp(phoneNumber: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('otp', otpCode);
+
     const hashedOtp = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)
