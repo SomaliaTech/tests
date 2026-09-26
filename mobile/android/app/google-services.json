@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "375449913411",
-    "project_id": "faraxda",
-    "storage_bucket": "faraxda.firebasestorage.app"
+    "project_number": "886195786211",
+    "project_id": "farxada114-94ff1",
+    "storage_bucket": "farxada114-94ff1.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:375449913411:android:318952ef38f87011b0ecf6",
+        "mobilesdk_app_id": "1:886195786211:android:ddab50169d67fcb4c7d0d6",
         "android_client_info": {
           "package_name": "com.farxada.app"
         }
@@ -15,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCS8N2bSuE9KgVbDajdhi15QgwMkRIeuJg"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:375449913411:android:59e019a5f3ec5727b0ecf6",
-        "android_client_info": {
-          "package_name": "com.farxadaApp"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCS8N2bSuE9KgVbDajdhi15QgwMkRIeuJg"
+          "current_key": "AIzaSyBWDVg3G1A7vo7-pv1jCWcQmv9zN0-EYqM"
         }
       ],
       "services": {

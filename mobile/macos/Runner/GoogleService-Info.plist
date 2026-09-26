@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCkxHd4JXiDGmlM6puKfCwMQmm2DeuY7fE</string>
+	<string>AIzaSyBu2j3c9uud4c2jLC2W_4aA6hHqzbEvsE0</string>
 	<key>GCM_SENDER_ID</key>
-	<string>375449913411</string>
+	<string>886195786211</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.farxada.app</string>
 	<key>PROJECT_ID</key>
-	<string>faraxda</string>
+	<string>farxada114-94ff1</string>
 	<key>STORAGE_BUCKET</key>
-	<string>faraxda.firebasestorage.app</string>
+	<string>farxada114-94ff1.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:375449913411:ios:6859e6cb3ee6f43fb0ecf6</string>
+	<string>1:886195786211:ios:9e067288d2db59dcc7d0d6</string>
 </dict>
 </plist>

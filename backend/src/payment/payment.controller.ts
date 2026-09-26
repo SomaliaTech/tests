@@ -29,6 +29,7 @@ import { PaymentStatus } from '../orders/enums/order-status.enum';
 @ApiBearerAuth('JWT-auth')
 export class PaymentController {
   private readonly logger = new Logger(PaymentController.name);
+
   constructor(
     private readonly waafiPayService: WaafiPayService,
     private readonly ordersService: OrdersService,
@@ -37,8 +38,9 @@ export class PaymentController {
   // ==========================================
   // ✅ INITIATE PAYMENT
   // ==========================================
-  // ⚠️ CRITICAL: This endpoint only INITIATES the payment.
-  // It does NOT mark the order as PAID. Only the webhook does that.
+  // Synchronous flow: WaafiPay returns success/failure immediately.
+  // The order is created and marked PAID by OrdersService.createOrder()
+  // only when WaafiPay returns responseCode 2001 + a transactionId.
   // ==========================================
   @Post('initiate')
   @Throttle({ payment: { limit: 3, ttl: 60000 } })
@@ -79,43 +81,39 @@ export class PaymentController {
       );
     }
 
-    // ✅ Generate unique referenceId (idempotency for our own API)
+    // ✅ Generate unique referenceId
     const referenceId = this.waafiPayService.generateReferenceId(order.id);
 
-    // ✅ Initiate payment with WaafiPay — pass the full order UUID as orderId
+    // ✅ Initiate payment — orderId becomes invoiceId in WaafiPay
     const result = await this.waafiPayService.initiatePayment({
       amount: dto.amount,
       phoneNumber: dto.phoneNumber,
-      orderId: order.id, // ✅ full UUID, will become invoiceId
+      orderId: order.id,
       description: dto.description || `Payment for order ${order.orderNumber}`,
       referenceId,
       paymentMethod: dto.paymentMethod,
     });
 
-    // ⚠️ DO NOT update order status here.
-    // The WaafiPay async webhook is the single source of truth.
-    // We only log the sync response for diagnostics.
-
-    this.logger?.log?.(
+    this.logger.log(
       `Initiate response: success=${result.success} state=${result.state}`,
     );
 
     return {
-      success: result.success, // informational only
+      success: result.success,
       message: result.success
-        ? 'Payment request sent. You will receive a prompt on your phone. Please approve to complete payment.'
+        ? 'Payment processed successfully.'
         : result.message,
       referenceId,
       orderId: order.id,
-      // ⚠️ Do NOT return transactionId from sync response
-      // — the client should poll /payment/status/:orderId instead
+      transactionId: result.success ? result.transactionId : undefined,
     };
   }
 
   // ==========================================
-  // ✅ VERIFY PAYMENT (client-side polling)
+  // ✅ VERIFY PAYMENT (client-side read-only polling)
   // ==========================================
-  // ⚠️ Read-only. Does NOT update DB. Webhook is the only writer.
+  // Useful for Flutter to double-check status after a delayed approval.
+  // This endpoint does NOT write to the DB.
   // ==========================================
   @Get('verify/:referenceId')
   @Throttle({ payment: { limit: 10, ttl: 60000 } })
@@ -127,8 +125,6 @@ export class PaymentController {
   ) {
     const result = await this.waafiPayService.checkPaymentStatus(referenceId);
 
-    // ✅ Read-only: return to client so they know whether to wait longer
-    // NEVER update order status here. The webhook is authoritative.
     return {
       success: result.success,
       state: result.state,

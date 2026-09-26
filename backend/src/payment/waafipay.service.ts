@@ -407,28 +407,29 @@ export class WaafiPayService {
   }
 
   private getWaafiPaymentMethod(method: string | undefined): string {
-    if (!method) return 'EVC_PLUS';
+    if (!method) return 'MWALLET_ACCOUNT';
 
     const upper = method.toUpperCase().replace(/\s+/g, '_');
 
-    if (upper.includes('EVC') || upper.includes('HORMUUD')) return 'EVC_PLUS';
-    if (upper.includes('ZAAD') || upper.includes('TELESOM')) return 'ZAAD';
+    // ✅ EVC/Hormuud → MWALLET_ACCOUNT is what most WaafiPay merchant accounts expect
+    if (upper.includes('EVC') || upper.includes('HORMUUD'))
+      return 'MWALLET_ACCOUNT';
+    if (upper.includes('ZAAD') || upper.includes('TELESOM'))
+      return 'MWALLET_ACCOUNT';
     if (upper.includes('DAHAB') || upper.includes('EDAHAB')) return 'E_DAHAB';
     if (upper.includes('SAHAL') || upper.includes('GOLIS')) return 'SAHAL';
     if (upper.includes('WAAFI')) return 'MWALLET_ACCOUNT';
     if (upper.includes('PREMIER')) return 'PREMIER_WALLET';
 
     const validCodes = [
-      'EVC_PLUS',
-      'ZAAD',
+      'MWALLET_ACCOUNT',
       'E_DAHAB',
       'SAHAL',
-      'MWALLET_ACCOUNT',
       'PREMIER_WALLET',
     ];
     if (validCodes.includes(upper)) return upper;
 
-    return 'EVC_PLUS';
+    return 'MWALLET_ACCOUNT';
   }
 
   formatPhoneNumber(phone: string): string {

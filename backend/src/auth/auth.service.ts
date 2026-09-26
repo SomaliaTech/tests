@@ -138,6 +138,7 @@ export class AuthService {
     // ✅ CHECK 2: RATE LIMIT PER PHONE (SEND)
     // ==========================================
     const sendKey = `otp:send:${normalizedPhone}`;
+
     try {
       const sendCount = await this.redis.incr(sendKey);
       if (sendCount === 1) {
@@ -160,7 +161,7 @@ export class AuthService {
     // ✅ CHECK 3: GENERATE CRYPTOGRAPHIC OTP
     // ==========================================
     const otpCode = crypto.randomInt(100000, 1000000).toString();
-
+    console.log(otpCode);
     const hashedOtp = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)

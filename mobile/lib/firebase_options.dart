@@ -44,38 +44,36 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBsJDf_YtNJo_ypckNB3TOOHgw3M9q8wuc',
-    appId: '1:375449913411:web:b712493b99bc5097b0ecf6',
-    messagingSenderId: '375449913411',
-    projectId: 'faraxda',
-    authDomain: 'faraxda.firebaseapp.com',
-    storageBucket: 'faraxda.firebasestorage.app',
-    measurementId: 'G-CYCJM39QKL',
+    apiKey: 'AIzaSyA7MQgbQRQ534o6XxyPt9dmJuVgfTnueLU',
+    appId: '1:886195786211:web:79be297c37525a34c7d0d6',
+    messagingSenderId: '886195786211',
+    projectId: 'farxada114-94ff1',
+    authDomain: 'farxada114-94ff1.firebaseapp.com',
+    storageBucket: 'farxada114-94ff1.firebasestorage.app',
+    measurementId: 'G-C9PFFDC21F',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCS8N2bSuE9KgVbDajdhi15QgwMkRIeuJg',
-    appId: '1:375449913411:android:66264e7b69cecc3ab0ecf6',
-    messagingSenderId: '375449913411',
-    projectId: 'faraxda',
-    storageBucket: 'faraxda.firebasestorage.app',
+    apiKey: 'AIzaSyBWDVg3G1A7vo7-pv1jCWcQmv9zN0-EYqM',
+    appId: '1:886195786211:android:ddab50169d67fcb4c7d0d6',
+    messagingSenderId: '886195786211',
+    projectId: 'farxada114-94ff1',
+    storageBucket: 'farxada114-94ff1.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCkxHd4JXiDGmlM6puKfCwMQmm2DeuY7fE',
-    appId: '1:375449913411:ios:57f3f2d8008c9952b0ecf6',
-    messagingSenderId: '375449913411',
-    projectId: 'faraxda',
-    storageBucket: 'faraxda.firebasestorage.app',
+    apiKey: 'AIzaSyBu2j3c9uud4c2jLC2W_4aA6hHqzbEvsE0',
+    appId: '1:886195786211:ios:9e067288d2db59dcc7d0d6',
+    messagingSenderId: '886195786211',
+    projectId: 'farxada114-94ff1',
+    storageBucket: 'farxada114-94ff1.firebasestorage.app',
     iosBundleId: 'com.farxada.app',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCkxHd4JXiDGmlM6puKfCwMQmm2DeuY7fE',
-    appId: '1:375449913411:ios:6859e6cb3ee6f43fb0ecf6',
-    messagingSenderId: '375449913411',
-    projectId: 'faraxda',
-    storageBucket: 'faraxda.firebasestorage.app',
+    apiKey: 'AIzaSyBu2j3c9uud4c2jLC2W_4aA6hHqzbEvsE0',
+    appId: '1:886195786211:ios:9e067288d2db59dcc7d0d6',
+    messagingSenderId: '886195786211',
+    projectId: 'farxada114-94ff1',
+    storageBucket: 'farxada114-94ff1.firebasestorage.app',
     iosBundleId: 'com.farxada.app',
   );
 }
