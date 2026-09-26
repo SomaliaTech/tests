@@ -2,16 +2,17 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { WaafiPayService } from './waafipay.service';
 import { PaymentController } from './payment.controller';
-import { OrdersModule } from '../orders/orders.module'; // 👈 direct import
+import { PaymentWebhookController } from './payment-webhook.controller';
+import { OrdersModule } from '../orders/orders.module';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 
 @Module({
-  imports: [
-    DrizzleModule,
-    forwardRef(() => OrdersModule), // 👈 wrap in forwardRef
+  imports: [DrizzleModule, forwardRef(() => OrdersModule)],
+  controllers: [
+    PaymentController,
+    PaymentWebhookController, // ✅ Moved here
   ],
-  controllers: [PaymentController],
   providers: [WaafiPayService],
-  exports: [WaafiPayService], // 👈 make sure this is exported
+  exports: [WaafiPayService], // ✅ Removed duplicate
 })
 export class PaymentModule {}

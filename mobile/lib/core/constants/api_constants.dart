@@ -1,6 +1,6 @@
 class ApiConstants {
-  static const String baseUrl = 'http://10.20.30.64:8080';
-  // static const String baseUrl = 'https://api.farxada.com';
+  // static const String baseUrl = 'http://10.20.30.59:8080';
+  static const String baseUrl = 'https://api.farxada.com';
 
   static const String products = '/products';
   static const String categories = '/categories';

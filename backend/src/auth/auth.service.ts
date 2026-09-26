@@ -24,7 +24,7 @@ import { FacebookAuthDto } from './dto/facebook-auth.dto';
 import { LogSanitizer } from '../common/utils/log-sanitizer.util';
 import axios from 'axios';
 import * as crypto from 'crypto';
-
+import { randomInt } from 'crypto';
 interface UpdateUserData {
   name?: string;
   marketId?: string;
@@ -51,9 +51,14 @@ export class AuthService {
     'https://accounts.google.com',
     'accounts.google.com',
   ];
-  private readonly MAX_OTP_ATTEMPTS = 5;
-  private readonly OTP_TTL_SECONDS = 600; // 10 minutes
   private readonly DELETION_GRACE_DAYS = 15;
+
+  // OTP security constants
+  private readonly OTP_TTL_SECONDS = 300;
+  private readonly MAX_OTP_ATTEMPTS_PER_OTP = 3;
+  private readonly MAX_OTP_REQUESTS_PER_PHONE_HOUR = 5;
+  private readonly VERIFY_ATTEMPTS_PER_PHONE_HOUR = 10;
+  private readonly LOCKOUT_SECONDS = 900;
 
   constructor(
     private jwtService: JwtService,
@@ -105,9 +110,56 @@ export class AuthService {
   // ==========================================
   // OTP SEND - WITH HASHING
   // ==========================================
+  // ==========================================
+  // OTP SEND - WITH HASHING + RATE LIMIT
+  // ==========================================
   async sendOtp(phoneNumber: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // ==========================================
+    // ✅ CHECK 1: IS PHONE CURRENTLY LOCKED?
+    // ==========================================
+    const lockKey = `otp:lock:${normalizedPhone}`;
+    try {
+      const isLocked = await this.redis.get(lockKey);
+      if (isLocked) {
+        const ttl = await this.redis.ttl(lockKey);
+        const minutesLeft = Math.ceil(ttl / 60);
+        throw new BadRequestException(
+          `Account temporarily locked. Please try again in ${minutesLeft} minute(s).`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Failed to check lockout status');
+    }
+
+    // ==========================================
+    // ✅ CHECK 2: RATE LIMIT PER PHONE (SEND)
+    // ==========================================
+    const sendKey = `otp:send:${normalizedPhone}`;
+    try {
+      const sendCount = await this.redis.incr(sendKey);
+      if (sendCount === 1) {
+        await this.redis.expire(sendKey, 3600); // 1 hour window
+      }
+      if (sendCount > this.MAX_OTP_REQUESTS_PER_PHONE_HOUR) {
+        this.logger.warn(
+          `OTP send rate limit hit for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+        );
+        throw new BadRequestException(
+          'Too many OTP requests. Please try again in 1 hour.',
+        );
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.logger.error('Failed to increment send counter');
+    }
+
+    // ==========================================
+    // ✅ CHECK 3: GENERATE CRYPTOGRAPHIC OTP
+    // ==========================================
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
 
     const hashedOtp = crypto
       .createHash('sha256')
@@ -130,6 +182,7 @@ export class AuthService {
         `OTP stored for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
 
+      // ✅ Dev mode: only log if explicitly allowed
       if (
         !this.isProduction &&
         this.configService.get('ALLOW_DEBUG_OTP') === 'true'
@@ -139,6 +192,7 @@ export class AuthService {
         );
       }
 
+      // ✅ Production: send via SMS
       if (this.isProduction) {
         await this.hormuudService.sendOtpSms(normalizedPhone, otpCode);
         this.logger.log(
@@ -147,19 +201,20 @@ export class AuthService {
         return {
           message: 'OTP sent successfully',
         };
-      } else {
-        const allowDebugOtp =
-          this.configService.get('ALLOW_DEBUG_OTP') === 'true';
-
-        this.logger.log(
-          `[DEV] OTP sent to ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
-        );
-
-        return {
-          message: 'OTP sent successfully (Development Mode)',
-          debugOtp: allowDebugOtp ? otpCode : undefined,
-        };
       }
+
+      // ✅ Development: return debug OTP only if explicitly enabled
+      const allowDebugOtp =
+        this.configService.get('ALLOW_DEBUG_OTP') === 'true';
+
+      this.logger.log(
+        `[DEV] OTP sent to ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+      );
+
+      return {
+        message: 'OTP sent successfully (Development Mode)',
+        debugOtp: allowDebugOtp ? otpCode : undefined,
+      };
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
@@ -168,7 +223,7 @@ export class AuthService {
       );
       await this.redis.del(redisKey);
       throw new BadRequestException(
-        `Failed to send verification code: ${errorMessage}`,
+        'Failed to send verification code. Please try again later.',
       );
     }
   }
@@ -176,10 +231,61 @@ export class AuthService {
   // ==========================================
   // OTP VERIFY - WITH HASH CHECK + AUTO RESTORE
   // ==========================================
+  // ==========================================
+  // OTP VERIFY - WITH LOCKOUT + RATE LIMIT + TIMING-SAFE
+  // ==========================================
   async verifyOtp(phoneNumber: string, otpCode: string) {
     const normalizedPhone = this.normalizePhoneNumber(phoneNumber);
     const redisKey = `otp:${normalizedPhone}`;
+    const verifyKey = `otp:verify:${normalizedPhone}`;
+    const lockKey = `otp:lock:${normalizedPhone}`;
 
+    // ==========================================
+    // ✅ STEP 1: CHECK PHONE-LEVEL LOCKOUT
+    // ==========================================
+    try {
+      const isLocked = await this.redis.get(lockKey);
+      if (isLocked) {
+        const ttl = await this.redis.ttl(lockKey);
+        const minutesLeft = Math.ceil(ttl / 60);
+        this.logger.warn(
+          `Locked OTP attempt for ${LogSanitizer.maskPhoneNumber(normalizedPhone)} — ${minutesLeft} min left`,
+        );
+        throw new UnauthorizedException(
+          `Too many failed attempts. Account locked for ${minutesLeft} more minute(s).`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      this.logger.error('Failed to check lockout status');
+    }
+
+    // ==========================================
+    // ✅ STEP 2: RATE LIMIT PER PHONE NUMBER
+    // ==========================================
+    try {
+      const verifyCount = await this.redis.incr(verifyKey);
+      if (verifyCount === 1) {
+        await this.redis.expire(verifyKey, 3600);
+      }
+      if (verifyCount > this.VERIFY_ATTEMPTS_PER_PHONE_HOUR) {
+        await this.redis.set(lockKey, '1', { ex: this.LOCKOUT_SECONDS });
+        await this.redis.del(redisKey);
+        this.logger.error(
+          `Verify rate limit exceeded → lockout for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+        );
+        throw new UnauthorizedException(
+          `Too many verification attempts. Account locked for ${Math.ceil(this.LOCKOUT_SECONDS / 60)} minutes.`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      this.logger.error('Failed to increment verify counter');
+    }
+
+    // ==========================================
+    // ✅ STEP 3: LOAD OTP FROM REDIS
+    // ==========================================
     let otpData: OtpCacheData | null = null;
 
     try {
@@ -190,8 +296,11 @@ export class AuthService {
             ? JSON.parse(cachedData)
             : (cachedData as OtpCacheData);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       this.logger.error('Failed to get OTP from Redis');
+      throw new UnauthorizedException(
+        'Verification service temporarily unavailable. Please try again.',
+      );
     }
 
     if (!otpData) {
@@ -200,33 +309,79 @@ export class AuthService {
       );
     }
 
-    if (otpData.attempts >= this.MAX_OTP_ATTEMPTS) {
-      await this.redis.del(redisKey);
+    // ==========================================
+    // ✅ STEP 4: CHECK PER-OTP ATTEMPT LIMIT
+    // ==========================================
+    if (otpData.attempts >= this.MAX_OTP_ATTEMPTS_PER_OTP) {
+      await Promise.all([
+        this.redis.del(redisKey),
+        this.redis.set(lockKey, '1', { ex: this.LOCKOUT_SECONDS }),
+      ]);
+      this.logger.warn(
+        `Per-OTP attempts exhausted for ${LogSanitizer.maskPhoneNumber(normalizedPhone)} → locked`,
+      );
       throw new UnauthorizedException(
-        'Too many attempts. Please request a new OTP.',
+        `Too many attempts on this OTP. Account locked for ${Math.ceil(this.LOCKOUT_SECONDS / 60)} minutes.`,
       );
     }
 
+    // ==========================================
+    // ✅ STEP 5: TIMING-SAFE OTP COMPARISON
+    // ==========================================
     const hashedInput = crypto
       .createHash('sha256')
       .update(otpCode + normalizedPhone)
       .digest('hex');
 
-    if (hashedInput !== otpData.otpHash) {
+    let isValid = false;
+    try {
+      isValid = crypto.timingSafeEqual(
+        Buffer.from(hashedInput, 'hex'),
+        Buffer.from(otpData.otpHash, 'hex'),
+      );
+    } catch {
+      isValid = false;
+    }
+
+    if (!isValid) {
       otpData.attempts += 1;
       await this.redis.set(redisKey, JSON.stringify(otpData), {
         ex: this.OTP_TTL_SECONDS,
       });
 
+      const attemptsLeft = this.MAX_OTP_ATTEMPTS_PER_OTP - otpData.attempts;
+
       this.logger.warn(
-        `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS} for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+        `Invalid OTP attempt ${otpData.attempts}/${this.MAX_OTP_ATTEMPTS_PER_OTP} for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
       );
 
-      throw new UnauthorizedException('Invalid OTP code');
+      if (otpData.attempts >= this.MAX_OTP_ATTEMPTS_PER_OTP) {
+        await Promise.all([
+          this.redis.del(redisKey),
+          this.redis.set(lockKey, '1', { ex: this.LOCKOUT_SECONDS }),
+        ]);
+        throw new UnauthorizedException(
+          `Too many failed attempts. Account locked for ${Math.ceil(this.LOCKOUT_SECONDS / 60)} minutes.`,
+        );
+      }
+
+      throw new UnauthorizedException(
+        `Invalid OTP code. ${attemptsLeft} attempt(s) remaining.`,
+      );
     }
 
-    await this.redis.del(redisKey);
+    // ==========================================
+    // ✅ STEP 6: SUCCESS — CLEAN UP ALL STATE
+    // ==========================================
+    await Promise.all([this.redis.del(redisKey), this.redis.del(verifyKey)]);
 
+    this.logger.log(
+      `✅ OTP verified for ${LogSanitizer.maskPhoneNumber(normalizedPhone)}`,
+    );
+
+    // ==========================================
+    // ✅ STEP 7: USER LOOKUP / CREATION
+    // ==========================================
     const userResult = await this.drizzle.db
       .select()
       .from(users)
@@ -236,10 +391,7 @@ export class AuthService {
     let currentUser: typeof users.$inferSelect;
 
     if (userResult.length > 0) {
-      // ✅ Guard: block if permanently past deletion date
       this.assertNotPermanentlyDeleted(userResult[0]);
-
-      // ✅ Auto-restore if scheduled for deletion
       await this.restoreAccountIfDeleted(userResult[0].id);
 
       const updatedResult = await this.drizzle.db
@@ -283,6 +435,9 @@ export class AuthService {
       currentUser = insertResult[0];
     }
 
+    // ==========================================
+    // ✅ STEP 8: TOKEN + RESPONSE
+    // ==========================================
     const token = this.generateToken(
       currentUser.id,
       currentUser.isAdmin ?? false,

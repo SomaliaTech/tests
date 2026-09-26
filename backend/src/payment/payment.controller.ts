@@ -1,5 +1,4 @@
 // src/payment/payment.controller.ts
-
 import {
   Controller,
   Post,
@@ -9,6 +8,7 @@ import {
   Param,
   BadRequestException,
   Get,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,18 +28,25 @@ import { PaymentStatus } from '../orders/enums/order-status.enum';
 @UseGuards(JwtAuthGuard, ThrottlerGuard)
 @ApiBearerAuth('JWT-auth')
 export class PaymentController {
+  private readonly logger = new Logger(PaymentController.name);
   constructor(
     private readonly waafiPayService: WaafiPayService,
     private readonly ordersService: OrdersService,
   ) {}
 
+  // ==========================================
+  // ✅ INITIATE PAYMENT
+  // ==========================================
+  // ⚠️ CRITICAL: This endpoint only INITIATES the payment.
+  // It does NOT mark the order as PAID. Only the webhook does that.
+  // ==========================================
   @Post('initiate')
   @Throttle({ payment: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: 'Initiate WaafiPay payment' })
   @ApiResponse({ status: 200, description: 'Payment initiated' })
   @ApiResponse({ status: 400, description: 'Invalid request' })
   async initiatePayment(@Request() req, @Body() dto: InitiatePaymentDto) {
-    // ✅ Verify order exists and belongs to user
+    // ✅ Verify order exists and belongs to the requesting user
     const order = await this.ordersService.getOrderById(
       dto.orderId,
       req.user.userId,
@@ -49,7 +56,7 @@ export class PaymentController {
       throw new BadRequestException('Order not found');
     }
 
-    // ✅ Validate order state before payment
+    // ✅ Guard: already paid?
     if (order.paymentStatus === PaymentStatus.PAID) {
       throw new BadRequestException('Order already paid');
     }
@@ -59,70 +66,98 @@ export class PaymentController {
     }
 
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      throw new BadRequestException(`Cannot pay for cancelled/returned order`);
+      throw new BadRequestException(
+        'Cannot pay for cancelled or returned order',
+      );
     }
 
-    // ✅ Verify amount matches
+    // ✅ Guard: amount must match order total exactly
     const orderAmount = parseFloat(order.totalAmount);
     if (Math.abs(orderAmount - dto.amount) > 0.01) {
       throw new BadRequestException(
-        `Amount mismatch. Order amount: ${orderAmount}, provided: ${dto.amount}`,
+        `Amount mismatch. Order total: ${orderAmount}, provided: ${dto.amount}`,
       );
     }
 
-    const referenceId = this.waafiPayService.generateReferenceId(dto.orderId);
+    // ✅ Generate unique referenceId (idempotency for our own API)
+    const referenceId = this.waafiPayService.generateReferenceId(order.id);
 
+    // ✅ Initiate payment with WaafiPay — pass the full order UUID as orderId
     const result = await this.waafiPayService.initiatePayment({
       amount: dto.amount,
       phoneNumber: dto.phoneNumber,
-      orderId: dto.orderId,
-      description: dto.description || `Payment for order ${dto.orderId}`,
-      referenceId: referenceId,
+      orderId: order.id, // ✅ full UUID, will become invoiceId
+      description: dto.description || `Payment for order ${order.orderNumber}`,
+      referenceId,
       paymentMethod: dto.paymentMethod,
     });
 
-    // ✅ If payment successful, update order payment status
-    if (result.success) {
-      await this.ordersService.updatePaymentStatus(
-        dto.orderId,
-        PaymentStatus.PAID,
-      );
-    }
+    // ⚠️ DO NOT update order status here.
+    // The WaafiPay async webhook is the single source of truth.
+    // We only log the sync response for diagnostics.
+
+    this.logger?.log?.(
+      `Initiate response: success=${result.success} state=${result.state}`,
+    );
 
     return {
-      ...result,
-      referenceId: referenceId,
-      orderId: dto.orderId,
+      success: result.success, // informational only
+      message: result.success
+        ? 'Payment request sent. You will receive a prompt on your phone. Please approve to complete payment.'
+        : result.message,
+      referenceId,
+      orderId: order.id,
+      // ⚠️ Do NOT return transactionId from sync response
+      // — the client should poll /payment/status/:orderId instead
     };
   }
 
+  // ==========================================
+  // ✅ VERIFY PAYMENT (client-side polling)
+  // ==========================================
+  // ⚠️ Read-only. Does NOT update DB. Webhook is the only writer.
+  // ==========================================
   @Get('verify/:referenceId')
   @Throttle({ payment: { limit: 10, ttl: 60000 } })
-  @ApiOperation({ summary: 'Verify payment status' })
+  @ApiOperation({ summary: 'Check payment status (read-only)' })
   @ApiResponse({ status: 200, description: 'Payment status retrieved' })
-  async verifyPayment(@Param('referenceId') referenceId: string) {
+  async verifyPayment(
+    @Request() req,
+    @Param('referenceId') referenceId: string,
+  ) {
     const result = await this.waafiPayService.checkPaymentStatus(referenceId);
 
-    // ✅ If payment is confirmed, update order
-    if (result.success && result.state === 'SUCCESS') {
-      // Extract order ID from reference (format: PAY-ORDERID-TIMESTAMP-RANDOM)
-      const parts = referenceId.split('-');
-      if (parts.length >= 2) {
-        const orderId = parts[1];
-        if (orderId) {
-          try {
-            await this.ordersService.updatePaymentStatus(
-              orderId,
-              PaymentStatus.PAID,
-            );
-          } catch (error) {
-            // Log but don't fail the verification
-            console.warn('Failed to update order payment status:', error);
-          }
-        }
-      }
-    }
+    // ✅ Read-only: return to client so they know whether to wait longer
+    // NEVER update order status here. The webhook is authoritative.
+    return {
+      success: result.success,
+      state: result.state,
+      message: result.message,
+      referenceId,
+    };
+  }
 
-    return result;
+  // ==========================================
+  // ✅ POLL ORDER STATUS (for Flutter client)
+  // ==========================================
+  @Get('status/:orderId')
+  @Throttle({ payment: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: 'Poll order payment status' })
+  async getOrderPaymentStatus(
+    @Request() req,
+    @Param('orderId') orderId: string,
+  ) {
+    const order = await this.ordersService.getOrderById(
+      orderId,
+      req.user.userId,
+    );
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      totalAmount: order.totalAmount,
+    };
   }
 }

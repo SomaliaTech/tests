@@ -10,7 +10,7 @@ export class VerifyOtpDto {
   @Matches(/^(\+?252|0)?(61|63|68|90)\d{7}$/, {
     message: 'Phone number must be a valid Somali number',
   })
-  phoneNumber: string;
+  phoneNumber!: string;
 
   @ApiProperty({
     description: '6-digit OTP code',
@@ -18,5 +18,6 @@ export class VerifyOtpDto {
   })
   @IsString()
   @Length(6, 6, { message: 'OTP code must be exactly 6 digits' })
-  otpCode: string;
+  @Matches(/^\d{6}$/, { message: 'OTP must contain only digits' })
+  otpCode!: string;
 }

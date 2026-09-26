@@ -57,20 +57,27 @@ export class OrdersService {
   // CREATE ORDER WITH PAYMENT VALIDATION
   // ==========================================
 
+  // ==========================================
+  // CREATE ORDER WITH PAYMENT VALIDATION
+  // ==========================================
   async createOrder(userId: string, orderData: CreateOrderDto) {
     this.logger.log(
       `Processing order for user: ${LogSanitizer.maskValue(userId)}`,
     );
 
+    // ✅ 1. Generate order UUID BEFORE payment so WaafiPay can echo it back
+    const orderId = uuidv4();
+
+    // ✅ 2. Validate items, compute totals, prepare order rows
     const {
-      itemsTotal, // 👈 ADD THIS
+      itemsTotal,
       orderItemsData,
       user,
       deliveryFee,
       finalTotalAmount: rawTotal,
     } = await this._validateAndPrepareOrder(userId, orderData);
 
-    // ✅ 1. PROMO CODE VALIDATION
+    // ✅ 3. PROMO CODE VALIDATION
     let promoCodeId: string | null = null;
     let promoDiscount = 0;
     let finalTotalAmount = rawTotal;
@@ -78,7 +85,7 @@ export class OrdersService {
     if (orderData.promoCode && orderData.promoCode.trim().length > 0) {
       const validation = await this.affiliateService.validatePromoCode(
         orderData.promoCode.trim(),
-        itemsTotal, // 👈 CHANGE rawTotal TO itemsTotal
+        itemsTotal,
         userId,
       );
 
@@ -88,7 +95,6 @@ export class OrdersService {
         );
       }
 
-      // ✅ FIX: Added ! to assert promoCode is defined when valid is true
       promoDiscount = validation.promoCode!.discountAmount;
       finalTotalAmount = Math.max(0, rawTotal - promoDiscount);
       promoCodeId = validation.promoCode!.id;
@@ -98,28 +104,27 @@ export class OrdersService {
       );
     }
 
-    // ✅ 2. Process payment with the DISCOUNTED total
+    // ✅ 4. Process payment with the DISCOUNTED total
+    //    If payment fails or is not confirmed, this method throws —
+    //    the order is never created in that case.
     const paymentResult = await this._processPaymentIfNeeded(
       orderData,
       finalTotalAmount,
+      orderId,
     );
 
+    // ✅ 5. Persist order + items + stock updates atomically
     const result = await this.drizzle.db.transaction(async (tx) => {
       const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const shippingAddress = `${orderData.shippingAddress.fullAddress} (${orderData.shippingAddress.label}) - Phone: ${orderData.shippingAddress.phoneNumber}`;
 
-      const isPaid = paymentResult?.success === true;
-      const initialStatus = isPaid
-        ? OrderStatus.CONFIRMED
-        : OrderStatus.PENDING;
-      const initialPaymentStatus = isPaid
-        ? PaymentStatus.PAID
-        : PaymentStatus.PENDING;
-
+      // ✅ Payment succeeded → order is CONFIRMED / PAID.
+      //    The webhook may still arrive later with the final transactionId,
+      //    which will overwrite paymentReferenceId via updatePaymentStatus().
       const [order] = await tx
         .insert(orders)
         .values({
-          id: uuidv4(),
+          id: orderId,
           orderNumber: orderNumber,
           userId: userId,
           customerName: user.name || 'Customer',
@@ -129,17 +134,18 @@ export class OrdersService {
           totalAmount: finalTotalAmount.toString(),
           promoCodeId: promoCodeId,
           promoCodeDiscount: promoDiscount.toString(),
-          status: initialStatus,
+          status: OrderStatus.CONFIRMED,
           paymentMethod: orderData.paymentMethod,
-          paymentStatus: initialPaymentStatus,
-          paymentReferenceId: paymentResult?.transactionId || null,
+          paymentStatus: PaymentStatus.PAID,
+          paymentReferenceId: paymentResult.transactionId || null,
           notes: orderData.notes || null,
-        } as any) // ✅ FIX: Cast to any to bypass TS error until schema migration is pushed
+        } as any)
         .returning();
 
       orderItemsData.forEach((item) => (item.orderId = order.id));
-      if (orderItemsData.length > 0)
+      if (orderItemsData.length > 0) {
         await tx.insert(orderItems).values(orderItemsData);
+      }
 
       await this._updateStock(tx, orderItemsData);
       await tx.delete(cartItems).where(eq(cartItems.userId, userId));
@@ -156,18 +162,18 @@ export class OrdersService {
         paymentResult,
         promoCodeId,
         promoDiscount,
-        itemsTotal, // 👈 CHANGE rawTotal TO itemsTotal
+        itemsTotal,
       };
     });
 
-    // ✅ 3. Record promo usage & generate affiliate commission AFTER transaction commits
+    // ✅ 6. Record promo usage & generate affiliate commission AFTER commit
     if (result.promoCodeId && result.promoDiscount > 0) {
       try {
         await this.affiliateService.recordPromoUsage(
           result.promoCodeId,
           userId,
           result.order.id,
-          result.itemsTotal, // 👈 CHANGE result.rawTotal TO result.itemsTotal
+          result.itemsTotal,
           result.promoDiscount,
         );
       } catch (err) {
@@ -182,10 +188,7 @@ export class OrdersService {
       totalAmount: result.totalAmount,
       items: result.items,
       payment: result.paymentResult,
-      message:
-        result.order.paymentStatus === PaymentStatus.PAID
-          ? 'Order created and payment processed successfully'
-          : 'Order created successfully. Please complete payment.',
+      message: 'Order created and payment processed successfully',
     };
   }
 
@@ -306,70 +309,93 @@ export class OrdersService {
   // ==========================================
   // PROCESS PAYMENT IF NEEDED
   // ==========================================
+  // ==========================================
+  // PROCESS PAYMENT — REQUIRED, NEVER SKIPPED
+  // ==========================================
+  /**
+   * Always processes payment via WaafiPay.
+   * Throws BadRequestException if payment fails.
+   * Never returns success:false — the caller can assume success on return.
+   */
   private async _processPaymentIfNeeded(
     orderData: CreateOrderDto,
     finalTotalAmount: number,
+    orderId: string,
   ): Promise<{
-    success: boolean;
+    success: true;
     message: string;
-    transactionId?: string;
-    referenceId?: string;
+    transactionId: string;
+    referenceId: string;
     state?: string;
     responseCode?: string;
   }> {
-    // ✅ Cash on delivery → no payment processing
-    if (orderData.paymentMethod === 'cash_on_delivery') {
-      this.logger.log('💰 Cash on delivery - no payment processing needed');
-      return {
-        success: true,
-        message: 'Cash on delivery',
-      };
+    // ✅ 1. Payment method + phone are mandatory
+    if (!orderData.paymentMethod) {
+      throw new BadRequestException('Payment method is required');
     }
 
-    // ✅ No payment method → leave as PENDING
-    if (!orderData.paymentMethod || !orderData.phoneNumber) {
-      this.logger.log('💰 No payment method or phone - skipping payment');
-      return {
-        success: false,
-        message: 'Payment method not provided',
-      };
+    if (!orderData.phoneNumber) {
+      throw new BadRequestException('Phone number is required for payment');
     }
 
     this.logger.log(
-      `🔄 Processing WaafiPay payment for order | Amount: $${finalTotalAmount} | Method: ${orderData.paymentMethod}`,
+      `🔄 Processing WaafiPay payment | Order: ${orderId} | Amount: $${finalTotalAmount} | Method: ${orderData.paymentMethod}`,
     );
 
-    const paymentRefId = this.waafiPayService.generateReferenceId(
-      `ORDER-${Date.now()}`,
-    );
+    // ✅ 2. Generate a unique referenceId tied to the real order UUID
+    const referenceId = this.waafiPayService.generateReferenceId(orderId);
 
+    // ✅ 3. Initiate payment — orderId becomes invoiceId in WaafiPay
     const paymentResult = await this.waafiPayService.initiatePayment({
       amount: finalTotalAmount,
       phoneNumber: orderData.phoneNumber,
-      orderId: `INV-${Date.now()}`,
-      description: `Payment for order via ${orderData.paymentMethod}`,
-      referenceId: paymentRefId,
+      orderId, // ✅ real order UUID → echoed back in webhook
+      description: `Payment for order ${orderId.substring(0, 8)}`,
+      referenceId,
       paymentMethod: orderData.paymentMethod,
     });
 
+    // ✅ 4. Reject on any failure — order must not be created
     if (!paymentResult.success) {
-      this.logger.error(`❌ Payment failed: ${paymentResult.message}`);
+      this.logger.error(
+        `❌ Payment failed | Order: ${orderId} | Reason: ${paymentResult.message}`,
+      );
       throw new BadRequestException(
         paymentResult.message || 'Payment failed. Please try again.',
       );
     }
 
+    // ✅ 5. WaafiPay may return success but without a transactionId —
+    //    that is a "pending" state. Reject it: we require a confirmed txnId.
+    if (!paymentResult.transactionId) {
+      this.logger.warn(
+        `⚠️ Payment pending | Order: ${orderId} | state: ${paymentResult.state ?? 'unknown'}`,
+      );
+      throw new BadRequestException(
+        'Payment is pending. Please approve the prompt on your phone and try again.',
+      );
+    }
+
     this.logger.log(
-      `✅ Payment successful! Transaction: ${paymentResult.transactionId}`,
+      `✅ Payment confirmed | Order: ${orderId} | Txn: ${paymentResult.transactionId}`,
     );
 
-    return paymentResult;
+    return {
+      success: true,
+      message: paymentResult.message,
+      transactionId: paymentResult.transactionId,
+      referenceId: paymentResult.referenceId || referenceId,
+      state: paymentResult.state,
+      responseCode: paymentResult.responseCode,
+    };
   }
-
   // ==========================================
   // UPDATE ORDER STATUS WITH STATE VALIDATION
   // ==========================================
 
+  // ==========================================
+  // UPDATE ORDER STATUS WITH STATE VALIDATION
+  // ==========================================
   async updateOrderStatus(orderId: string, newStatus: OrderStatus) {
     this.logger.log(`Updating order ${orderId} status to ${newStatus}`);
 
@@ -381,6 +407,7 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
 
+    // ✅ 1. Validate state transition
     const allowedTransitions =
       ORDER_STATUS_TRANSITIONS[order.status as OrderStatus] || [];
     if (!allowedTransitions.includes(newStatus)) {
@@ -390,17 +417,17 @@ export class OrdersService {
       );
     }
 
+    // ✅ 2. Payment is always required — no COD exception
     if (
       newStatus === OrderStatus.CONFIRMED &&
       order.paymentStatus !== PaymentStatus.PAID
     ) {
-      if (order.paymentMethod !== 'cash_on_delivery') {
-        throw new BadRequestException(
-          'Cannot confirm order. Payment must be completed first.',
-        );
-      }
+      throw new BadRequestException(
+        'Cannot confirm order. Payment must be completed first.',
+      );
     }
 
+    // ✅ 3. Cannot ship unpaid orders
     if (
       newStatus === OrderStatus.SHIPPED &&
       order.paymentStatus !== PaymentStatus.PAID
@@ -410,6 +437,7 @@ export class OrdersService {
       );
     }
 
+    // ✅ 4. Cannot change orders in final state
     if (FINAL_ORDER_STATUSES.includes(order.status as OrderStatus)) {
       throw new BadRequestException(
         `Order is already in final state '${order.status}'. Cannot change.`,
@@ -447,8 +475,15 @@ export class OrdersService {
   // ==========================================
   // UPDATE PAYMENT STATUS
   // ==========================================
+  // src/orders/orders.service.ts
+  // REPLACE the existing updatePaymentStatus method
 
-  async updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus) {
+  async updatePaymentStatus(
+    orderId: string,
+    paymentStatus: PaymentStatus,
+    source: 'webhook' | 'admin' | 'system' = 'system',
+    transactionId?: string,
+  ) {
     const validStatuses = Object.values(PaymentStatus);
     if (!validStatuses.includes(paymentStatus)) {
       throw new BadRequestException(
@@ -464,16 +499,52 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
 
+    // ✅ Guard: only webhook/admin can mark PAID
+    if (
+      paymentStatus === PaymentStatus.PAID &&
+      source !== 'webhook' &&
+      source !== 'admin'
+    ) {
+      throw new ForbiddenException(
+        'Only webhook or admin can mark orders as PAID',
+      );
+    }
+
+    // ✅ Guard: don't overwrite a PAID order with FAILED
+    if (
+      order.paymentStatus === PaymentStatus.PAID &&
+      paymentStatus === PaymentStatus.FAILED
+    ) {
+      this.logger.warn(
+        `Ignoring FAILED update on already-PAID order ${orderId}`,
+      );
+      return {
+        message: 'Order is already paid — ignoring failure',
+        order: {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          paymentStatus: order.paymentStatus,
+          status: order.status,
+        },
+      };
+    }
+
     const updates: any = {
-      paymentStatus: paymentStatus,
+      paymentStatus,
       updatedAt: new Date(),
     };
 
+    // Auto-confirm when payment succeeds (from webhook)
     if (
       paymentStatus === PaymentStatus.PAID &&
       order.status === OrderStatus.PENDING
     ) {
       updates.status = OrderStatus.CONFIRMED;
+    }
+
+    // Store transaction ID if provided
+    if (transactionId) {
+      updates.paymentReferenceId = transactionId;
     }
 
     const [updatedOrder] = await this.drizzle.db
@@ -484,8 +555,13 @@ export class OrdersService {
 
     if (!updatedOrder) throw new NotFoundException('Order not found');
 
-    if (paymentStatus === PaymentStatus.PAID) {
-      if (updatedOrder.userId) {
+    // ✅ Notify user only when transitioning to PAID
+    if (
+      paymentStatus === PaymentStatus.PAID &&
+      order.paymentStatus !== PaymentStatus.PAID &&
+      updatedOrder.userId
+    ) {
+      try {
         await this.notificationsService.create({
           userId: updatedOrder.userId,
           type: NotificationType.PAYMENT,
@@ -494,6 +570,8 @@ export class OrdersService {
           actionText: 'View Order',
           actionLink: `/orders/${orderId}`,
         });
+      } catch (e) {
+        this.logger.warn('Failed to send payment notification', e);
       }
     }
 
@@ -850,82 +928,30 @@ export class OrdersService {
     };
   }
   async getOrderById(orderId: string, userId: string) {
-    console.log('🔍 [getOrderById] START');
-
     const order = await this.drizzle.db.query.orders.findFirst({
       where: eq(orders.id, orderId),
       with: {
-        items: {
-          with: {
-            product: {
-              // ✅ ADD
-              with: { images: true }, // ✅ ADD
-            },
-            variant: {
-              // ✅ ADD
-              with: {
-                product: { with: { images: true } },
-                color: true,
-                size: true,
-              },
-            },
-          },
-        },
-        user: {
-          columns: { id: true, name: true, phoneNumber: true, email: true },
-        },
+        /* ... */
       },
     });
-    if (!order) {
-      console.log('❌ Order NOT found in DB');
-      console.log('═══════════════════════════════════════');
-      throw new NotFoundException('Order not found');
-    }
-
-    console.log('✅ Order found in DB');
-    console.log('   order.id       :', order.id);
-    console.log('   order.userId   :', JSON.stringify(order.userId));
-    console.log('   order.userName :', order.user?.name ?? 'N/A');
-    console.log('   order.createdAt:', order.createdAt);
+    if (!order) throw new NotFoundException('Order not found');
 
     const [user] = await this.drizzle.db
-      .select({
-        isAdmin: users.isAdmin,
-        isSuperAdmin: users.isSuperAdmin,
-      })
+      .select({ isAdmin: users.isAdmin, isSuperAdmin: users.isSuperAdmin })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
     const isAdmin = user?.isAdmin || user?.isSuperAdmin;
-
-    console.log('👤 Requesting user:');
-    console.log('   isAdmin      :', user?.isAdmin);
-    console.log('   isSuperAdmin :', user?.isSuperAdmin);
-    console.log('   effective    :', isAdmin);
-
-    // Type-safe comparison
     const orderUserIdStr = order.userId ? String(order.userId).trim() : null;
     const requestUserIdStr = userId ? String(userId).trim() : null;
 
-    console.log('🔍 Comparing:');
-    console.log('   order.userId  (string):', JSON.stringify(orderUserIdStr));
-    console.log('   request userId(string):', JSON.stringify(requestUserIdStr));
-    console.log(
-      '   are equal             :',
-      orderUserIdStr === requestUserIdStr,
-    );
-
     if (!isAdmin && orderUserIdStr !== requestUserIdStr) {
-      console.log('❌ PERMISSION DENIED');
-      console.log('═══════════════════════════════════════');
       throw new ForbiddenException(
         'You do not have permission to view this order',
       );
     }
 
-    console.log('✅ PERMISSION GRANTED');
-    console.log('═══════════════════════════════════════');
     return order;
   }
 

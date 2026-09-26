@@ -1,40 +1,28 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true, // ✅ CRITICAL for webhook signature verification
+  });
 
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
-  // app.useGlobalPipes(
-  //   new ValidationPipe({
-  //     whitelist: true,
-  //     forbidNonWhitelisted: true,
-  //     transform: true,
-  //     exceptionFactory: (errors) => {
-  //       console.error('❌ Validation errors:', JSON.stringify(errors, null, 2));
-  //       return new BadRequestException(
-  //         errors.map((error) => ({
-  //           field: error.property,
-  //           constraints: error.constraints,
-  //         })),
-  //       );
-  //     },
-  //   }),
-  // );
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // ⚠️ This strips undeclared props
-      forbidNonWhitelisted: false, // ⚠️ Should be false, not true
+      whitelist: true,
+      forbidNonWhitelisted: false,
       transform: true,
       transformOptions: {
         enableImplicitConversion: true,
       },
     }),
   );
+
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS
       ? process.env.ALLOWED_ORIGINS.split(',')

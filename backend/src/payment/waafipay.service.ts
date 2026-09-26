@@ -98,13 +98,12 @@ export class WaafiPayService {
       this.logger.log('   API Key: ***CONFIGURED***');
     }
   }
-
   private createSafeRequestBody(
     data: PaymentRequest,
     referenceId: string,
     orderId: string,
   ): any {
-    const requestBody = {
+    return {
       schemaVersion: '1.0',
       requestId: referenceId,
       timestamp: new Date().toISOString(),
@@ -114,21 +113,19 @@ export class WaafiPayService {
         merchantUid: this.config.merchantUId,
         apiUserId: this.config.apiUId,
         apiKey: this.config.apiKey,
-        paymentMethod: 'MWALLET_ACCOUNT',
+        paymentMethod: this.getWaafiPaymentMethod(data.paymentMethod), // ✅ use resolved method
         payerInfo: {
           accountNo: this.formatPhoneNumber(data.phoneNumber),
         },
         transactionInfo: {
-          referenceId: referenceId,
-          invoiceId: orderId,
+          referenceId,
+          invoiceId: orderId, // ✅ full order UUID
           amount: data.amount.toString(),
           currency: 'USD',
           description: data.description,
         },
       },
     };
-
-    return requestBody;
   }
 
   /**

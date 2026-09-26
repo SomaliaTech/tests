@@ -25,6 +25,7 @@ import { RedisModule } from './redis/redis.module';
 import { AccountCleanupService } from './auth/account-cleanup.service';
 import { AffiliateModule } from './affiliate/affiliate.module';
 import { SupportModule } from './support/support.module';
+import { PaymentWebhookController } from './payment/payment-webhook.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),

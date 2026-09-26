@@ -11,11 +11,13 @@ export enum OrderStatus {
   REFUNDED = 'REFUNDED',
 }
 
+// src/orders/enums/order-status.enum.ts
 export enum PaymentStatus {
   PENDING = 'PENDING',
   PAID = 'PAID',
-  FAILED = 'FAILED',
+  FAILED = 'FAILED', // ✅ ADD if missing
   REFUNDED = 'REFUNDED',
+  CANCELLED = 'CANCELLED', // ✅ ADD if missing
 }
 
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
